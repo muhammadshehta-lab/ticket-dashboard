@@ -1,0 +1,23 @@
+# requirements.txt
+# Install with:  pip install -r requirements.txt
+
+# ── Core data stack ──────────────────────────────────────────────────────────
+pandas>=2.2.0
+openpyxl>=3.1.2          # Excel .xlsx read/write engine for pandas
+
+# ── Dashboard ────────────────────────────────────────────────────────────────
+streamlit>=1.35.0
+plotly>=5.22.0
+
+# ── Web automation ───────────────────────────────────────────────────────────
+selenium>=4.21.0
+
+# ── Secrets / config ─────────────────────────────────────────────────────────
+python-dotenv>=1.0.1
+
+# ── Optional: auto-manages ChromeDriver (recommended) ────────────────────────
+# Uncomment if you want webdriver-manager to handle ChromeDriver automatically:
+# webdriver-manager>=4.0.1
+# Then change build_driver() in scraper.py:
+#   from webdriver_manager.chrome import ChromeDriverManager
+#   service = Service(ChromeDriverManager().install())
