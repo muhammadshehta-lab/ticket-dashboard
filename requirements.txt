@@ -21,3 +21,5 @@ python-dotenv>=1.0.1
 # Then change build_driver() in scraper.py:
 #   from webdriver_manager.chrome import ChromeDriverManager
 #   service = Service(ChromeDriverManager().install())
+gspread
+google-auth
