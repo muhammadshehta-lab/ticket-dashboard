@@ -4,7 +4,10 @@ dashboard.py — In-Store Requests Dashboard (English)
 
 import io
 import glob
+import json
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
@@ -90,24 +93,97 @@ def calc_attendance(df, min_cases=20):
     attendance["Avg Cases/Day"] = (attendance["Total Cases"] / attendance["Attendance Days"]).round(1)
     return attendance
 
+# ── Password Protection ───────────────────────────────────────────────────────
+# !! عدّل الباسورد هنا !!
+APP_PASSWORD = "Dawaa@2026"
+
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        return True
+
+    st.markdown("""
+    <div style="display:flex;justify-content:center;align-items:center;height:80vh">
+    <div style="background:#161b22;border:1px solid #30363d;border-radius:16px;
+                padding:3rem 2.5rem;text-align:center;width:360px">
+        <div style="font-size:3rem">💊</div>
+        <h2 style="color:#e6edf3;margin:.5rem 0 .2rem">al-Dawaa Dashboard</h2>
+        <p style="color:#8b949e;font-size:.9rem;margin-bottom:1.5rem">Enter password to continue</p>
+    </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        pwd = st.text_input("Password", type="password", placeholder="Enter password…")
+        if st.button("Login", use_container_width=True):
+            if pwd == APP_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("❌ Incorrect password")
+    return False
+
+if not check_password():
+    st.stop()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 💊 Dashboard")
     st.markdown("**In-Store Requests**")
     st.divider()
 
-    uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
-    if uploaded:
-        df_raw = load_data(uploaded.read())
-        st.success(f"✅ {uploaded.name}")
+    # Load from Google Sheets automatically
+    @st.cache_data(ttl=3600, show_spinner="Loading from Google Sheets...")
+    def load_from_sheets():
+        try:
+            scopes = [
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive",
+            ]
+            # Try to load credentials from Streamlit secrets
+            if "gcp_service_account" in st.secrets:
+                creds = Credentials.from_service_account_info(
+                    st.secrets["gcp_service_account"], scopes=scopes
+                )
+            else:
+                return None, "No credentials found"
+            
+            client = gspread.authorize(creds)
+            sheet = client.open("AlDawaa Tickets Data").sheet1
+            data = sheet.get_all_records()
+            if not data:
+                return None, "No data in Google Sheets yet"
+            df = pd.DataFrame(data)
+            df["Request Date"] = pd.to_datetime(df["Request Date"], errors="coerce")
+            df["Date Only"] = df["Request Date"].dt.date
+            df["Hour"] = df["Request Date"].dt.hour
+            df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes)
+            df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes)
+            df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes)
+            df["Is Email"] = df["Is Special Request(By Email)"].astype(str).str.strip().str.upper() == "YES"
+            return df, None
+        except Exception as e:
+            return None, str(e)
+
+    df_sheets, error = load_from_sheets()
+    
+    if df_sheets is not None and not df_sheets.empty:
+        df_raw = df_sheets
+        st.success(f"✅ Google Sheets — {len(df_raw):,} rows")
     else:
-        files = glob.glob(str(Path(__file__).parent / "downloads" / "*.xlsx"))
-        if files:
-            latest = max(files, key=Path.stat)
-            df_raw = load_data(latest)
-            st.info(f"📂 {Path(latest).name}")
+        if error:
+            st.warning(f"Google Sheets: {error}")
+        # Fallback: upload manually
+        uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
+        if uploaded:
+            df_raw = load_data(uploaded.read())
+            st.success(f"✅ {uploaded.name}")
         else:
-            st.warning("Please upload an Excel file.")
+            st.warning("No data available. Run auto_report.py first.")
             st.stop()
 
     st.divider()
@@ -387,6 +463,123 @@ if iqr_data:
         )
         fig_iqr.update_layout(**THEME)
         st.plotly_chart(fig_iqr, use_container_width=True)
+
+
+
+st.divider()
+
+# ── Distribution Curves ────────────────────────────────────────────────────────
+st.markdown("## 📈 Distribution Curve — Service Time & Response Time")
+st.caption("Shows how times are distributed across all requests — with IQR filtering to remove outliers")
+
+import numpy as np
+
+def plot_distribution(df, col, label, color):
+    s = df[col].dropna()
+    # IQR filter
+    q1, q3 = s.quantile(0.25), s.quantile(0.75)
+    iqr_val = q3 - q1
+    s_clean = s[(s >= q1 - 1.5*iqr_val) & (s <= q3 + 1.5*iqr_val)]
+
+    fig = go.Figure()
+
+    # Histogram bars
+    fig.add_trace(go.Histogram(
+        x=s_clean,
+        nbinsx=40,
+        name="Frequency",
+        marker_color=color,
+        opacity=0.5,
+        histnorm="probability density",
+    ))
+
+    # KDE smooth curve
+    from scipy.stats import gaussian_kde
+    kde = gaussian_kde(s_clean)
+    x_range = np.linspace(s_clean.min(), s_clean.max(), 300)
+    fig.add_trace(go.Scatter(
+        x=x_range,
+        y=kde(x_range),
+        mode="lines",
+        name="Distribution Curve",
+        line=dict(color=color, width=3),
+    ))
+
+    # Vertical lines for Q1, Median, Q3
+    for val, name, dash in [
+        (s_clean.quantile(0.25), "Q1 (25%)", "dash"),
+        (s_clean.median(),       "Median",   "solid"),
+        (s_clean.quantile(0.75), "Q3 (75%)", "dash"),
+    ]:
+        fig.add_vline(x=val, line_dash=dash, line_color="#f0883e",
+                      annotation_text=f"{name}: {val:.1f} min",
+                      annotation_position="top right")
+
+    fig.update_layout(
+        **THEME,
+        title=f"{label} Distribution (IQR filtered — {len(s_clean):,} requests)",
+        xaxis_title="Minutes",
+        yaxis_title="Density",
+        showlegend=True,
+        bargap=0.05,
+    )
+    return fig
+
+try:
+    from scipy.stats import gaussian_kde
+    has_scipy = True
+except ImportError:
+    has_scipy = False
+    st.warning("Install scipy for distribution curves: pip install scipy")
+
+if has_scipy:
+    col_d1, col_d2 = st.columns(2, gap="medium")
+
+    with col_d1:
+        if "Request Take (min)" in df.columns and df["Request Take (min)"].dropna().shape[0] > 10:
+            st.plotly_chart(
+                plot_distribution(df, "Request Take (min)", "Service Time", "#58a6ff"),
+                use_container_width=True
+            )
+        else:
+            st.info("Not enough Service Time data.")
+
+    with col_d2:
+        if "Response Take (min)" in df.columns and df["Response Take (min)"].dropna().shape[0] > 10:
+            st.plotly_chart(
+                plot_distribution(df, "Response Take (min)", "Response Time", "#f0883e"),
+                use_container_width=True
+            )
+        else:
+            st.info("Not enough Response Time data.")
+
+    # Combined distribution — both on same chart
+    st.markdown("### Combined Distribution — Service Time vs Response Time")
+    fig_combined = go.Figure()
+    for col, label, color in [
+        ("Request Take (min)",  "Service Time",  "#58a6ff"),
+        ("Response Take (min)", "Response Time", "#f0883e"),
+    ]:
+        if col in df.columns:
+            s = df[col].dropna()
+            q1, q3 = s.quantile(0.25), s.quantile(0.75)
+            iqr_val = q3 - q1
+            s_clean = s[(s >= q1 - 1.5*iqr_val) & (s <= q3 + 1.5*iqr_val)]
+            if len(s_clean) > 10:
+                kde = gaussian_kde(s_clean)
+                x_range = np.linspace(s_clean.min(), s_clean.max(), 300)
+                fig_combined.add_trace(go.Scatter(
+                    x=x_range, y=kde(x_range),
+                    mode="lines", name=label,
+                    line=dict(color=color, width=3),
+                    fill="tozeroy", opacity=0.3,
+                ))
+    fig_combined.update_layout(
+        **THEME,
+        title="Service Time vs Response Time — Distribution Curves",
+        xaxis_title="Minutes", yaxis_title="Density",
+    )
+    st.plotly_chart(fig_combined, use_container_width=True)
 
 
 # ── Raw Data ──────────────────────────────────────────────────────────────────
