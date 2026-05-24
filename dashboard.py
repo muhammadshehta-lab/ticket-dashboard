@@ -218,4 +218,36 @@ with tab1:
         fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
         fig_dual.add_trace(go.Bar(x=hourly["Hour"], y=hourly["Cases"], name="Total Cases", marker_color="#58a6ff"), secondary_y=False)
         fig_dual.add_trace(go.Scatter(x=hourly["Hour"], y=hourly["Avg_Time"], name="Avg Service Time (min)", line=dict(color="#f0883e", width=3), mode="lines+markers"), secondary_y=True)
-        fig_dual.update_layout(**THEME, hovermode="x unified", xaxis=dict(tickmode="linear", dtick=1
+        # تم إصلاح القوس المفقود هنا تلقائياً ليعمل السيرفر بكفاءة
+        fig_dual.update_layout(**THEME, hovermode="x unified", xaxis=dict(tickmode="linear", dtick=1))
+        fig_dual.update_yaxes(title_text="Number of Cases", secondary_y=False)
+        fig_dual.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True, showgrid=False)
+        st.plotly_chart(fig_dual, use_container_width=True)
+
+    # منحنى التوزيع الإحصائي لوقت الخدمة
+    st.markdown("### 📈 Service Time Distribution Curve")
+    if "Request Take (min)" in df.columns and not df["Request Take (min)"].dropna().empty:
+        fig_dist = px.histogram(df, x="Request Take (min)", nbins=50, marginal="box", 
+                                color_discrete_sequence=["#bc8cff"], title="Distribution of Request Service Time (Minutes)")
+        fig_dist.update_layout(**THEME, xaxis_title="Minutes", yaxis_title="Frequency")
+        st.plotly_chart(fig_dist, use_container_width=True)
+    else:
+        st.info("Service time data not sufficient for curve.")
+
+
+# ==============================================================================
+# TAB 2: AGENTS PERFORMANCE (أداء الزملاء التفصيلي)
+# ==============================================================================
+with tab2:
+    st.markdown("### 🧑‍💻 Agent Detailed Performance")
+
+    agent_stats = calc_attendance(df, min_cases)
+    
+    # فصل نوع الإغلاق (Completed بنجاح أو بمشكلة)
+    closed_df = df[df["Status"].astype(str).str.contains("Closed", na=False, case=False)].copy()
+    
+    if not closed_df.empty:
+        closed_df["Closed Type"] = closed_df["Status"].apply(
+            lambda x: "Completed With Issue" if "issue" in str(x).lower() else "Completed Successfully"
+        )
+        closed_breakdown = closed_df.groupby(["Assigned By", "Closed Type"]).size
