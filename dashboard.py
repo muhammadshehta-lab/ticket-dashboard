@@ -7,6 +7,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import numpy as np
+import json  # تمت إضافة هذه المكتبة لقراءة الـ Secrets
 
 # ── PAGE CONFIGURATION ────────────────────────────────────────────────────────
 st.set_page_config(
@@ -51,7 +52,7 @@ def time_to_minutes(s):
     except:
         return np.nan
 
-# ── DATA LOADING ─────────────────────────────────────────────────────────────
+# ── DATA LOADING (Updated to use st.secrets) ─────────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -59,7 +60,11 @@ def load_data_from_sheets():
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
         ]
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+        
+        # التعديل الجديد: قراءة المفاتيح من الـ Secrets كـ JSON
+        creds_dict = json.loads(st.secrets["GCP_JSON"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        
         client = gspread.authorize(creds)
         spreadsheet = client.open("AlDawaa Tickets Data")
 
@@ -143,7 +148,7 @@ if page == "📊 Platform Overview":
     st.markdown("## 📊 Platform Statistics Overview")
     st.caption(f"Showing requests from {d_from} to {d_to}")
     
-    # Calculations (Adjust keywords if your sheet data uses Arabic statuses)
+    # Calculations
     total_req = len(df)
     closed_completed = df["Status"].str.contains("Completed|مكتمل|Closed", na=False, case=False).sum()
     closed_issue = df["Status"].str.contains("Issue|مشكلة", na=False, case=False).sum()
@@ -151,7 +156,7 @@ if page == "📊 Platform Overview":
     reopen_cases = df["Status"].str.contains("Reopen|معاد", na=False, case=False).sum()
     
     avg_resp = df["Response Take (min)"].mean()
-    aht = df["Request Take (min)"].mean()  # Average Handling Time / Service Time
+    aht = df["Request Take (min)"].mean()
     reopen_rate = (reopen_cases / total_req * 100) if total_req > 0 else 0
 
     # Row 1: Main Status Cards
@@ -170,7 +175,7 @@ if page == "📊 Platform Overview":
 
     st.divider()
 
-    # Charts: Request Types Pie and Distribution Curve
+    # Charts
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 🥧 Request Types Distribution")
@@ -192,83 +197,4 @@ if page == "📊 Platform Overview":
             fig_dist.update_layout(**THEME, xaxis_title="Minutes", yaxis_title="Count")
             st.plotly_chart(fig_dist, use_container_width=True)
         else:
-            st.info("Not enough data to calculate distribution.")
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ── PAGE 2: TEAM PERFORMANCE ──
-# ──────────────────────────────────────────────────────────────────────────────
-elif page == "👥 Team Performance":
-    st.markdown("## 👥 Team Performance Metrics")
-    
-    min_cases = st.sidebar.number_input("Minimum cases to count as Attendance Day", min_value=1, value=20)
-    
-    if not df.empty:
-        # 1. Calculate Attendance Days per Agent
-        daily_per_agent = df.groupby(["Assigned By", "Date Only"]).size().reset_index(name="Daily Cases")
-        attendance = daily_per_agent[daily_per_agent["Daily Cases"] >= min_cases].groupby("Assigned By").size().reset_index(name="Attendance Days")
-        
-        # 2. Aggregate Agent Metrics
-        agent_stats = df.groupby("Assigned By").agg(
-            Total_Cases=("Request Date", "count"),
-            Avg_Response_Time=("Response Take (min)", "mean"),
-            Avg_Handling_Time=("Request Take (min)", "mean"),
-            Email_Cases=("Is Email", "sum")
-        ).reset_index()
-        
-        # Merge Data
-        team_data = pd.merge(agent_stats, attendance, on="Assigned By", how="left").fillna(0)
-        team_data["Attendance Days"] = team_data["Attendance Days"].astype(int)
-        
-        # Format and display team metrics table
-        st.dataframe(
-            team_data.style.format({
-                "Avg_Response_Time": "{:.1f} min",
-                "Avg_Handling_Time": "{:.1f} min"
-            }),
-            use_container_width=True, height=400, hide_index=True
-        )
-        
-        st.markdown("### 📊 Agent Workload Volume")
-        fig_wl = px.bar(team_data.sort_values("Total_Cases"), x="Total_Cases", y="Assigned By", 
-                        orientation="h", color="Total_Cases", color_continuous_scale="Blues",
-                        labels={"Total_Cases": "Total Handled Cases", "Assigned By": "Agent Name"})
-        fig_wl.update_layout(**THEME, coloraxis_showscale=False)
-        st.plotly_chart(fig_wl, use_container_width=True)
-    else:
-        st.warning("No data available for the selected filters.")
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ── PAGE 3: KPIS & MANUAL ENTRY ──
-# ──────────────────────────────────────────────────────────────────────────────
-elif page == "🎯 KPIs & Manual Settings":
-    st.markdown("## 🎯 KPI Management & External Inputs")
-    st.info("💡 Use this page to track your operational targets and manually update external metrics.")
-    
-    # Editable Data Grid for KPI Targets
-    st.markdown("### ✍️ Manual Target Settings")
-    
-    default_targets = pd.DataFrame({
-        "Metric / KPI Indicator": ["Average Handling Time (AHT)", "Response Time (SLA)", "Quality Score %", "Reopen Rate Target"],
-        "Target Goal": ["15 Min", "5 Min", "95%", "< 5%"],
-        "Current Actual": ["-", "-", "-", "-"],
-        "Comments / Notes": ["", "", "", ""]
-    })
-    
-    edited_df = st.data_editor(default_targets, num_rows="dynamic", use_container_width=True)
-    
-    st.divider()
-    
-    # File Uploader section for external sheets (e.g., QA sheets, Audits)
-    st.markdown("### 📎 Upload External Team Sheets (Excel / CSV)")
-    uploaded_file = st.file_uploader("Upload external QA or performance files", type=["csv", "xlsx"])
-    
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                ext_df = pd.read_csv(uploaded_file)
-            else:
-                ext_df = pd.read_excel(uploaded_file)
-            st.success("File uploaded successfully! Data Preview:")
-            st.dataframe(ext_df, use_container_width=True, height=250)
-        except Exception as e:
-            st.error(f"An error occurred while parsing the file: {e}")
+            st.info("
