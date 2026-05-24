@@ -52,7 +52,7 @@ def time_to_minutes(s):
     except:
         return np.nan
 
-# ── DATA LOADING (Updated to use st.secrets) ─────────────────────────────────
+# ── DATA LOADING ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -75,3 +75,27 @@ def load_data_from_sheets():
                 headers = data[0]
                 rows = data[1:]
                 df_tab = pd.DataFrame(rows, columns=headers)
+                all_dfs.append(df_tab)
+
+        if not all_dfs:
+            return pd.DataFrame()
+
+        df = pd.concat(all_dfs, ignore_index=True)
+        df.replace("", pd.NA, inplace=True)
+
+        # Convert dates and times
+        df["Request Date"] = pd.to_datetime(df["Request Date"], errors="coerce")
+        df["Date Only"] = df["Request Date"].dt.date
+        df["Request Take (min)"]  = df["Request Take"].apply(time_to_minutes)
+        df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes)
+        
+        if "Is Special Request(By Email)" in df.columns:
+            df["Is Email"] = df["Is Special Request(By Email)"].astype(str).str.strip().str.upper() == "YES"
+        else:
+            df["Is Email"] = False
+
+        return df
+
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        return
