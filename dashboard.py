@@ -59,7 +59,10 @@ def load_data_from_sheets():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         # تأكد من وجود ملف credentials.json في نفس فولدر الكود
-        creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
+        # استخدام Path للتأكد من قراءة الملف من نفس مكان السكريبت تلقائياً
+from pathlib import Path
+credentials_path = str(Path(__file__).parent / "credentials.json")
+creds = Credentials.from_service_account_file(credentials_path, scopes=scopes)
         client = gspread.authorize(creds)
         spreadsheet = client.open("AlDawaa Tickets Data")
 
