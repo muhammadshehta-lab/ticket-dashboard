@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Flash Cards & Advanced Stats Version)
+dashboard.py — In-Store Requests Dashboard (Business Hours & Bottleneck Edition)
 """
 
 import pandas as pd
@@ -180,23 +180,20 @@ with tab1:
     def kpi(label, value, sub="", sub_color='#3fb950'):
         return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
 
-    # الحسابات الإحصائية الدقيقة للفلاش كاردز المطلوبة
     total_tickets = len(df)
     total_emails = int(df["Is Email"].sum())
     total_reopened = int(df["Is Reopened"].sum())
     reopen_rate = (total_reopened / total_tickets * 100) if total_tickets else 0.0
 
-    # فلترة الحالات المغلقة وتفصيلها (Completed بنجاح أو بمشكلة)
     closed_df_all = df[df["Status"].astype(str).str.contains("Closed", na=False, case=False)]
     comp_success = closed_df_all[~closed_df_all["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
     comp_with_issue = closed_df_all[closed_df_all["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
 
-    # نسب مئوية فرعية للكروت
     pct_success = (comp_success / total_tickets * 100) if total_tickets else 0.0
     pct_issue = (comp_with_issue / total_tickets * 100) if total_tickets else 0.0
     pct_email = (total_emails / total_tickets * 100) if total_tickets else 0.0
 
-    # ── الفلاش كاردز المحدثة بالكامل بناءً على طلبك ──
+    # ── الفلاش كاردز الرئيسيّة
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.markdown(kpi("Total Requests", f"{total_tickets:,}", "All received cases", '#58a6ff'), unsafe_allow_html=True)
     c2.markdown(kpi("Completed Successfully", f"{comp_success:,}", f"{pct_success:.1f}% of total", '#3fb950'), unsafe_allow_html=True)
@@ -206,7 +203,7 @@ with tab1:
 
     st.write("")
     
-    # ── قسم إحصائيات نوع التيكت وحالته
+    # ── قسم إحصائيات نوع التيكيت
     st.markdown("### 📊 Ticket Stats Breakdown by Request Type")
     if not df.empty:
         stats_pivot = df.groupby("Request Type").agg(
@@ -222,8 +219,77 @@ with tab1:
     
     st.write("")
 
+    # ── تحليل أوقات الذروة وعنق الزجاجة (Rush Hours & Response Time Curve)
+    st.markdown("### 📈 Business Hours Rush Analysis (7:00 AM to 1:00 AM)")
+    st.caption("الرسمة التالية توضح حجم الحالات بالساعة (الأعمدة) مقارنة بمتوسط سرعة الاستجابة الأولى بالدقائق (المنحنى) لرصد الـ Morning Bottleneck.")
+    
+    if not df.empty:
+        # 1. فلترة الداتا وترتيبها لتطابق ساعات العمل بالظبط (من 7 صباحاً لـ 1 صباحاً)
+        # الساعات من 7 لـ 23 تعني (7am to 11pm) والساعة 0 تعني 12am والساعة 1 تعني 1am
+        business_hours_order = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1]
+        
+        # تجميع البيانات لكل ساعة
+        hourly_stats = df.groupby("Hour").agg(
+            Total_Cases=("Request ID", "count"),
+            Avg_Response=("Response Take (min)", "mean")
+        ).reindex(business_hours_order).fillna(0).reset_index()
+        
+        # تحويل أرقام الساعات لنصوص مفهومة على المحور الأفقي (مثل: 7 AM، 12 AM)
+        def format_hour_label(h):
+            if h == 0: return "12 AM"
+            if h == 1: return "1 AM"
+            if h < 12: return f"{h} AM"
+            if h == 12: return "12 PM"
+            return f"{h-12} PM"
+            
+        hourly_stats["Hour Label"] = hourly_stats["Hour"].apply(format_hour_label)
+        
+        # 2. بناء الرسم البياني ذو المحورين المزدوجين (Dual Axis)
+        fig_rush = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        # العمود: يوضح الـ Rush Hours (حجم الحالات)
+        fig_rush.add_trace(
+            go.Bar(
+                x=hourly_stats["Hour Label"], 
+                y=hourly_stats["Total_Cases"], 
+                name="Total Received Cases", 
+                marker_color="#58a6ff",
+                hovertemplate="Hour: %{x}<br>Cases: %{y:,}<extra></extra>"
+            ), 
+            secondary_y=False
+        )
+        
+        # المنحنى: يوضح الـ Response Time لبيان الـ Bottleneck
+        fig_rush.add_trace(
+            go.Scatter(
+                x=hourly_stats["Hour Label"], 
+                y=hourly_stats["Avg_Response"], 
+                name="Avg Response Time (Minutes)", 
+                line=dict(color="#f0883e", width=4, shape="spline"),
+                mode="lines+markers",
+                hovertemplate="Hour: %{x}<br>Avg Response: %{y:.1f} min<extra></extra>"
+            ), 
+            secondary_y=True
+        )
+        
+        fig_rush.update_layout(
+            **THEME,
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+        )
+        
+        fig_rush.update_xaxes(title_text="Shift Timeline (Business Hours)", tickmode="array", tickvals=hourly_stats["Hour Label"])
+        fig_rush.update_yaxes(title_text="Number of Tickets (Volume)", secondary_y=False)
+        fig_rush.update_yaxes(title_text="Response Time (Minutes)", secondary_y=True, showgrid=False)
+        
+        st.plotly_chart(fig_rush, use_container_width=True)
+    else:
+        st.info("No data available for shift timeline analysis.")
+
+    st.write("")
+
     # ── منحنيات التوزيع الإحصائي
-    st.markdown("### 📈 Distribution Curves for Tickets Performance")
+    st.markdown("### 📊 Distribution Range for Service & Response Times")
     col_dist1, col_dist2 = st.columns(2, gap="large")
     
     with col_dist1:
@@ -232,8 +298,6 @@ with tab1:
             fig_dist1 = px.histogram(df, x="Request Take (min)", nbins=40, marginal="box", color_discrete_sequence=["#bc8cff"])
             fig_dist1.update_layout(**THEME, xaxis_title="Minutes to Complete Case", yaxis_title="Number of Tickets")
             st.plotly_chart(fig_dist1, use_container_width=True)
-        else:
-            st.info("No sufficient data for service time distribution curve.")
 
     with col_dist2:
         st.markdown("##### ⚡ Response Time Distribution (Response Take)")
@@ -241,23 +305,19 @@ with tab1:
             fig_dist2 = px.histogram(df, x="Response Take (min)", nbins=40, marginal="box", color_discrete_sequence=["#58a6ff"])
             fig_dist2.update_layout(**THEME, xaxis_title="Minutes to First Response", yaxis_title="Number of Tickets")
             st.plotly_chart(fig_dist2, use_container_width=True)
-        else:
-            st.info("No sufficient data for response time distribution curve.")
 
     st.divider()
     
-    # ── الخريطة الحرارية وأوقات الضغط اليومي
-    col_hm, col_pie = st.columns([2, 1], gap="large")
-    with col_hm:
-        st.markdown("### 🔥 Daily Volume Heatmap (Hour vs Day)")
-        days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        hm_data = df.groupby(["Day Name", "Hour"]).size().reset_index(name="Cases")
-        if not hm_data.empty:
-            hm_pivot = hm_data.pivot(index="Day Name", columns="Hour", values="Cases").reindex(days_order).fillna(0)
-            fig_hm = px.imshow(hm_pivot, text_auto=True, aspect="auto", color_continuous_scale="Blues",
-                               labels=dict(x="Hour of Day", y="Day of Week", color="Cases"))
-            fig_hm.update_layout(**THEME, coloraxis_showscale=False)
-            st.plotly_chart(fig_hm, use_container_width=True)
+    # ── الخريطة الحرارية
+    st.markdown("### 🔥 Weekly Demand Heatmap")
+    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    hm_data = df.groupby(["Day Name", "Hour"]).size().reset_index(name="Cases")
+    if not hm_data.empty:
+        hm_pivot = hm_data.pivot(index="Day Name", columns="Hour", values="Cases").reindex(days_order).fillna(0)
+        fig_hm = px.imshow(hm_pivot, text_auto=True, aspect="auto", color_continuous_scale="Blues",
+                           labels=dict(x="Hour of Day", y="Day of Week", color="Cases"))
+        fig_hm.update_layout(**THEME, coloraxis_showscale=False)
+        st.plotly_chart(fig_hm, use_container_width=True)
 
 
 # ==============================================================================
