@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Business Hours & Bottleneck Edition)
+dashboard.py — In-Store Requests Dashboard (24 Hours Rush Analysis Edition)
 """
 
 import pandas as pd
@@ -219,35 +219,32 @@ with tab1:
     
     st.write("")
 
-    # ── تحليل أوقات الذروة وعنق الزجاجة (Rush Hours & Response Time Curve)
-    st.markdown("### 📈 Business Hours Rush Analysis (7:00 AM to 1:00 AM)")
-    st.caption("الرسمة التالية توضح حجم الحالات بالساعة (الأعمدة) مقارنة بمتوسط سرعة الاستجابة الأولى بالدقائق (المنحنى) لرصد الـ Morning Bottleneck.")
+    # ── تحليل أوقات الذروة وعنق الزجاجة لـ 24 ساعة بالكامل (24 Hours Rush Analysis)
+    st.markdown("### 📈 24-Hour Timeline Rush Analysis")
+    st.caption("الرسمة التالية توضح حجم الحالات الإجمالي على مدار الـ 24 ساعة بالكامل (الأعمدة) مقارنة بمتوسط سرعة الاستجابة الأولى بالدقائق (المنحنى البرتقالي).")
     
     if not df.empty:
-        # 1. فلترة الداتا وترتيبها لتطابق ساعات العمل بالظبط (من 7 صباحاً لـ 1 صباحاً)
-        # الساعات من 7 لـ 23 تعني (7am to 11pm) والساعة 0 تعني 12am والساعة 1 تعني 1am
-        business_hours_order = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1]
+        # ترتيب الساعات من 0 لـ 23 بالكامل لتغطية الـ 24 ساعة
+        full_24_hours_order = list(range(24))
         
-        # تجميع البيانات لكل ساعة
         hourly_stats = df.groupby("Hour").agg(
             Total_Cases=("Request ID", "count"),
             Avg_Response=("Response Take (min)", "mean")
-        ).reindex(business_hours_order).fillna(0).reset_index()
+        ).reindex(full_24_hours_order).fillna(0).reset_index()
         
-        # تحويل أرقام الساعات لنصوص مفهومة على المحور الأفقي (مثل: 7 AM، 12 AM)
-        def format_hour_label(h):
+        # دالة لتنسيق شكل الساعات من رقمي (0-23) إلى نصي (AM/PM)
+        def format_hour_label_24(h):
             if h == 0: return "12 AM"
-            if h == 1: return "1 AM"
-            if h < 12: return f"{h} AM"
             if h == 12: return "12 PM"
+            if h < 12: return f"{h} AM"
             return f"{h-12} PM"
             
-        hourly_stats["Hour Label"] = hourly_stats["Hour"].apply(format_hour_label)
+        hourly_stats["Hour Label"] = hourly_stats["Hour"].apply(format_hour_label_24)
         
-        # 2. بناء الرسم البياني ذو المحورين المزدوجين (Dual Axis)
+        # بناء الرسم البياني
         fig_rush = make_subplots(specs=[[{"secondary_y": True}]])
         
-        # العمود: يوضح الـ Rush Hours (حجم الحالات)
+        # حجم الطلبات (الأعمدة)
         fig_rush.add_trace(
             go.Bar(
                 x=hourly_stats["Hour Label"], 
@@ -259,7 +256,7 @@ with tab1:
             secondary_y=False
         )
         
-        # المنحنى: يوضح الـ Response Time لبيان الـ Bottleneck
+        # وقت الاستجابة (المنحنى البرتقالي)
         fig_rush.add_trace(
             go.Scatter(
                 x=hourly_stats["Hour Label"], 
@@ -275,113 +272,4 @@ with tab1:
         fig_rush.update_layout(
             **THEME,
             hovermode="x unified",
-            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
-        )
-        
-        fig_rush.update_xaxes(title_text="Shift Timeline (Business Hours)", tickmode="array", tickvals=hourly_stats["Hour Label"])
-        fig_rush.update_yaxes(title_text="Number of Tickets (Volume)", secondary_y=False)
-        fig_rush.update_yaxes(title_text="Response Time (Minutes)", secondary_y=True, showgrid=False)
-        
-        st.plotly_chart(fig_rush, use_container_width=True)
-    else:
-        st.info("No data available for shift timeline analysis.")
-
-    st.write("")
-
-    # ── منحنيات التوزيع الإحصائي
-    st.markdown("### 📊 Distribution Range for Service & Response Times")
-    col_dist1, col_dist2 = st.columns(2, gap="large")
-    
-    with col_dist1:
-        st.markdown("##### ⏳ Service Time Distribution (Request Take)")
-        if not df["Request Take (min)"].dropna().empty:
-            fig_dist1 = px.histogram(df, x="Request Take (min)", nbins=40, marginal="box", color_discrete_sequence=["#bc8cff"])
-            fig_dist1.update_layout(**THEME, xaxis_title="Minutes to Complete Case", yaxis_title="Number of Tickets")
-            st.plotly_chart(fig_dist1, use_container_width=True)
-
-    with col_dist2:
-        st.markdown("##### ⚡ Response Time Distribution (Response Take)")
-        if not df["Response Take (min)"].dropna().empty:
-            fig_dist2 = px.histogram(df, x="Response Take (min)", nbins=40, marginal="box", color_discrete_sequence=["#58a6ff"])
-            fig_dist2.update_layout(**THEME, xaxis_title="Minutes to First Response", yaxis_title="Number of Tickets")
-            st.plotly_chart(fig_dist2, use_container_width=True)
-
-    st.divider()
-    
-    # ── الخريطة الحرارية
-    st.markdown("### 🔥 Weekly Demand Heatmap")
-    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    hm_data = df.groupby(["Day Name", "Hour"]).size().reset_index(name="Cases")
-    if not hm_data.empty:
-        hm_pivot = hm_data.pivot(index="Day Name", columns="Hour", values="Cases").reindex(days_order).fillna(0)
-        fig_hm = px.imshow(hm_pivot, text_auto=True, aspect="auto", color_continuous_scale="Blues",
-                           labels=dict(x="Hour of Day", y="Day of Week", color="Cases"))
-        fig_hm.update_layout(**THEME, coloraxis_showscale=False)
-        st.plotly_chart(fig_hm, use_container_width=True)
-
-
-# ==============================================================================
-# TAB 2: AGENTS PERFORMANCE
-# ==============================================================================
-with tab2:
-    st.markdown("### 🧑‍💻 Agent Detailed Performance")
-
-    agent_stats = calc_attendance(df, min_cases)
-    closed_df = df[df["Status"].astype(str).str.contains("Closed", na=False, case=False)].copy()
-    
-    if not closed_df.empty:
-        closed_df["Closed Type"] = closed_df["Status"].apply(
-            lambda x: "Completed With Issue" if "issue" in str(x).lower() else "Completed Successfully"
-        )
-        closed_breakdown = closed_df.groupby(["Assigned By", "Closed Type"]).size().unstack(fill_value=0).reset_index()
-        if not closed_breakdown.empty:
-            agent_stats = agent_stats.merge(closed_breakdown, on="Assigned By", how="left").fillna(0)
-
-    if not agent_stats.empty:
-        if "Completed Successfully" not in agent_stats.columns: agent_stats["Completed Successfully"] = 0
-        if "Completed With Issue" not in agent_stats.columns: agent_stats["Completed With Issue"] = 0
-        
-        agent_stats = agent_stats.sort_values("Total Handled Cases", ascending=False)
-        
-        columns_rename = {
-            "Assigned By": "Agent Name",
-            "Total Handled Cases": "Total Cases",
-            "Attendance Days": "Working Days",
-            "Completed Successfully": "Closed Successfully",
-            "Completed With Issue": "Closed With Issue"
-        }
-        
-        col_tbl, col_bar = st.columns([2, 3], gap="medium")
-        with col_tbl:
-            st.dataframe(agent_stats.rename(columns=columns_rename), hide_index=True, use_container_width=True, height=450)
-
-        with col_bar:
-            plot_closed = closed_df.groupby(["Assigned By", "Closed Type"]).size().reset_index(name="Count")
-            fig_stack = px.bar(plot_closed, x="Assigned By", y="Count", color="Closed Type", 
-                               color_discrete_map={"Completed Successfully": "#3fb950", "Completed With Issue": "#d29922"},
-                               title="Closed Status Breakdown per Agent")
-            fig_stack.update_layout(**THEME, xaxis={'categoryorder':'total descending'}, 
-                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-            st.plotly_chart(fig_stack, use_container_width=True)
-
-
-# ==============================================================================
-# TAB 3: RAW DATA
-# ==============================================================================
-with tab3:
-    st.markdown("### 🗃 Raw Data Explorer")
-    search = st.text_input("🔍 Search in any column")
-    show_df = df.copy()
-    if search:
-        mask = show_df.astype(str).apply(lambda c: c.str.contains(search, case=False, na=False)).any(axis=1)
-        show_df = show_df[mask]
-
-    display_cols = ["Request ID", "Request Date", "Request Type", "Status", "Assigned By", 
-                    "Store Code", "Insurance Company", "Request Take", "Response Take"]
-    st.dataframe(show_df[[c for c in display_cols if c in show_df.columns]], use_container_width=True, height=400)
-
-    csv = show_df.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download Current View as CSV", data=csv, file_name="filtered_requests.csv", mime="text/csv")
-
-st.divider()
-st.caption("al-Dawaa • Advanced In-Store Requests Dashboard • Powered by Streamlit")
+            legend=dict(orientation="h", yanchor="bottom
