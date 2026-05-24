@@ -180,5 +180,178 @@ with tab1:
     def kpi(label, value, sub="", sub_color='#3fb950'):
         return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
 
+    # تم تأمين وإصلاح أسطر الحسابات هنا بالكامل لتفادي أي انقطاع نصي
     total_tickets = len(df)
-    total_emails =
+    total_emails = int(df["Is Email"].sum())
+    total_reopened = int(df["Is Reopened"].sum())
+    reopen_rate = (total_reopened / total_tickets * 100) if total_tickets else 0.0
+
+    closed_df_all = df[df["Status"].astype(str).str.contains("Closed", na=False, case=False)]
+    comp_success = closed_df_all[~closed_df_all["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
+    comp_with_issue = closed_df_all[closed_df_all["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
+
+    pct_success = (comp_success / total_tickets * 100) if total_tickets else 0.0
+    pct_issue = (comp_with_issue / total_tickets * 100) if total_tickets else 0.0
+    pct_email = (total_emails / total_tickets * 100) if total_tickets else 0.0
+
+    # ── الفلاش كاردز الرئيسيّة
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.markdown(kpi("Total Requests", f"{total_tickets:,}", "All received cases", '#58a6ff'), unsafe_allow_html=True)
+    c2.markdown(kpi("Completed Successfully", f"{comp_success:,}", f"{pct_success:.1f}% of total", '#3fb950'), unsafe_allow_html=True)
+    c3.markdown(kpi("Closed With Issue", f"{comp_with_issue:,}", f"{pct_issue:.1f}% of total", '#d29922'), unsafe_allow_html=True)
+    c4.markdown(kpi("Sent By Email", f"{total_emails:,}", f"{pct_email:.1f}% of total", '#bc8cff'), unsafe_allow_html=True)
+    c5.markdown(kpi("Reopen Rate", f"{reopen_rate:.1f}%", f"{total_reopened} tickets reopened", '#f85149' if reopen_rate > 5 else '#8b949e'), unsafe_allow_html=True)
+
+    st.write("")
+    
+    # ── قسم إحصائيات نوع التيكيت
+    st.markdown("### 📊 Ticket Stats Breakdown by Request Type")
+    if not df.empty:
+        stats_pivot = df.groupby("Request Type").agg(
+            Total_Tickets=("Request ID", "count"),
+            Special_Email=("Is Email", "sum"),
+            Reopened_Cases=("Is Reopened", "sum"),
+            Avg_Response_Min=("Response Take (min)", "mean"),
+            Avg_Service_Min=("Request Take (min)", "mean")
+        ).reset_index().round(1)
+        
+        stats_pivot.columns = ["Request Type", "Total Tickets", "Special By Email", "Reopened Count", "Avg Response (Min)", "Avg Service (Min)"]
+        st.dataframe(stats_pivot.sort_values("Total Tickets", ascending=False), hide_index=True, use_container_width=True)
+    
+    st.write("")
+
+    # ── تحليل أوقات الذروة وعنق الزجاجة لـ 24 ساعة بالكامل (24 Hours Rush Analysis)
+    st.markdown("### 📈 24-Hour Timeline Rush Analysis")
+    st.caption("الرسمة التالية توضح حجم الحالات الإجمالي على مدار الـ 24 ساعة بالكامل (الأعمدة) مقارنة بمتوسط سرعة الاستجابة الأولى بالدقائق (المنحنى البرتقالي).")
+    
+    if not df.empty:
+        full_24_hours_order = list(range(24))
+        hourly_stats = df.groupby("Hour").agg(
+            Total_Cases=("Request ID", "count"),
+            Avg_Response=("Response Take (min)", "mean")
+        ).reindex(full_24_hours_order).fillna(0).reset_index()
+        
+        def format_hour_label_24(h):
+            if h == 0: return "12 AM"
+            if h == 12: return "12 PM"
+            if h < 12: return f"{h} AM"
+            return f"{h-12} PM"
+            
+        hourly_stats["Hour Label"] = hourly_stats["Hour"].apply(format_hour_label_24)
+        
+        fig_rush = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        fig_rush.add_trace(
+            go.Bar(
+                x=hourly_stats["Hour Label"], 
+                y=hourly_stats["Total_Cases"], 
+                name="Total Received Cases", 
+                marker_color="#58a6ff",
+                hovertemplate="Hour: %{x}<br>Cases: %{y:,}<extra></extra>"
+            ), 
+            secondary_y=False
+        )
+        
+        fig_rush.add_trace(
+            go.Scatter(
+                x=hourly_stats["Hour Label"], 
+                y=hourly_stats["Avg_Response"], 
+                name="Avg Response Time (Minutes)", 
+                line=dict(color="#f0883e", width=4, shape="spline"),
+                mode="lines+markers",
+                hovertemplate="Hour: %{x}<br>Avg Response: %{y:.1f} min<extra></extra>"
+            ), 
+            secondary_y=True
+        )
+        
+        fig_rush.update_layout(
+            **THEME,
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+        )
+        
+        fig_rush.update_xaxes(title_text="24-Hour Timeline", tickmode="array", tickvals=hourly_stats["Hour Label"])
+        fig_rush.update_yaxes(title_text="Number of Tickets (Volume)", secondary_y=False)
+        fig_rush.update_yaxes(title_text="Response Time (Minutes)", secondary_y=True, showgrid=False)
+        
+        st.plotly_chart(fig_rush, use_container_width=True)
+    else:
+        st.info("No data available for timeline analysis.")
+
+    st.write("")
+
+    # ── منحنيات التوزيع الإحصائي
+    st.markdown("### 📊 Distribution Range for Service & Response Times")
+    col_dist1, col_dist2 = st.columns(2, gap="large")
+    
+    with col_dist1:
+        st.markdown("##### ⏳ Service Time Distribution (Request Take)")
+        if not df["Request Take (min)"].dropna().empty:
+            fig_dist1 = px.histogram(df, x="Request Take (min)", nbins=40, marginal="box", color_discrete_sequence=["#bc8cff"])
+            fig_dist1.update_layout(**THEME, xaxis_title="Minutes to Complete Case", yaxis_title="Number of Tickets")
+            st.plotly_chart(fig_dist1, use_container_width=True)
+
+    with col_dist2:
+        st.markdown("##### ⚡ Response Time Distribution (Response Take)")
+        if not df["Response Take (min)"].dropna().empty:
+            fig_dist2 = px.histogram(df, x="Response Take (min)", nbins=40, marginal="box", color_discrete_sequence=["#58a6ff"])
+            fig_dist2.update_layout(**THEME, xaxis_title="Minutes to First Response", yaxis_title="Number of Tickets")
+            st.plotly_chart(fig_dist2, use_container_width=True)
+
+    st.divider()
+    
+    # ── الخريطة الحرارية
+    st.markdown("### 🔥 Weekly Demand Heatmap")
+    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    hm_data = df.groupby(["Day Name", "Hour"]).size().reset_index(name="Cases")
+    if not hm_data.empty:
+        hm_pivot = hm_data.pivot(index="Day Name", columns="Hour", values="Cases").reindex(days_order).fillna(0)
+        fig_hm = px.imshow(hm_pivot, text_auto=True, aspect="auto", color_continuous_scale="Blues",
+                           labels=dict(x="Hour of Day", y="Day of Week", color="Cases"))
+        fig_hm.update_layout(**THEME, coloraxis_showscale=False)
+        st.plotly_chart(fig_hm, use_container_width=True)
+
+
+# ==============================================================================
+# TAB 2: AGENTS PERFORMANCE
+# ==============================================================================
+with tab2:
+    st.markdown("### 🧑‍💻 Agent Detailed Performance")
+
+    agent_stats = calc_attendance(df, min_cases)
+    closed_df = df[df["Status"].astype(str).str.contains("Closed", na=False, case=False)].copy()
+    
+    if not closed_df.empty:
+        closed_df["Closed Type"] = closed_df["Status"].apply(
+            lambda x: "Completed With Issue" if "issue" in str(x).lower() else "Completed Successfully"
+        )
+        closed_breakdown = closed_df.groupby(["Assigned By", "Closed Type"]).size().unstack(fill_value=0).reset_index()
+        if not closed_breakdown.empty:
+            agent_stats = agent_stats.merge(closed_breakdown, on="Assigned By", how="left").fillna(0)
+
+    if not agent_stats.empty:
+        if "Completed Successfully" not in agent_stats.columns: agent_stats["Completed Successfully"] = 0
+        if "Completed With Issue" not in agent_stats.columns: agent_stats["Completed With Issue"] = 0
+        
+        agent_stats = agent_stats.sort_values("Total Handled Cases", ascending=False)
+        
+        columns_rename = {
+            "Assigned By": "Agent Name",
+            "Total Handled Cases": "Total Cases",
+            "Attendance Days": "Working Days",
+            "Completed Successfully": "Closed Successfully",
+            "Completed With Issue": "Closed With Issue"
+        }
+        
+        col_tbl, col_bar = st.columns([2, 3], gap="medium")
+        with col_tbl:
+            st.dataframe(agent_stats.rename(columns=columns_rename), hide_index=True, use_container_width=True, height=450)
+
+        with col_bar:
+            plot_closed = closed_df.groupby(["Assigned By", "Closed Type"]).size().reset_index(name="Count")
+            fig_stack = px.bar(plot_closed, x="Assigned By", y="Count", color="Closed Type", 
+                               color_discrete_map={"Completed Successfully": "#3fb950", "Completed With Issue": "#d29922"},
+                               title="Closed Status Breakdown per Agent")
+            fig_stack.update_layout(**THEME, xaxis={'categoryorder':'total descending'}, 
+                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_stack,
