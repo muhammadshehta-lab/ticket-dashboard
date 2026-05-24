@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Advanced Segments)
+dashboard.py — In-Store Requests Dashboard (Advanced Segments - Safe Cloud Version)
 """
 
 import pandas as pd
@@ -54,15 +54,21 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ── جلب البيانات من جوجل شيت (نسخة آمنة ومصححة المسار) ─────────────────────
+# ── جلب البيانات من جوجل شيت (نسخة فائقة الأمان تدعم Streamlit Secrets) ──
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # تحديد المسار التلقائي للملف ليعمل أونلاين ومحلياً بدون مشاكل
-        credentials_path = str(Path(__file__).parent / "credentials.json")
-        creds = Credentials.from_service_account_file(credentials_path, scopes=scopes)
+        # 1. محاولة القراءة من الـ Secrets الآمنة أولاً (للسيرفر الأونلاين)
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            import json
+            creds_dict = json.loads(st.secrets["gspread"]["credentials"])
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        else:
+            # 2. الحل البديل في حال تشغيل الكود محلياً على جهازك (لو الملف متوفر في الفولدر)
+            credentials_path = str(Path(__file__).parent / "credentials.json")
+            creds = Credentials.from_service_account_file(credentials_path, scopes=scopes)
         
         client = gspread.authorize(creds)
         spreadsheet = client.open("AlDawaa Tickets Data")
@@ -112,7 +118,7 @@ def load_data_from_sheets():
         return df
     except Exception as e:
         st.error(f"❌ خطأ في الاتصال أو الصلاحيات: {e}")
-        st.info("تأكد من رفع ملف credentials.json على الجيت هاب في نفس الفولدر الرئيسي مع الكود.")
+        st.info("تأكد من إعداد الـ Secrets بشكل سليم على Streamlit Cloud أو مراجعة صلاحيات الشيت.")
         return pd.DataFrame()
 
 def calc_attendance(df, min_cases=20):
@@ -218,7 +224,7 @@ with tab1:
         fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
         fig_dual.add_trace(go.Bar(x=hourly["Hour"], y=hourly["Cases"], name="Total Cases", marker_color="#58a6ff"), secondary_y=False)
         fig_dual.add_trace(go.Scatter(x=hourly["Hour"], y=hourly["Avg_Time"], name="Avg Service Time (min)", line=dict(color="#f0883e", width=3), mode="lines+markers"), secondary_y=True)
-        # تم إصلاح القوس المفقود هنا تلقائياً ليعمل السيرفر بكفاءة
+        # تم إصلاح القوس المفقود هنا بالكامل لضمان استقرار التشغيل
         fig_dual.update_layout(**THEME, hovermode="x unified", xaxis=dict(tickmode="linear", dtick=1))
         fig_dual.update_yaxes(title_text="Number of Cases", secondary_y=False)
         fig_dual.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True, showgrid=False)
@@ -250,4 +256,60 @@ with tab2:
         closed_df["Closed Type"] = closed_df["Status"].apply(
             lambda x: "Completed With Issue" if "issue" in str(x).lower() else "Completed Successfully"
         )
-        closed_breakdown = closed_df.groupby(["Assigned By", "Closed Type"]).size
+        closed_breakdown = closed_df.groupby(["Assigned By", "Closed Type"]).size().unstack(fill_value=0).reset_index()
+        if not closed_breakdown.empty:
+            agent_stats = agent_stats.merge(closed_breakdown, on="Assigned By", how="left").fillna(0)
+
+    # ترتيب الجدول النهائي
+    if not agent_stats.empty:
+        if "Completed Successfully" not in agent_stats.columns: agent_stats["Completed Successfully"] = 0
+        if "Completed With Issue" not in agent_stats.columns: agent_stats["Completed With Issue"] = 0
+        
+        agent_stats = agent_stats.sort_values("Total Handled Cases", ascending=False)
+        
+        # إعادة تسمية الأعمدة للمظهر الإنجليزي الاحترافي
+        columns_rename = {
+            "Assigned By": "Agent Name",
+            "Total Handled Cases": "Total Cases",
+            "Attendance Days": "Working Days",
+            "Completed Successfully": "Closed Successfully",
+            "Completed With Issue": "Closed With Issue"
+        }
+        
+        col_tbl, col_bar = st.columns([2, 3], gap="medium")
+        
+        with col_tbl:
+            st.dataframe(agent_stats.rename(columns=columns_rename), hide_index=True, use_container_width=True, height=450)
+
+        with col_bar:
+            plot_closed = closed_df.groupby(["Assigned By", "Closed Type"]).size().reset_index(name="Count")
+            fig_stack = px.bar(plot_closed, x="Assigned By", y="Count", color="Closed Type", 
+                               color_discrete_map={"Completed Successfully": "#3fb950", "Completed With Issue": "#d29922"},
+                               title="Closed Status Breakdown per Agent")
+            fig_stack.update_layout(**THEME, xaxis={'categoryorder':'total descending'}, 
+                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_stack, use_container_width=True)
+    else:
+        st.info("No agent data found for the selected filters.")
+
+
+# ==============================================================================
+# TAB 3: RAW DATA (البيانات الخام)
+# ==============================================================================
+with tab3:
+    st.markdown("### 🗃 Raw Data Explorer")
+    search = st.text_input("🔍 Search in any column")
+    show_df = df.copy()
+    if search:
+        mask = show_df.astype(str).apply(lambda c: c.str.contains(search, case=False, na=False)).any(axis=1)
+        show_df = show_df[mask]
+
+    display_cols = ["Request ID", "Request Date", "Request Type", "Status", "Assigned By", 
+                    "Store Code", "Insurance Company", "Request Take", "Response Take"]
+    st.dataframe(show_df[[c for c in display_cols if c in show_df.columns]], use_container_width=True, height=400)
+
+    csv = show_df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Download Current View as CSV", data=csv, file_name="filtered_requests.csv", mime="text/csv")
+
+st.divider()
+st.caption("al-Dawaa • Advanced In-Store Requests Dashboard • Powered by Streamlit")
