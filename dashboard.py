@@ -180,7 +180,6 @@ with tab1:
     def kpi(label, value, sub="", sub_color='#3fb950'):
         return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
 
-    # تم تأمين وإصلاح أسطر الحسابات هنا بالكامل لتفادي أي انقطاع نصي
     total_tickets = len(df)
     total_emails = int(df["Is Email"].sum())
     total_reopened = int(df["Is Reopened"].sum())
@@ -306,52 +305,4 @@ with tab1:
     hm_data = df.groupby(["Day Name", "Hour"]).size().reset_index(name="Cases")
     if not hm_data.empty:
         hm_pivot = hm_data.pivot(index="Day Name", columns="Hour", values="Cases").reindex(days_order).fillna(0)
-        fig_hm = px.imshow(hm_pivot, text_auto=True, aspect="auto", color_continuous_scale="Blues",
-                           labels=dict(x="Hour of Day", y="Day of Week", color="Cases"))
-        fig_hm.update_layout(**THEME, coloraxis_showscale=False)
-        st.plotly_chart(fig_hm, use_container_width=True)
-
-
-# ==============================================================================
-# TAB 2: AGENTS PERFORMANCE
-# ==============================================================================
-with tab2:
-    st.markdown("### 🧑‍💻 Agent Detailed Performance")
-
-    agent_stats = calc_attendance(df, min_cases)
-    closed_df = df[df["Status"].astype(str).str.contains("Closed", na=False, case=False)].copy()
-    
-    if not closed_df.empty:
-        closed_df["Closed Type"] = closed_df["Status"].apply(
-            lambda x: "Completed With Issue" if "issue" in str(x).lower() else "Completed Successfully"
-        )
-        closed_breakdown = closed_df.groupby(["Assigned By", "Closed Type"]).size().unstack(fill_value=0).reset_index()
-        if not closed_breakdown.empty:
-            agent_stats = agent_stats.merge(closed_breakdown, on="Assigned By", how="left").fillna(0)
-
-    if not agent_stats.empty:
-        if "Completed Successfully" not in agent_stats.columns: agent_stats["Completed Successfully"] = 0
-        if "Completed With Issue" not in agent_stats.columns: agent_stats["Completed With Issue"] = 0
-        
-        agent_stats = agent_stats.sort_values("Total Handled Cases", ascending=False)
-        
-        columns_rename = {
-            "Assigned By": "Agent Name",
-            "Total Handled Cases": "Total Cases",
-            "Attendance Days": "Working Days",
-            "Completed Successfully": "Closed Successfully",
-            "Completed With Issue": "Closed With Issue"
-        }
-        
-        col_tbl, col_bar = st.columns([2, 3], gap="medium")
-        with col_tbl:
-            st.dataframe(agent_stats.rename(columns=columns_rename), hide_index=True, use_container_width=True, height=450)
-
-        with col_bar:
-            plot_closed = closed_df.groupby(["Assigned By", "Closed Type"]).size().reset_index(name="Count")
-            fig_stack = px.bar(plot_closed, x="Assigned By", y="Count", color="Closed Type", 
-                               color_discrete_map={"Completed Successfully": "#3fb950", "Completed With Issue": "#d29922"},
-                               title="Closed Status Breakdown per Agent")
-            fig_stack.update_layout(**THEME, xaxis={'categoryorder':'total descending'}, 
-                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-            st.plotly_chart(fig_stack,
+        fig_hm = px.imshow(hm_pivot, text_auto=True, aspect="auto", color_
