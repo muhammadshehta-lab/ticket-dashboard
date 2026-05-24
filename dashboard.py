@@ -1,4 +1,4 @@
-# dashboard.py — In-Store Requests Dashboard (Multi-Page - English Version)
+# dashboard.py — Approvals Team Dashboard (Multi-Page English Version)
 
 import pandas as pd
 import plotly.express as px
@@ -100,3 +100,175 @@ def kpi(label, value, sub=""):
 
 # ── SIDEBAR & NAVIGATION ─────────────────────────────────────────────────────
 with st.sidebar:
+    st.markdown("## 🛡️ Approvals Team")
+    st.success("📡 Live sync is Active")
+    
+    if st.button("🔄 Refresh Data Now", use_container_width=True):
+        load_data_from_sheets.clear()
+        
+    # Page Navigation Links
+    page = st.radio("📌 Navigation:", ["📊 Platform Overview", "👥 Team Performance", "🎯 KPIs & Manual Settings"])
+    st.divider()
+
+    df_raw = load_data_from_sheets()
+    if df_raw.empty:
+        st.warning("No data found. Check connections.")
+        st.stop()
+
+    st.subheader("🔍 Global Filters")
+    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
+    
+    if pd.isna(min_d) or pd.isna(max_d):
+        st.error("Date column format issue detected.")
+        st.stop()
+        
+    date_range = st.date_input("Date Range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        d_from, d_to = date_range
+    else:
+        d_from, d_to = min_d, max_d
+
+    agents = sorted(df_raw["Assigned By"].dropna().unique())
+    sel_agents = st.multiselect("Select Agent(s)", agents, default=agents)
+
+# ── APPLY FILTERS ────────────────────────────────────────────────────────────
+df = df_raw.copy()
+df = df[df["Date Only"].between(d_from, d_to)]
+if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ── PAGE 1: PLATFORM OVERVIEW ──
+# ──────────────────────────────────────────────────────────────────────────────
+if page == "📊 Platform Overview":
+    st.markdown("## 📊 Platform Statistics Overview")
+    st.caption(f"Showing requests from {d_from} to {d_to}")
+    
+    # Calculations (Adjust keywords if your sheet data uses Arabic statuses)
+    total_req = len(df)
+    closed_completed = df["Status"].str.contains("Completed|مكتمل|Closed", na=False, case=False).sum()
+    closed_issue = df["Status"].str.contains("Issue|مشكلة", na=False, case=False).sum()
+    sent_insurance = df["Status"].str.contains("Insurance|تأمين", na=False, case=False).sum()
+    reopen_cases = df["Status"].str.contains("Reopen|معاد", na=False, case=False).sum()
+    
+    avg_resp = df["Response Take (min)"].mean()
+    aht = df["Request Take (min)"].mean()  # Average Handling Time / Service Time
+    reopen_rate = (reopen_cases / total_req * 100) if total_req > 0 else 0
+
+    # Row 1: Main Status Cards
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(kpi("Total Requests", f"{total_req:,}"), unsafe_allow_html=True)
+    c2.markdown(kpi("Completed / Closed", f"{closed_completed:,}"), unsafe_allow_html=True)
+    c3.markdown(kpi("Closed with Issue", f"{closed_issue:,}"), unsafe_allow_html=True)
+    c4.markdown(kpi("Sent to Insurance", f"{sent_insurance:,}"), unsafe_allow_html=True)
+
+    # Row 2: Service Metrics Cards
+    c5, c6, c7, c8 = st.columns(4)
+    c5.markdown(kpi("Avg Response Time", f"{avg_resp:.1f} min" if pd.notna(avg_resp) else "0 min"), unsafe_allow_html=True)
+    c6.markdown(kpi("Avg Handling Time (AHT)", f"{aht:.1f} min" if pd.notna(aht) else "0 min"), unsafe_allow_html=True)
+    c7.markdown(kpi("Reopen Rate", f"{reopen_rate:.1f}%"), unsafe_allow_html=True)
+    c8.markdown(kpi("Email Requests", f"{df['Is Email'].sum()}"), unsafe_allow_html=True)
+
+    st.divider()
+
+    # Charts: Request Types Pie and Distribution Curve
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🥧 Request Types Distribution")
+        if not df.empty and "Request Type" in df.columns:
+            type_counts = df["Request Type"].value_counts().reset_index()
+            type_counts.columns = ["Request Type", "Count"]
+            fig_pie = px.pie(type_counts, values="Count", names="Request Type", hole=0.4,
+                             color_discrete_sequence=px.colors.sequential.Tealgrn)
+            fig_pie.update_layout(**THEME)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("No request type data available.")
+
+    with col2:
+        st.markdown("### 📈 Handling Time Distribution Curve")
+        if not df.empty and pd.notna(aht):
+            fig_dist = px.histogram(df, x="Request Take (min)", marginal="box", 
+                                    color_discrete_sequence=["#58a6ff"])
+            fig_dist.update_layout(**THEME, xaxis_title="Minutes", yaxis_title="Count")
+            st.plotly_chart(fig_dist, use_container_width=True)
+        else:
+            st.info("Not enough data to calculate distribution.")
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ── PAGE 2: TEAM PERFORMANCE ──
+# ──────────────────────────────────────────────────────────────────────────────
+elif page == "👥 Team Performance":
+    st.markdown("## 👥 Team Performance Metrics")
+    
+    min_cases = st.sidebar.number_input("Minimum cases to count as Attendance Day", min_value=1, value=20)
+    
+    if not df.empty:
+        # 1. Calculate Attendance Days per Agent
+        daily_per_agent = df.groupby(["Assigned By", "Date Only"]).size().reset_index(name="Daily Cases")
+        attendance = daily_per_agent[daily_per_agent["Daily Cases"] >= min_cases].groupby("Assigned By").size().reset_index(name="Attendance Days")
+        
+        # 2. Aggregate Agent Metrics
+        agent_stats = df.groupby("Assigned By").agg(
+            Total_Cases=("Request Date", "count"),
+            Avg_Response_Time=("Response Take (min)", "mean"),
+            Avg_Handling_Time=("Request Take (min)", "mean"),
+            Email_Cases=("Is Email", "sum")
+        ).reset_index()
+        
+        # Merge Data
+        team_data = pd.merge(agent_stats, attendance, on="Assigned By", how="left").fillna(0)
+        team_data["Attendance Days"] = team_data["Attendance Days"].astype(int)
+        
+        # Format and display team metrics table
+        st.dataframe(
+            team_data.style.format({
+                "Avg_Response_Time": "{:.1f} min",
+                "Avg_Handling_Time": "{:.1f} min"
+            }),
+            use_container_width=True, height=400, hide_index=True
+        )
+        
+        st.markdown("### 📊 Agent Workload Volume")
+        fig_wl = px.bar(team_data.sort_values("Total_Cases"), x="Total_Cases", y="Assigned By", 
+                        orientation="h", color="Total_Cases", color_continuous_scale="Blues",
+                        labels={"Total_Cases": "Total Handled Cases", "Assigned By": "Agent Name"})
+        fig_wl.update_layout(**THEME, coloraxis_showscale=False)
+        st.plotly_chart(fig_wl, use_container_width=True)
+    else:
+        st.warning("No data available for the selected filters.")
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ── PAGE 3: KPIS & MANUAL ENTRY ──
+# ──────────────────────────────────────────────────────────────────────────────
+elif page == "🎯 KPIs & Manual Settings":
+    st.markdown("## 🎯 KPI Management & External Inputs")
+    st.info("💡 Use this page to track your operational targets and manually update external metrics.")
+    
+    # Editable Data Grid for KPI Targets
+    st.markdown("### ✍️ Manual Target Settings")
+    
+    default_targets = pd.DataFrame({
+        "Metric / KPI Indicator": ["Average Handling Time (AHT)", "Response Time (SLA)", "Quality Score %", "Reopen Rate Target"],
+        "Target Goal": ["15 Min", "5 Min", "95%", "< 5%"],
+        "Current Actual": ["-", "-", "-", "-"],
+        "Comments / Notes": ["", "", "", ""]
+    })
+    
+    edited_df = st.data_editor(default_targets, num_rows="dynamic", use_container_width=True)
+    
+    st.divider()
+    
+    # File Uploader section for external sheets (e.g., QA sheets, Audits)
+    st.markdown("### 📎 Upload External Team Sheets (Excel / CSV)")
+    uploaded_file = st.file_uploader("Upload external QA or performance files", type=["csv", "xlsx"])
+    
+    if uploaded_file is not None:
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                ext_df = pd.read_csv(uploaded_file)
+            else:
+                ext_df = pd.read_excel(uploaded_file)
+            st.success("File uploaded successfully! Data Preview:")
+            st.dataframe(ext_df, use_container_width=True, height=250)
+        except Exception as e:
+            st.error(f"An error occurred while parsing the file: {e}")
