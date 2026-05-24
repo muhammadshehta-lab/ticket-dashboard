@@ -89,4 +89,96 @@ def load_data_from_sheets():
             if col not in df.columns:
                 df[col] = np.nan
 
-        df
+        df["Status"] = df["Status"].fillna("Unknown")
+        df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
+        df["Request Date"] = pd.to_datetime(df["Request Date"], errors="coerce")
+        df["Date Only"] = df["Request Date"].dt.date
+        df["Hour"] = df["Request Date"].dt.hour.fillna(0).astype(int)
+        df["Day Name"] = df["Request Date"].dt.day_name().fillna("Unknown")
+        df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
+        df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
+        
+        # رصد الـ Reopened Tickets
+        df["Is Reopened"] = df["Status"].astype(str).str.lower().str.contains("reopen") | \
+                            df["Request Type"].astype(str).str.lower().str.contains("reopen")
+
+        invalid_ins = ["nan", "none", "n/a", "null", "-", "لا يوجد", "unknown", ""]
+        if "Insurance Company" in df.columns:
+            df["Has Insurance"] = df["Insurance Company"].astype(str).str.strip().str.lower().apply(
+                lambda x: False if x in invalid_ins or pd.isna(x) else True
+            )
+        else:
+            df["Has Insurance"] = False
+
+        if "Is Special Request(By Email)" in df.columns:
+            df["Is Email"] = df["Is Special Request(By Email)"].astype(str).str.strip().str.upper() == "YES"
+        else:
+            df["Is Email"] = False
+
+        return df
+    except Exception as e:
+        st.error(f"❌ خطأ في الاتصال أو الصلاحيات: {e}")
+        return pd.DataFrame()
+
+def calc_attendance(df, min_cases=20):
+    if df.empty or "Assigned By" not in df.columns or "Date Only" not in df.columns:
+        return pd.DataFrame(columns=["Assigned By", "Attendance Days", "Total Handled Cases"])
+        
+    daily_per_agent = df.groupby(["Assigned By", "Date Only"]).size().reset_index(name="Daily Cases")
+    attendance = daily_per_agent[daily_per_agent["Daily Cases"] >= min_cases].groupby("Assigned By").size().reset_index(name="Attendance Days")
+    total_agent = df.groupby("Assigned By").size().reset_index(name="Total Handled Cases")
+    
+    agent_stats = total_agent.merge(attendance, on="Assigned By", how="left").fillna(0)
+    agent_stats["Attendance Days"] = agent_stats["Attendance Days"].astype(int)
+    return agent_stats
+
+# ── Sidebar Filters ───────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 💊 Dashboard")
+    st.success("📡 Live sync Active")
+    if st.button("🔄 Refresh Data Now", use_container_width=True):
+        load_data_from_sheets.clear()
+
+    df_raw = load_data_from_sheets()
+    if df_raw.empty:
+        st.warning("Waiting for data...")
+        st.stop()
+
+    st.divider()
+    st.subheader("🔍 Filters")
+    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
+    
+    if pd.isna(min_d) or pd.isna(max_d):
+        st.error("Date values are completely missing in the sheet.")
+        st.stop()
+        
+    date_range = st.date_input("Date Range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
+    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
+
+    sel_agents = st.multiselect("Agent", sorted(df_raw["Assigned By"].dropna().unique()))
+    sel_types = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
+    
+    st.divider()
+    min_cases = st.number_input("Min cases for Attendance Day", min_value=1, max_value=100, value=20)
+
+# تصفية البيانات
+df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
+if sel_types:  df = df[df["Request Type"].isin(sel_types)]
+
+# ── العنوان الرئيسي ───────────────────────────────────────────────────────────
+st.markdown("## 💊 In-Store Requests Dashboard")
+st.caption(f"Showing **{len(df):,}** requests out of {len(df_raw):,} — {d_from} to {d_to}")
+
+# ── تابات العرض ──────────────────────────────────────────────────────────────
+tab1, tab2, tab3 = st.tabs(["📊 Tickets Stats & Overview", "👥 Agents Performance", "🗃 Raw Data"])
+
+# ==============================================================================
+# TAB 1: TICKETS STATS & OVERVIEW
+# ==============================================================================
+with tab1:
+    def kpi(label, value, sub="", sub_color='#3fb950'):
+        return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
+
+    total_tickets = len(df)
+    total_emails =
