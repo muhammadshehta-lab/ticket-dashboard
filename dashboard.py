@@ -1,4 +1,4 @@
-# dashboard.py — In-Store Requests Dashboard (Multi-Page)
+# dashboard.py — In-Store Requests Dashboard (Multi-Page - English Version)
 
 import pandas as pd
 import plotly.express as px
@@ -8,7 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import numpy as np
 
-# ── إعدادات الصفحة ─────────────────────────────────────────────────────────────
+# ── PAGE CONFIGURATION ────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Approvals Team Dashboard",
     page_icon="🛡️",
@@ -16,6 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Custom Dark Theme CSS
 st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
@@ -50,7 +51,7 @@ def time_to_minutes(s):
     except:
         return np.nan
 
-# ── جلب البيانات ─────────────────────────────────────────────────────────────
+# ── DATA LOADING ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -77,7 +78,7 @@ def load_data_from_sheets():
         df = pd.concat(all_dfs, ignore_index=True)
         df.replace("", pd.NA, inplace=True)
 
-        # تحويل التواريخ والأوقات
+        # Convert dates and times
         df["Request Date"] = pd.to_datetime(df["Request Date"], errors="coerce")
         df["Date Only"] = df["Request Date"].dt.date
         df["Request Take (min)"]  = df["Request Take"].apply(time_to_minutes)
@@ -97,160 +98,5 @@ def kpi(label, value, sub=""):
     sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
     return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div>{sub_html}</div>'
 
-# ── القائمة الجانبية (Sidebar & Navigation) ──────────────────────────────────
+# ── SIDEBAR & NAVIGATION ─────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🛡️ Approvals Team")
-    
-    # نظام التنقل بين الصفحات
-    page = st.radio("📌 انتقل إلى:", ["📊 ملخص المنصة", "👥 أداء الفريق", "🎯 مؤشرات الأداء (KPIs)"])
-    st.divider()
-
-    df_raw = load_data_from_sheets()
-    if df_raw.empty:
-        st.warning("No data found. Check connections.")
-        st.stop()
-
-    st.subheader("🔍 الفلاتر العامة")
-    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
-    date_range = st.date_input("نطاق التاريخ", value=(min_d, max_d), min_value=min_d, max_value=max_d)
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        d_from, d_to = date_range
-    else:
-        d_from, d_to = min_d, max_d
-
-    agents = sorted(df_raw["Assigned By"].dropna().unique())
-    sel_agents = st.multiselect("اختر الموظف (Agent)", agents, default=agents)
-
-# ── تطبيق الفلاتر ─────────────────────────────────────────────────────────────
-df = df_raw.copy()
-df = df[df["Date Only"].between(d_from, d_to)]
-if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ── الصفحة الأولى: ملخص المنصة (Platform Overview) ──
-# ──────────────────────────────────────────────────────────────────────────────
-if page == "📊 ملخص المنصة":
-    st.markdown("## 📊 تقرير المنصة (Platform Statistics)")
-    
-    # حساب الإحصائيات (ملاحظة: عدل نصوص الـ Status حسب ما هو مكتوب عندك في الشيت)
-    total_req = len(df)
-    closed_completed = df["Status"].str.contains("Completed|مكتمل", na=False, case=False).sum()
-    closed_issue = df["Status"].str.contains("Issue|مشكلة", na=False, case=False).sum()
-    sent_insurance = df["Status"].str.contains("Insurance|تأمين", na=False, case=False).sum()
-    reopen_cases = df["Status"].str.contains("Reopen|معاد", na=False, case=False).sum()
-    
-    avg_resp = df["Response Take (min)"].mean()
-    aht = df["Request Take (min)"].mean() # Average Handling Time / Service Time
-    reopen_rate = (reopen_cases / total_req * 100) if total_req > 0 else 0
-
-    # عرض كروت الـ KPIs
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(kpi("إجمالي الطلبات", f"{total_req:,}"), unsafe_allow_html=True)
-    c2.markdown(kpi("مكتمل بدون مشاكل", f"{closed_completed:,}"), unsafe_allow_html=True)
-    c3.markdown(kpi("مغلق بمشكلة", f"{closed_issue:,}"), unsafe_allow_html=True)
-    c4.markdown(kpi("مرسل للتأمين", f"{sent_insurance:,}"), unsafe_allow_html=True)
-
-    c5, c6, c7, c8 = st.columns(4)
-    c5.markdown(kpi("متوسط سرعة الرد", f"{avg_resp:.1f} min"), unsafe_allow_html=True)
-    c6.markdown(kpi("متوسط وقت الخدمة (AHT)", f"{aht:.1f} min"), unsafe_allow_html=True)
-    c7.markdown(kpi("نسبة إعادة الفتح (Reopen)", f"{reopen_rate:.1f}%"), unsafe_allow_html=True)
-    c8.markdown(kpi("طلبات الإيميل", f"{df['Is Email'].sum()}"), unsafe_allow_html=True)
-
-    st.divider()
-
-    # الرسوم البيانية: أنواع الطلبات ومنحنى التوزيع
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🥧 توزيع أنواع الطلبات")
-        type_counts = df["Request Type"].value_counts().reset_index()
-        type_counts.columns = ["Request Type", "Count"]
-        fig_pie = px.pie(type_counts, values="Count", names="Request Type", hole=0.4,
-                         color_discrete_sequence=px.colors.sequential.Tealgrn)
-        fig_pie.update_layout(**THEME)
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    with col2:
-        st.markdown("### 📈 منحنى التوزيع: وقت الخدمة والاستجابة")
-        # Distribution curve using Marginal Box plot
-        fig_dist = px.histogram(df, x="Request Take (min)", marginal="box", 
-                                title="Distribution of Handling Time (AHT)",
-                                color_discrete_sequence=["#58a6ff"])
-        fig_dist.update_layout(**THEME, xaxis_title="Minutes", yaxis_title="Count")
-        st.plotly_chart(fig_dist, use_container_width=True)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ── الصفحة الثانية: أداء الفريق (Team Performance) ──
-# ──────────────────────────────────────────────────────────────────────────────
-elif page == "👥 أداء الفريق":
-    st.markdown("## 👥 تفاصيل أداء الفريق (Team Metrics)")
-    
-    min_cases = st.sidebar.number_input("الحد الأدنى لاحتساب يوم دوام", min_value=1, value=20)
-    
-    # تجميع بيانات كل موظف
-    # 1. أيام الدوام
-    daily_per_agent = df.groupby(["Assigned By", "Date Only"]).size().reset_index(name="Daily Cases")
-    attendance = daily_per_agent[daily_per_agent["Daily Cases"] >= min_cases].groupby("Assigned By").size().reset_index(name="أيام الدوام")
-    
-    # 2. إحصائيات الموظف (إجمالي، متوسط الأوقات، الحالات، الإيميلات)
-    agent_stats = df.groupby("Assigned By").agg(
-        إجمالي_الحالات=("Request Date", "count"),
-        متوسط_وقت_الاستجابة=("Response Take (min)", "mean"),
-        متوسط_وقت_الخدمة=("Request Take (min)", "mean"),
-        حالات_الايميل=("Is Email", "sum")
-    ).reset_index()
-    
-    # دمج البيانات
-    team_data = pd.merge(agent_stats, attendance, on="Assigned By", how="left").fillna(0)
-    team_data["أيام الدوام"] = team_data["أيام الدوام"].astype(int)
-    
-    st.dataframe(
-        team_data.style.format({
-            "متوسط_وقت_الاستجابة": "{:.1f} دقيقة",
-            "متوسط_وقت_الخدمة": "{:.1f} دقيقة"
-        }),
-        use_container_width=True, height=400, hide_index=True
-    )
-    
-    st.markdown("### 📊 حجم العمل لكل موظف")
-    fig_wl = px.bar(team_data.sort_values("إجمالي_الحالات"), x="إجمالي_الحالات", y="Assigned By", 
-                    orientation="h", color="إجمالي_الحالات", color_continuous_scale="Blues")
-    fig_wl.update_layout(**THEME, coloraxis_showscale=False)
-    st.plotly_chart(fig_wl, use_container_width=True)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ── الصفحة الثالثة: مؤشرات الأداء والإدخال اليدوي (KPIs & Manual Entry) ──
-# ──────────────────────────────────────────────────────────────────────────────
-elif page == "🎯 مؤشرات الأداء (KPIs)":
-    st.markdown("## 🎯 إعدادات ومتابعة الـ KPIs")
-    st.info("💡 في هذه الصفحة يمكنك إدخال التارجت الشهري يدوياً أو مراجعة شيتات خارجية.")
-    
-    # جزء للإدخال اليدوي باستخدام st.data_editor
-    st.markdown("### ✍️ إدخال التارجت يدوياً (Manual Target Entry)")
-    
-    # بيانات مبدئية قابلة للتعديل
-    default_targets = pd.DataFrame({
-        "الهدف (KPI)": ["متوسط وقت الخدمة (AHT)", "سرعة الاستجابة (SLA)", "نسبة الجودة", "نسبة إعادة الفتح"],
-        "التارجت المطلوب": ["15 Min", "5 Min", "95%", "< 5%"],
-        "النتيجة الفعلية": ["-", "-", "-", "-"],
-        "ملاحظات": ["", "", "", ""]
-    })
-    
-    # الأداة دي بتسمحلك تعدل البيانات كأنها ملف إكسيل جوه الداش بورد
-    edited_df = st.data_editor(default_targets, num_rows="dynamic", use_container_width=True)
-    
-    st.divider()
-    
-    # جزء لرفع شيتات خارجية (مثلاً شيت تقييم الجودة من الـ QA)
-    st.markdown("### 📎 رفع شيتات خارجية (External Data Upload)")
-    uploaded_file = st.file_uploader("ارفع ملف Excel أو CSV لتقييمات الفريق", type=["csv", "xlsx"])
-    
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                ext_df = pd.read_csv(uploaded_file)
-            else:
-                ext_df = pd.read_excel(uploaded_file)
-            st.success("تم رفع الملف بنجاح! معاينة البيانات:")
-            st.dataframe(ext_df, use_container_width=True, height=250)
-        except Exception as e:
-            st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
