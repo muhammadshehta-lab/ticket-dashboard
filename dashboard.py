@@ -7,7 +7,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import numpy as np
-import json  # تمت إضافة هذه المكتبة لقراءة الـ Secrets
+import json
 
 # ── PAGE CONFIGURATION ────────────────────────────────────────────────────────
 st.set_page_config(
@@ -61,7 +61,7 @@ def load_data_from_sheets():
             "https://www.googleapis.com/auth/drive",
         ]
         
-        # التعديل الجديد: قراءة المفاتيح من الـ Secrets كـ JSON
+        # قراءة المفاتيح من الـ Secrets
         creds_dict = json.loads(st.secrets["GCP_JSON"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         
@@ -75,126 +75,3 @@ def load_data_from_sheets():
                 headers = data[0]
                 rows = data[1:]
                 df_tab = pd.DataFrame(rows, columns=headers)
-                all_dfs.append(df_tab)
-
-        if not all_dfs:
-            return pd.DataFrame()
-
-        df = pd.concat(all_dfs, ignore_index=True)
-        df.replace("", pd.NA, inplace=True)
-
-        # Convert dates and times
-        df["Request Date"] = pd.to_datetime(df["Request Date"], errors="coerce")
-        df["Date Only"] = df["Request Date"].dt.date
-        df["Request Take (min)"]  = df["Request Take"].apply(time_to_minutes)
-        df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes)
-        
-        if "Is Special Request(By Email)" in df.columns:
-            df["Is Email"] = df["Is Special Request(By Email)"].astype(str).str.strip().str.upper() == "YES"
-        else:
-            df["Is Email"] = False
-
-        return df
-    except Exception as e:
-        st.error(f"Error fetching data: {e}")
-        return pd.DataFrame()
-
-def kpi(label, value, sub=""):
-    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
-    return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div>{sub_html}</div>'
-
-# ── SIDEBAR & NAVIGATION ─────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 🛡️ Approvals Team")
-    st.success("📡 Live sync is Active")
-    
-    if st.button("🔄 Refresh Data Now", use_container_width=True):
-        load_data_from_sheets.clear()
-        
-    # Page Navigation Links
-    page = st.radio("📌 Navigation:", ["📊 Platform Overview", "👥 Team Performance", "🎯 KPIs & Manual Settings"])
-    st.divider()
-
-    df_raw = load_data_from_sheets()
-    if df_raw.empty:
-        st.warning("No data found. Check connections.")
-        st.stop()
-
-    st.subheader("🔍 Global Filters")
-    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
-    
-    if pd.isna(min_d) or pd.isna(max_d):
-        st.error("Date column format issue detected.")
-        st.stop()
-        
-    date_range = st.date_input("Date Range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        d_from, d_to = date_range
-    else:
-        d_from, d_to = min_d, max_d
-
-    agents = sorted(df_raw["Assigned By"].dropna().unique())
-    sel_agents = st.multiselect("Select Agent(s)", agents, default=agents)
-
-# ── APPLY FILTERS ────────────────────────────────────────────────────────────
-df = df_raw.copy()
-df = df[df["Date Only"].between(d_from, d_to)]
-if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ── PAGE 1: PLATFORM OVERVIEW ──
-# ──────────────────────────────────────────────────────────────────────────────
-if page == "📊 Platform Overview":
-    st.markdown("## 📊 Platform Statistics Overview")
-    st.caption(f"Showing requests from {d_from} to {d_to}")
-    
-    # Calculations
-    total_req = len(df)
-    closed_completed = df["Status"].str.contains("Completed|مكتمل|Closed", na=False, case=False).sum()
-    closed_issue = df["Status"].str.contains("Issue|مشكلة", na=False, case=False).sum()
-    sent_insurance = df["Status"].str.contains("Insurance|تأمين", na=False, case=False).sum()
-    reopen_cases = df["Status"].str.contains("Reopen|معاد", na=False, case=False).sum()
-    
-    avg_resp = df["Response Take (min)"].mean()
-    aht = df["Request Take (min)"].mean()
-    reopen_rate = (reopen_cases / total_req * 100) if total_req > 0 else 0
-
-    # Row 1: Main Status Cards
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(kpi("Total Requests", f"{total_req:,}"), unsafe_allow_html=True)
-    c2.markdown(kpi("Completed / Closed", f"{closed_completed:,}"), unsafe_allow_html=True)
-    c3.markdown(kpi("Closed with Issue", f"{closed_issue:,}"), unsafe_allow_html=True)
-    c4.markdown(kpi("Sent to Insurance", f"{sent_insurance:,}"), unsafe_allow_html=True)
-
-    # Row 2: Service Metrics Cards
-    c5, c6, c7, c8 = st.columns(4)
-    c5.markdown(kpi("Avg Response Time", f"{avg_resp:.1f} min" if pd.notna(avg_resp) else "0 min"), unsafe_allow_html=True)
-    c6.markdown(kpi("Avg Handling Time (AHT)", f"{aht:.1f} min" if pd.notna(aht) else "0 min"), unsafe_allow_html=True)
-    c7.markdown(kpi("Reopen Rate", f"{reopen_rate:.1f}%"), unsafe_allow_html=True)
-    c8.markdown(kpi("Email Requests", f"{df['Is Email'].sum()}"), unsafe_allow_html=True)
-
-    st.divider()
-
-    # Charts
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🥧 Request Types Distribution")
-        if not df.empty and "Request Type" in df.columns:
-            type_counts = df["Request Type"].value_counts().reset_index()
-            type_counts.columns = ["Request Type", "Count"]
-            fig_pie = px.pie(type_counts, values="Count", names="Request Type", hole=0.4,
-                             color_discrete_sequence=px.colors.sequential.Tealgrn)
-            fig_pie.update_layout(**THEME)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("No request type data available.")
-
-    with col2:
-        st.markdown("### 📈 Handling Time Distribution Curve")
-        if not df.empty and pd.notna(aht):
-            fig_dist = px.histogram(df, x="Request Take (min)", marginal="box", 
-                                    color_discrete_sequence=["#58a6ff"])
-            fig_dist.update_layout(**THEME, xaxis_title="Minutes", yaxis_title="Count")
-            st.plotly_chart(fig_dist, use_container_width=True)
-        else:
-            st.info("
