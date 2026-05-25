@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Secured Short-Line Edition)
+dashboard.py — In-Store Requests & Ticket Analytics Dashboard (Stable Production Build)
 """
 
 import pandas as pd
@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── تصميم الواجهة والألوان (CSS) ──────────────────────────────────────────────
+# ── تصميم الواجهة والألوان المتطورة (Modern UI/UX CSS) ─────────────────────────
 st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
@@ -56,7 +56,7 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ── جلب البيانات من جوجل شيت (مؤمن بأقصر الأسطر الممكنة) ──────────────────────
+# ── جلب البيانات من جوجل شيت (مؤمن ومحمي تماماً من البتر) ─────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -68,10 +68,7 @@ def load_data_from_sheets():
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
             sec_json = st.secrets["gspread"]["credentials"]
             creds_dict = json.loads(sec_json)
-            creds = Credentials.from_service_account_info(
-                creds_dict, 
-                scopes=scopes
-            )
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
             st.error("❌ لم يتم العثور على جينات الصلاحيات في Secrets.")
             return pd.DataFrame()
@@ -101,26 +98,21 @@ def load_data_from_sheets():
             if col not in df.columns:
                 df[col] = np.nan
 
-        # حماية معالجة الأعمدة بأسطر شديدة القصر
         df["Status"] = df["Status"].fillna("Unknown")
         df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
         
-        # تحويل التواريخ
         date_parsed = pd.to_datetime(df["Request Date"], errors="coerce")
         df["Request Date"] = date_parsed
         df["Date Only"] = date_parsed.dt.date
         df["Hour"] = date_parsed.dt.hour.fillna(0).astype(int)
         df["Day Name"] = date_parsed.dt.day_name().fillna("Unknown")
         
-        # حساب الدقائق
         df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
         
-        # وقت الحل الإجمالي AHT
         df["AHT (min)"] = df["Response Take (min)"] + df["First Action Take (min)"]
         
-        # قراءة حقل الإيميل بأمان
         if "Is Special Request(By Email)" in df.columns:
             mail_col = df["Is Special Request(By Email)"]
             has_mail = mail_col.astype(str).str.strip().str.lower()
@@ -146,4 +138,24 @@ if "manual_values_log" not in st.session_state:
 if "manual_cases_log" not in st.session_state:
     st.session_state.manual_cases_log = []
 
-# ── Sidebar Filters ────────────────────────────────────────────────────────
+# ── Sidebar Filters ───────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 💊 Navigation & Filters")
+    st.success("📡 Live Sync Active")
+    if st.button("🔄 Refresh Data Now", use_container_width=True):
+        load_data_from_sheets.clear()
+
+    df_raw = load_data_from_sheets()
+    if df_raw.empty:
+        st.warning("Waiting for data configuration...")
+        st.stop()
+
+    st.divider()
+    min_d = df_raw["Date Only"].dropna().min()
+    max_d = df_raw["Date Only"].dropna().max()
+    
+    date_val = (min_d, max_d)
+    date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
+    
+    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
+    sel_agents = st.multiselect("Agent Filter", sorted(df_raw
