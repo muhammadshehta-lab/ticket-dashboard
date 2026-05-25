@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests & Ticket Analytics Dashboard (SLA Performance Edition)
+dashboard.py — In-Store Requests & Ticket Analytics Dashboard (SLA Time Tiers Edition)
 """
 
 import pandas as pd
@@ -113,6 +113,14 @@ def load_data_from_sheets():
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame()
 
+# دالة مساعدة لتصنيف الفترات الزمنية
+def assign_time_tier(minutes):
+    if minutes <= 15: return "01. Under 15 Mins"
+    if minutes <= 30: return "02. 15 to 30 Mins"
+    if minutes <= 45: return "03. 30 to 45 Mins"
+    if minutes <= 60: return "04. 45 to 60 Mins"
+    return "05. Over 1 Hour"
+
 # ── إدارة الحالات والبيانات اليدوية (Tab 2 States) ────────────────────────────
 if "manual_values_log" not in st.session_state:
     st.session_state.manual_values_log = []
@@ -187,45 +195,62 @@ with tab1:
     st.markdown(f"⚡ **Average Handling Time (Response + First Action) Across Team:** {avg_aht_global:.1f} Minutes per ticket.")
     st.write("")
 
-    # 💡 2. قسم الـ SLA ومعدل السرعة والحل الفوري (طلبك الجديد هنا بالظبط)
-    st.markdown("### 🎯 SLA Velocity & Response vs. Resolution Analysis")
-    st.caption("التحليل التالي يوضح النسبة المئوية للحالات التي تم الرد عليها وحلها في أوقات قياسية.")
-    
-    # تحديد عتبات السرعة (مثلاً الرد السريع <= 15 دقيقة، والحل السريع <= 30 دقيقة)
-    threshold_response = 15
-    threshold_resolution = 30
+    # ── 2. قسم الـ SLA وعرض الفترات الزمنية الجديد (SLA Time Tiers Breakdown)
+    st.markdown("### 🎯 SLA Service & Response Tiers Percentage")
+    st.caption("يوضح المخطط أدناه النسبة المئوية الدقيقة لتوزيع الحالات عبر فترات زمنية محددة (15، 30، 45، 60 دقيقة).")
     
     if not df_metrics.empty:
-        fast_response_count = df_metrics[df_metrics["Response Take (min)"] <= threshold_response].shape[0]
-        fast_resolution_count = df_metrics[df_metrics["Request Take (min)"] <= threshold_resolution].shape[0]
+        # تصنيف الحالات بناءً على التوزيع المطلوب
+        df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
+        df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
         
-        pct_fast_response = (fast_response_count / total_tickets * 100) if total_tickets else 0
-        pct_fast_resolution = (fast_resolution_count / total_tickets * 100) if total_tickets else 0
+        # تحضير داتا الـ Response Time
+        resp_counts = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
+        resp_counts["Metric Type"] = "01. Response Time"
+        resp_counts.rename(columns={"Response Tier": "Time Tier"}, inplace=True)
         
-        # كروت SLA سريعة
-        cs1, cs2 = st.columns(2)
-        cs1.markdown(kpi("Fast Response Rate", f"{pct_fast_response:.1f}%", f"Tickets acknowledged within {threshold_response} mins ({fast_response_count:,} cases)", '#3fb950'), unsafe_allow_html=True)
-        cs2.markdown(kpi("Fast Resolution Rate", f"{pct_fast_resolution:.1f}%", f"Tickets fully resolved within {threshold_resolution} mins ({fast_resolution_count:,} cases)", '#bc8cff'), unsafe_allow_html=True)
+        # تحضير داتا الـ Service Time
+        serv_counts = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
+        serv_counts["Metric Type"] = "02. Service (Resolution) Time"
+        serv_counts.rename(columns={"Service Tier": "Time Tier"}, inplace=True)
         
-        st.write("")
+        # دمج البيانات لبناء مخطط احترافي ومقارن
+        sla_combined = pd.concat([resp_counts, serv_counts], ignore_index=True)
         
-        # رسمة الـ Scatter الموضحة لتوزيع السرعة
-        fig_sla_scatter = px.scatter(
-            df_metrics, 
-            x="Response Take (min)", 
-            y="Request Take (min)",
-            color="Request Type",
-            hover_data=["Request ID", "Assigned By", "Status"],
-            title="Correlation Matrix: Response Time vs. Service Resolution Time",
-            labels={"Response Take (min)": "Response Time (Minutes)", "Request Take (min)": "Service Resolution Time (Minutes)"}
+        # حساب النسب المئوية لإظهارها مباشرة على الأعمدة
+        sla_combined["Percentage"] = sla_combined.groupby("Metric Type")["Tickets"].transform(lambda x: (x / x.sum() * 100).round(1))
+        sla_combined["Label"] = sla_combined["Percentage"].astype(str) + "% (" + sla_combined["Tickets"].astype(str) + " Cases)"
+        
+        # رسم المخطط التراكمي المئوي (100% Stacked Horizontal Bar Chart)
+        fig_tiers = px.bar(
+            sla_combined, 
+            y="Metric Type", 
+            x="Percentage", 
+            color="Time Tier",
+            orientation="h",
+            text="Label",
+            color_discrete_map={
+                "01. Under 15 Mins": "#2ea44f",
+                "02. 15 to 30 Mins": "#2188ff",
+                "03. 30 to 45 Mins": "#bc8cff",
+                "04. 45 to 60 Mins": "#f9c513",
+                "05. Over 1 Hour": "#ea4a5a"
+            },
+            title="SLA Efficiency Matrix (15m, 30m, 45m, 60m Tier Distribution)"
         )
-        # إضافة خطوط إرشادية لتحديد الحالات السريعة بصرياً
-        fig_sla_scatter.add_vline(x=threshold_response, line_dash="dash", line_color="#3fb950", annotation_text="Fast Response Border")
-        fig_sla_scatter.add_hline(y=threshold_resolution, line_dash="dash", line_color="#bc8cff", annotation_text="Fast Resolution Border")
-        fig_sla_scatter.update_layout(**THEME)
-        st.plotly_chart(fig_sla_scatter, use_container_width=True)
+        
+        fig_tiers.update_layout(
+            **THEME,
+            barmode="stack",
+            xaxis_title="Percentage Allocation (%)",
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+        )
+        fig_tiers.update_traces(textposition="inside", insidetextanchor="center")
+        st.plotly_chart(fig_tiers, use_container_width=True)
+        
     else:
-        st.info("No data available to calculate SLA velocities.")
+        st.info("No data available to calculate time tier percentages.")
 
     st.write("")
 
@@ -238,4 +263,92 @@ with tab1:
     
     fig_rush = px.area(hourly_data, x="Hour Label", y="Volume", color_discrete_sequence=["#58a6ff"], title="Fluctuations to identify peak hours")
     fig_rush.update_layout(**THEME)
-    st.plotly
+    st.plotly_chart(fig_rush, use_container_width=True)
+
+    # إحصائية الوقت التراكمي
+    st.info(f"⏱️ **Total Cumulative Service Time Spent Across All Tickets:** {total_cumulative_hours:,.1f} Active Operational Hours")
+    st.write("")
+
+    # 4. جدول الـ Breakdown
+    st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
+    if not df_metrics.empty:
+        breakdown = df_metrics.groupby("Request Type").agg(
+            Count=("Request ID", "count"),
+            Avg_Service=("Request Take (min)", "mean"),
+            Avg_AHT=("AHT (min)", "mean")
+        ).reset_index()
+        
+        breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
+        breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].round(1).astype(str) + " min"
+        breakdown["Avg Service Time"] = breakdown["Avg_Service"].round(1).astype(str) + " min"
+        
+        display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
+        st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
+
+
+# ==============================================================================
+# TAB 2: MANUAL INPUTS & VALUE TRACKING
+# ==============================================================================
+with tab2:
+    st.markdown("## 🛠️ Operational Logging & Value Adjustments")
+    st.caption("Track financial weights, direct walk-ins, or off-system tasks that lack automation.")
+    
+    col_f1, col_f2 = st.columns(2, gap="large")
+    
+    # 1. Support Value Entry Form
+    with col_f1:
+        st.markdown("<div class='form-container'>", unsafe_allow_html=True)
+        st.subheader("💰 1. Support Value Entry Form")
+        
+        with st.form("support_value_form", clear_on_submit=True):
+            val_amount = st.number_input("Support Value amount (Saved Cost / Weight)", min_value=0.0, step=10.0, value=0.0)
+            val_type = st.selectbox("Value Category", ["Monetary Saved ($)", "Resource Cost Optimization", "Tier Weight Factor"])
+            val_notes = st.text_area("Justification / Strategic Notes")
+            
+            submit_val = st.form_submit_button("💾 Save / Submit Value")
+            if submit_val:
+                st.session_state.manual_values_log.append({
+                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Value": f"{val_amount:,.1f}",
+                    "Category": val_type,
+                    "Justification": val_notes
+                })
+                st.toast("✅ Support Value Saved Successfully!", icon="💰")
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("##### 📜 Historical Support Values Log")
+        if st.session_state.manual_values_log:
+            st.dataframe(pd.DataFrame(st.session_state.manual_values_log), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No custom values logged in this session yet.")
+
+    # 2. Manual Support Cases Logger
+    with col_f2:
+        st.markdown("<div class='form-container'>", unsafe_allow_html=True)
+        st.subheader("📞 2. Manual Support Cases Logger")
+        
+        with st.form("manual_case_form", clear_on_submit=True):
+            case_title = st.text_input("Case Title (e.g., Direct Call, Walk-In)")
+            case_desc = st.text_area("Detailed Description of request")
+            case_date = st.date_input("Date of Occurrence", value=datetime.today())
+            case_owner = st.text_input("Logged By (Owner)")
+            
+            submit_case = st.form_submit_button("📝 Register Manual Case")
+            if submit_case:
+                if case_title.strip() == "":
+                    st.error("Validation Error: Case Title cannot be empty.")
+                else:
+                    st.session_state.manual_cases_log.append({
+                        "Date": case_date.strftime("%Y-%m-%d"),
+                        "Case Title": case_title,
+                        "Description": case_desc,
+                        "Owner": case_owner if case_owner else "Anonymous"
+                    })
+                    st.toast("✅ Off-System Case Logged Successfully!", icon="📞")
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("##### 📋 Registered Off-System Cases Table")
+        if st.session_state.manual_cases_log:
+            st.dataframe(pd.DataFrame(st.session_state.manual_cases_log), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No manual off-system cases tracked yet.")
