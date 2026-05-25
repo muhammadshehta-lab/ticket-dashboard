@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Unified Time Metrics Edition)
+dashboard.py — In-Store Requests Dashboard (Standard Time Metrics Edition)
 """
 
 import pandas as pd
@@ -57,7 +57,7 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ── جلب البيانات من جوجل شيت (يدعم قراءة أي تابات جديدة تلقائياً) ───────────────
+# ── جلب البيانات والربط الديناميكي للأعمدة المتغيرة ─────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -81,8 +81,23 @@ def load_data_from_sheets():
         for worksheet in spreadsheet.worksheets():
             data = worksheet.get_all_values()
             if len(data) > 1:
-                cols = [str(c).strip() for c in data[0]]
-                df_tab = pd.DataFrame(data[1:], columns=cols)
+                raw_cols = [str(c).strip() for c in data[0]]
+                df_tab = pd.DataFrame(data[1:], columns=raw_cols)
+                
+                mapped_cols = {}
+                for col in df_tab.columns:
+                    c_low = col.lower()
+                    if "id" in c_low and "req" in c_low: mapped_cols[col] = "Request ID"
+                    elif "date" in c_low: mapped_cols[col] = "Request Date"
+                    elif "type" in c_low: mapped_cols[col] = "Request Type"
+                    elif "status" in c_low: mapped_cols[col] = "Status"
+                    elif "assigned" in c_low or "agent" in c_low: mapped_cols[col] = "Assigned By"
+                    elif "request" in c_low and "take" in c_low: mapped_cols[col] = "Request Take"
+                    elif "response" in c_low and "take" in c_low: mapped_cols[col] = "Response Take"
+                    elif "action" in c_low and "take" in c_low: mapped_cols[col] = "First Action Take"
+                    elif "email" in c_low or "special" in c_low: mapped_cols[col] = "Is Special Request(By Email)"
+                
+                df_tab.rename(columns=mapped_cols, inplace=True)
                 all_dfs.append(df_tab)
 
         if not all_dfs: 
@@ -94,7 +109,7 @@ def load_data_from_sheets():
         req_cols = [
             "Request ID", "Request Date", "Request Type", 
             "Status", "Request Take", "Response Take", 
-            "First Action Take", "Assigned By"
+            "First Action Take", "Assigned By", "Is Special Request(By Email)"
         ]
         for col in req_cols:
             if col not in df.columns:
@@ -115,12 +130,8 @@ def load_data_from_sheets():
         
         df["AHT (min)"] = df["Response Take (min)"] + df["First Action Take (min)"]
         
-        if "Is Special Request(By Email)" in df.columns:
-            mail_col = df["Is Special Request(By Email)"]
-            has_mail = mail_col.astype(str).str.strip().str.lower()
-            df["Is Email"] = (has_mail == "yes")
-        else:
-            df["Is Email"] = False
+        mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
+        df["Is Email"] = (mail_col == "yes")
 
         return df
     except Exception as e:
@@ -142,7 +153,7 @@ if "manual_cases_log" not in st.session_state:
 
 # ── Sidebar Filters ───────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 💊 Navigation & Filters")
+    st.markdown("## Navigation & Filters")
     st.success("📡 Live Sync Active")
     if st.button("🔄 Refresh Data Now", use_container_width=True):
         load_data_from_sheets.clear()
@@ -205,9 +216,25 @@ with tab1:
     
     escalated_cases = df_metrics[df_metrics["Is Email"] == True].shape[0]
     
-    # حساب المتوسطات الزمنية لصف الأوقات الموحد
+    # حساب المتوسطات والمجاميع الزمنية المطلوبة بدقة للفلاش كاردز المجمعة
     avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
     avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
     
     total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
-    total_cumulative_hours = total_cumulative_minutes
+    total_cumulative_hours = total_cumulative_minutes / 60
+
+    # حساب مجاميع القيم اليدوية من Tab 2
+    total_logged_manual_cases = len(st.session_state.manual_cases_log)
+    total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
+
+    # ── [A] الصف العلوي: الـ 8 فلاش كاردز (عرض مؤشرات الوقت الثلاثة متجاورة FRT, AHT, TAT)
+    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
+    
+    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
+    r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
+    r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
+    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume", '#f85149'), unsafe_allow_html=True)
+    
+    # 🎯 صف مقاييس الوقت الثلاثية الموحدة جنباً إلى جنب كما طلبت بالظبط:
+    r1_c5.markdown(kpi("Avg Response (FRT)", f"{avg_response_global:.1f} Min", "First Response Time", '#f0883e'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Avg Handling (AHT)", f"{avg_aht_global:.1f} Min", "Actual Process Time", '#bc8cff'), unsafe_allow_html=True)
