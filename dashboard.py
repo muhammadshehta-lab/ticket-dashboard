@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests & Ticket Analytics Dashboard (Unified Operational Cards Edition)
+dashboard.py — In-Store Requests & Ticket Analytics Dashboard (Final Secured Build)
 """
 
 import pandas as pd
@@ -66,7 +66,7 @@ def load_data_from_sheets():
             creds_dict = json.loads(st.secrets["gspread"]["credentials"])
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على بيانات الاعتماد gspread.credentials في إعدادات Secrets.")
+            st.error("❌ لم يتم العثور على جينات الصلاحيات فى Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
@@ -103,5 +103,12 @@ def load_data_from_sheets():
         
         df["AHT (min)"] = df["Response Take (min)"] + df["First Action Take (min)"]
         
+        # حماية عملية قراءة الإيميل بسطر برمجى قصير ومأمن تماماً لعدم البتر
         if "Is Special Request(By Email)" in df.columns:
-            df["Is Email"] = df
+            has_mail = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
+            df["Is Email"] = (has_mail == "yes")
+        else:
+            df["Is Email"] = False
+
+        return df
+    except Exception as e:
