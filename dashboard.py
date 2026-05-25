@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Unified 8 Operational Cards Edition)
+dashboard.py — In-Store Requests Dashboard (Multi-Tab Autodetect Edition)
 """
 
 import pandas as pd
@@ -57,7 +57,7 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ── جلب البيانات من جوجل شيت (عبر الـ Secrets حصرياً) ──────────────────────────
+# ── جلب البيانات من جوجل شيت (محدث لدعم قراءة أي تابات جديدة تلقائياً) ───────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -81,19 +81,23 @@ def load_data_from_sheets():
         for worksheet in spreadsheet.worksheets():
             data = worksheet.get_all_values()
             if len(data) > 1:
-                df_tab = pd.DataFrame(data[1:], columns=data[0])
+                # تنظيف أسماء الأعمدة من أي مسافات زائدة
+                cols = [str(c).strip() for c in data[0]]
+                df_tab = pd.DataFrame(data[1:], columns=cols)
                 all_dfs.append(df_tab)
 
         if not all_dfs: 
             return pd.DataFrame()
 
-        df = pd.concat(all_dfs, ignore_index=True)
+        # دمج كل التابات معاً حتى لو اختلفت الأعمدة (Outer Join)
+        df = pd.concat(all_dfs, ignore_index=True, sort=False)
         df.replace("", np.nan, inplace=True)
 
+        # التأكد من وجود الأعمدة الأساسية وتوليدها كـ فارغة لو لم توجد في التاب الجديدة
         req_cols = [
             "Request ID", "Request Date", "Request Type", 
             "Status", "Request Take", "Response Take", 
-            "First Action Take"
+            "First Action Take", "Assigned By"
         ]
         for col in req_cols:
             if col not in df.columns:
@@ -207,18 +211,16 @@ with tab1:
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # ── [A] الصف العلوي المحدث: تجميع الـ 8 فلاش كاردز كاملة بشكل متناسق جداً
+    # ── [A] الصف العلوي: الـ 8 فلاش كاردز كاملة بشكل متناسق
     r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
     r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
     r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
     r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Pending / Open", '#f85149'), unsafe_allow_html=True)
     
-    # الـ Flash Cards الجديدة المطلوبة لسرعة الاستجابة والتشغيل
     r1_c5.markdown(kpi("Avr Response Time", f"{avg_response_global:.1f} m", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
     r1_c6.markdown(kpi("Avr Handling Time", f"{avg_aht_global:.1f} m", "Response + First Action", '#bc8cff'), unsafe_allow_html=True)
     
-    # الكروت التشغيلية اليدوية المحتفظ بها
     r1_c7.markdown(kpi("Total Support Value", f"{total_support_value_sum:,.1f}", "Saved weight sum", '#2ea44f'), unsafe_allow_html=True)
     r1_c8.markdown(kpi("Manual Support Cases", f"{total_logged_manual_cases:,}", "Off-system logging", '#bc8cff'), unsafe_allow_html=True)
 
