@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Email Escalation Counting Edition)
+dashboard.py — In-Store Requests Dashboard (Total Service Time KPI Edition)
 """
 
 import pandas as pd
@@ -205,13 +205,14 @@ with tab1:
         status_series.str.contains("issue", na=False, case=False)
     ].shape[0]
     
-    # 3. 🎯 التعديل الذهبي المطلوب: عد خلايا الـ Yes في عمود Is Email فقط لتحديد الحالات المتصعدة
+    # 3. Escalated Cases
     escalated_cases = df_metrics[df_metrics["Is Email"] == True].shape[0]
     
     # حساب متوسط الـ Response والـ AHT المطلوبين للفلاش كاردز
     avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
     avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
     
+    # 🎯 الحسبة الجديدة المطلوبة: حساب الـ Total Service Time التراكمي لـ Request Take بالدقائق وتحويلها لساعات
     total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
     total_cumulative_hours = total_cumulative_minutes / 60
 
@@ -219,13 +220,15 @@ with tab1:
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # ── [A] الصف العلوي: الـ 8 فلاش كاردز كاملة بشكل متناسق مع حسبة عمود الـ Yes
+    # ── [A] الصف العلوي: الـ 8 فلاش كاردز المحدثة بـ Total Service Time ذكياً
     r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
-    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
+    
+    # دمج الـ Total Tickets والـ Total Service Time في عمود واحد متناسق جداً للمقارنة الإدارية
+    ticket_sub_text = f"Total Service: {total_cumulative_hours:,.1f} Hours"
+    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", ticket_sub_text, '#58a6ff'), unsafe_allow_html=True)
+    
     r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
-    
-    # الكارد المحدث بناءً على طلبك لقراءة عمود الإيميل مباشرة
     r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume count", '#f85149'), unsafe_allow_html=True)
     
     r1_c5.markdown(kpi("Avr Response Time", f"{avg_response_global:.1f} m", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
@@ -340,6 +343,7 @@ with tab1:
     else:
         st.info("No data available for timeline analysis.")
 
+    # تم الحفاظ على السطر التوضيحي بالأسفل
     st.info(f"⏱️ **Total Cumulative Service Time Spent Across All Tickets:** {total_cumulative_hours:,.1f} Active Operational Hours")
     st.write("")
 
@@ -361,4 +365,68 @@ with tab1:
 
 
 # ==============================================================================
-# TAB 2: MANUAL INPUTS
+# TAB 2: MANUAL INPUTS & VALUE TRACKING
+# ==============================================================================
+with tab2:
+    st.markdown("## 🛠️ Operational Logging & Value Adjustments")
+    st.caption("Track financial weights, direct walk-ins, or off-system tasks that lack automation.")
+    
+    col_f1, col_f2 = st.columns(2, gap="large")
+    
+    # 1. Support Value Entry Form
+    with col_f1:
+        st.markdown("<div class='form-container'>", unsafe_allow_html=True)
+        st.subheader("💰 1. Support Value Entry Form")
+        
+        with st.form("support_value_form", clear_on_submit=True):
+            val_amount = st.number_input("Support Value amount", min_value=0.0, step=10.0, value=0.0)
+            val_type = st.selectbox("Value Category", ["Monetary Saved ($)", "Resource Cost Optimization", "Tier Weight Factor"])
+            val_notes = st.text_area("Justification / Strategic Notes")
+            
+            submit_val = st.form_submit_button("💾 Save / Submit Value")
+            if submit_val:
+                st.session_state.manual_values_log.append({
+                    "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Value": f"{val_amount:,.1f}",
+                    "Category": val_type,
+                    "Justification": val_notes
+                })
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("##### 📜 Historical Support Values Log")
+        if st.session_state.manual_values_log:
+            st.dataframe(pd.DataFrame(st.session_state.manual_values_log), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No custom values logged in this session yet.")
+
+    # 2. Manual Support Cases Logger
+    with col_f2:
+        st.markdown("<div class='form-container'>", unsafe_allow_html=True)
+        st.subheader("📞 2. Manual Support Cases Logger")
+        
+        with st.form("manual_case_form", clear_on_submit=True):
+            case_title = st.text_input("Case Title (e.g., Direct Call, Walk-In)")
+            case_desc = st.text_area("Detailed Description of request")
+            case_date = st.date_input("Date of Occurrence", value=datetime.today())
+            case_owner = st.text_input("Logged By (Owner)")
+            
+            submit_case = st.form_submit_button("📝 Register Manual Case")
+            if submit_case:
+                if case_title.strip() == "":
+                    st.error("Validation Error: Case Title cannot be empty.")
+                else:
+                    st.session_state.manual_cases_log.append({
+                        "Date": case_date.strftime("%Y-%m-%d"),
+                        "Case Title": case_title,
+                        "Description": case_desc,
+                        "Owner": case_owner if case_owner else "Anonymous"
+                    })
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("##### 📋 Registered Off-System Cases Table")
+        if st.session_state.manual_cases_log:
+            st.dataframe(pd.DataFrame(st.session_state.manual_cases_log), hide_index=True, use_container_width=True)
+        else:
+            st.caption("No manual off-system cases tracked yet.")
