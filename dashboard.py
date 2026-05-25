@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests & Ticket Analytics Dashboard (Final Secured Build)
+dashboard.py — In-Store Requests & Ticket Analytics Dashboard (Secured Operational Build)
 """
 
 import pandas as pd
@@ -66,7 +66,7 @@ def load_data_from_sheets():
             creds_dict = json.loads(st.secrets["gspread"]["credentials"])
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على جينات الصلاحيات فى Secrets.")
+            st.error("❌ لم يتم العثور على جينات الصلاحيات في الـ Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
@@ -100,10 +100,9 @@ def load_data_from_sheets():
         df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
-        
         df["AHT (min)"] = df["Response Take (min)"] + df["First Action Take (min)"]
         
-        # حماية عملية قراءة الإيميل بسطر برمجى قصير ومأمن تماماً لعدم البتر
+        # حقل البريد الإلكتروني مؤمن ومحمي تماماً من البتر
         if "Is Special Request(By Email)" in df.columns:
             has_mail = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
             df["Is Email"] = (has_mail == "yes")
@@ -112,3 +111,173 @@ def load_data_from_sheets():
 
         return df
     except Exception as e:
+        st.error(f"❌ Connection Error: {e}")
+        return pd.DataFrame()
+
+# دالة تصنيف الفترات الزمنية القياسية
+def assign_time_tier(m):
+    if m <= 15: return "01. Under 15 Mins"
+    if m <= 30: return "02. 15 to 30 Mins"
+    if m <= 45: return "03. 30 to 45 Mins"
+    if m <= 60: return "04. 45 to 60 Mins"
+    return "05. Over 1 Hour"
+
+# ── إدارة الحالات والبيانات اليدوية (Tab 2 States) ────────────────────────────
+if "manual_values_log" not in st.session_state:
+    st.session_state.manual_values_log = []
+if "manual_cases_log" not in st.session_state:
+    st.session_state.manual_cases_log = []
+
+# ── Sidebar Filters ───────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 💊 Navigation & Filters")
+    st.success("📡 Live Sync Active")
+    if st.button("🔄 Refresh Data Now", use_container_width=True):
+        load_data_from_sheets.clear()
+
+    df_raw = load_data_from_sheets()
+    if df_raw.empty:
+        st.warning("Waiting for data configuration...")
+        st.stop()
+
+    st.divider()
+    min_d = df_raw["Date Only"].dropna().min()
+    max_d = df_raw["Date Only"].dropna().max()
+    
+    date_val = (min_d, max_d)
+    date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
+    
+    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
+    sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
+
+# تطبيق الفلاتر الأساسية
+df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+if sel_agents: 
+    df = df[df["Assigned By"].isin(sel_agents)]
+
+# ── العنوان الرئيسي ───────────────────────────────────────────────────────────
+st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
+st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
+
+# ── تقسيم لوحة التحكم إلى التابات المطلوبة ────────────────────────────────────────
+tab1, tab2 = st.tabs(["📊 Tab 1: Ticket Statistics & Core Metrics", "⚙️ Tab 2: Manual Inputs & Value Tracking"])
+
+# ==============================================================================
+# TAB 1: TICKET STATISTICS & CORE METRICS
+# ==============================================================================
+with tab1:
+    def kpi(label, value, sub="", sub_color='#3fb950'):
+        return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
+
+    st.markdown("#### 🔍 Specific Filter Context")
+    email_filter = st.checkbox("🎯 Filter Dashboard Content by Special Email Requests Only", value=False)
+    
+    df_metrics = df[df["Is Email"] == True].copy() if email_filter else df.copy()
+
+    # حساب الـ KPIs الأساسية للنظام الآلي
+    total_tickets = len(df_metrics)
+    closed_df = df_metrics[df_metrics["Status"].astype(str).str.contains("Closed", na=False, case=False)]
+    
+    comp_success = closed_df[~closed_df["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
+    comp_with_issue = closed_df[closed_df["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
+    escalated_cases = total_tickets - (comp_success + comp_with_issue)
+    
+    avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
+    total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
+    total_cumulative_hours = total_cumulative_minutes / 60
+
+    # حساب مجاميع القيم اليدوية المدخلة من Tab 2 ديناميكياً
+    total_logged_manual_cases = len(st.session_state.manual_cases_log)
+    total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
+
+    # ── [A] كروت الـ KPI الرئيسية التشغيلية في القمة
+    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
+    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "System automation", '#58a6ff'), unsafe_allow_html=True)
+    r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
+    r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
+    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Pending / Open", '#f85149'), unsafe_allow_html=True)
+    r1_c5.markdown(kpi("Total Support Value", f"{total_support_value_sum:,.1f}", "Aggregate saved weight", '#2ea44f'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Manual Support Cases", f"{total_logged_manual_cases:,}", "Off-system entries", '#bc8cff'), unsafe_allow_html=True)
+
+    st.write("")
+    st.markdown(f"⚡ **Average Handling Time (Response + First Action) Across Team:** {avg_aht_global:.1f} Minutes per ticket.")
+    st.write("")
+
+    # ── [B] الـ SLA Time Tiers مباشرة تحت فلاش كاردز
+    st.markdown("### 🎯 SLA Service & Response Tiers Percentage")
+    st.caption("يوضح المخطط أدناه النسبة المئوية الدقيقة لتوزيع الحالات عبر فترات زمنية محددة.")
+    
+    if not df_metrics.empty:
+        df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
+        df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
+        
+        all_tiers = ["01. Under 15 Mins", "02. 15 to 30 Mins", "03. 30 to 45 Mins", "04. 45 to 60 Mins", "05. Over 1 Hour"]
+        
+        resp_counts = df_metrics.groupby("Response Tier").size().reindex(all_tiers, fill_value=0).reset_index(name="Tickets")
+        resp_counts["Metric Type"] = "01. Response Time"
+        resp_counts.rename(columns={"Response Tier": "Time Tier"}, inplace=True)
+        
+        serv_counts = df_metrics.groupby("Service Tier").size().reindex(all_tiers, fill_value=0).reset_index(name="Tickets")
+        serv_counts["Metric Type"] = "02. Service (Resolution) Time"
+        serv_counts.rename(columns={"Service Tier": "Time Tier"}, inplace=True)
+        
+        sla_combined = pd.concat([resp_counts, serv_counts], ignore_index=True)
+        
+        total_per_metric = sla_combined.groupby("Metric Type")["Tickets"].transform("sum")
+        sla_combined["Percentage"] = np.where(total_per_metric > 0, (sla_combined["Tickets"] / total_per_metric * 100).round(1), 0.0)
+        sla_combined["Label"] = np.where(sla_combined["Percentage"] > 0, sla_combined["Percentage"].astype(str) + "%", "")
+        
+        fig_tiers = px.bar(
+            sla_combined, 
+            y="Metric Type", 
+            x="Percentage", 
+            color="Time Tier",
+            orientation="h",
+            text="Label",
+            category_orders={"Time Tier": all_tiers},
+            color_discrete_map={
+                "01. Under 15 Mins": "#2ea44f",
+                "02. 15 to 30 Mins": "#2188ff",
+                "03. 30 to 45 Mins": "#bc8cff",
+                "04. 45 to 60 Mins": "#f9c513",
+                "05. Over 1 Hour": "#ea4a5a"
+            }
+        )
+        
+        fig_tiers.update_layout(
+            **THEME,
+            barmode="stack",
+            xaxis_title="Percentage Allocation (%)",
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+        )
+        fig_tiers.update_traces(textposition="inside")
+        st.plotly_chart(fig_tiers, use_container_width=True)
+        
+    else:
+        st.info("No data available to calculate time tier percentages.")
+
+    st.divider()
+
+    # ── [C] كيرف الـ Rush Hours المزدوج مع منحنى الـ Response Time ──
+    st.markdown("### 📈 24-Hour Rush Hours Curve & Response Time Trend")
+    st.caption("يوضح المنحنى حجم ضغط الحالات الكلي مقارنة بمتوسط سرعة الـ Response Time بالدقائق لكل ساعة.")
+    
+    if not df_metrics.empty:
+        full_hours = list(range(24))
+        hourly_stats = df_metrics.groupby("Hour").agg(
+            Volume=("Request ID", "count"),
+            Avg_Response=("Response Take (min)", "mean")
+        ).reindex(full_hours).fillna(0).reset_index()
+        
+        hourly_stats["Hour Label"] = hourly_stats["Hour"].apply(lambda h: "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")))
+        
+        fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        fig_rush_mobi.add_trace(
+            go.Scatter(
+                x=hourly_stats["Hour Label"], y=hourly_stats["Volume"],
+                name="Ticket Volume (Rush Hours)", fill='tozeroy',
+                line=dict(color="#58a6ff", width=2),
+                hovertemplate="Hour: %{x}<br>Volume: %{y:,}<extra></extra>"
+            ),
