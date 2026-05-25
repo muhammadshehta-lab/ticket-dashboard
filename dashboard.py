@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Total Service Time KPI Edition)
+dashboard.py — In-Store Requests Dashboard (Unified Time Metrics Edition)
 """
 
 import pandas as pd
@@ -193,26 +193,22 @@ with tab1:
     total_tickets = len(df_metrics)
     status_series = df_metrics["Status"].astype(str).str.strip()
     
-    # 1. Closed Completed: الحالات المغلقة بدون مشاكل
     comp_success = df_metrics[
         status_series.str.contains("Closed", na=False, case=False) & 
         ~status_series.str.contains("issue", na=False, case=False)
     ].shape[0]
     
-    # 2. Closed with Issue: الحالات المغلقة ولكن كان بها مشكلة
     comp_with_issue = df_metrics[
         status_series.str.contains("Closed", na=False, case=False) & 
         status_series.str.contains("issue", na=False, case=False)
     ].shape[0]
     
-    # 3. Escalated Cases
     escalated_cases = df_metrics[df_metrics["Is Email"] == True].shape[0]
     
-    # حساب متوسط الـ Response والـ AHT المطلوبين للفلاش كاردز
+    # حساب المتوسطات الزمنية لصف الأوقات الموحد
     avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
     avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
     
-    # 🎯 الحسبة الجديدة المطلوبة: حساب الـ Total Service Time التراكمي لـ Request Take بالدقائق وتحويلها لساعات
     total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
     total_cumulative_hours = total_cumulative_minutes / 60
 
@@ -220,22 +216,22 @@ with tab1:
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # ── [A] الصف العلوي: الـ 8 فلاش كاردز المحدثة بـ Total Service Time ذكياً
+    # ── [A] الصف العلوي: الـ 8 فلاش كاردز (تم ترتيب مؤشرات الوقت بالملي جنب بعض)
     r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
     
-    # دمج الـ Total Tickets والـ Total Service Time في عمود واحد متناسق جداً للمقارنة الإدارية
-    ticket_sub_text = f"Total Service: {total_cumulative_hours:,.1f} Hours"
-    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", ticket_sub_text, '#58a6ff'), unsafe_allow_html=True)
-    
+    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
     r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
-    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume count", '#f85149'), unsafe_allow_html=True)
+    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume", '#f85149'), unsafe_allow_html=True)
     
-    r1_c5.markdown(kpi("Avr Response Time", f"{avg_response_global:.1f} m", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
-    r1_c6.markdown(kpi("Avr Handling Time", f"{avg_aht_global:.1f} m", "Response + First Action", '#bc8cff'), unsafe_allow_html=True)
+    # 🎯 صف الأوقات الموحد المطلوب جنب بعض بالظبط
+    r1_c5.markdown(kpi("Avg Response (FRT)", f"{avg_response_global:.1f} m", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Avg Handling (AHT)", f"{avg_aht_global:.1f} m", "Response + Action", '#bc8cff'), unsafe_allow_html=True)
+    r1_c7.markdown(kpi("Total Service (TAT)", f"{total_cumulative_hours:,.1f} h", "Cumulative resolution", '#58a6ff'), unsafe_allow_html=True)
     
-    r1_c7.markdown(kpi("Total Support Value", f"{total_support_value_sum:,.1f}", "Saved weight sum", '#2ea44f'), unsafe_allow_html=True)
-    r1_c8.markdown(kpi("Manual Support Cases", f"{total_logged_manual_cases:,}", "Off-system logging", '#bc8cff'), unsafe_allow_html=True)
+    # الكروت اليدوية المتبقية متناسقة في النهاية
+    manual_sub_text = f"Value: {total_support_value_sum:,.1f} | Cases: {total_logged_manual_cases}"
+    r1_c8.markdown(kpi("Manual Logs", f"{total_logged_manual_cases:,}", manual_sub_text, '#2ea44f'), unsafe_allow_html=True)
 
     st.write("")
 
@@ -343,7 +339,6 @@ with tab1:
     else:
         st.info("No data available for timeline analysis.")
 
-    # تم الحفاظ على السطر التوضيحي بالأسفل
     st.info(f"⏱️ **Total Cumulative Service Time Spent Across All Tickets:** {total_cumulative_hours:,.1f} Active Operational Hours")
     st.write("")
 
