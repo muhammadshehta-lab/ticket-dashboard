@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests & Ticket Analytics Dashboard (Secured Short-Line Edition)
+dashboard.py — In-Store Requests Dashboard (Sunburst SLA Design Edition)
 """
 
 import pandas as pd
@@ -126,11 +126,11 @@ def load_data_from_sheets():
         return pd.DataFrame()
 
 def assign_time_tier(m):
-    if m <= 15: return "01. Under 15 Mins"
-    if m <= 30: return "02. 15 to 30 Mins"
-    if m <= 45: return "03. 30 to 45 Mins"
-    if m <= 60: return "04. 45 to 60 Mins"
-    return "05. Over 1 Hour"
+    if m <= 15: return "Under 15 Mins"
+    if m <= 30: return "15-30 Mins"
+    if m <= 45: return "30-45 Mins"
+    if m <= 60: return "45-60 Mins"
+    return "Over 1 Hour"
 
 # ── إدارة الحالات والبيانات اليدوية (Tab 2 States) ────────────────────────────
 if "manual_values_log" not in st.session_state:
@@ -159,7 +159,6 @@ with st.sidebar:
     
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     
-    # تفكيك دالة اختيار الموظفين إلى أسطر قصيرة جداً ومأمنة بالكامل من أي بتر
     raw_agents = df_raw["Assigned By"].dropna().unique()
     sorted_agents = sorted(raw_agents)
     sel_agents = st.multiselect("Agent Filter", sorted_agents)
@@ -217,59 +216,57 @@ with tab1:
     st.markdown(f"⚡ **Average Handling Time (Response + First Action) Across Team:** {avg_aht_global:.1f} Minutes per ticket.")
     st.write("")
 
-    # ── [B] الـ SLA Time Tiers مباشرة تحت فلاش كاردز
-    st.markdown("### 🎯 SLA Service & Response Tiers Percentage")
-    st.caption("يوضح المخطط أدناه النسبة المئوية الدقيقة لتوزيع الحالات عبر فترات زمنية محددة.")
+    # ── [B] المخطط الدائري التفاعلي الجديد كلياً (SLA Interactive Sunburst Chart)
+    st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
+    st.caption("اضغط على أي حلقة داخلية للتكبير وعرض النسب المئوية الدقيقة للتوزيع التراكمي للسرعة.")
     
     if not df_metrics.empty:
         df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
         df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
         
-        all_tiers = ["01. Under 15 Mins", "02. 15 to 30 Mins", "03. 30 to 45 Mins", "04. 45 to 60 Mins", "05. Over 1 Hour"]
+        all_tiers = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
         
-        resp_counts = df_metrics.groupby("Response Tier").size().reindex(all_tiers, fill_value=0).reset_index(name="Tickets")
-        resp_counts["Metric Type"] = "01. Response Time"
-        resp_counts.rename(columns={"Response Tier": "Time Tier"}, inplace=True)
+        # تجميع وحساب أعداد الـ Response Time
+        r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
+        r_data["SLA Category"] = "Response Time"
+        r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
         
-        serv_counts = df_metrics.groupby("Service Tier").size().reindex(all_tiers, fill_value=0).reset_index(name="Tickets")
-        serv_counts["Metric Type"] = "02. Service (Resolution) Time"
-        serv_counts.rename(columns={"Service Tier": "Time Tier"}, inplace=True)
+        # تجميع وحساب أعداد الـ Service Time
+        s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
+        s_data["SLA Category"] = "Service Resolution"
+        s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
         
-        sla_combined = pd.concat([resp_counts, serv_counts], ignore_index=True)
+        # دمج البيانات لتغذية الـ Sunburst
+        sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
         
-        total_per_metric = sla_combined.groupby("Metric Type")["Tickets"].transform("sum")
-        sla_combined["Percentage"] = np.where(total_per_metric > 0, (sla_combined["Tickets"] / total_per_metric * 100).round(1), 0.0)
-        sla_combined["Label"] = np.where(sla_combined["Percentage"] > 0, sla_combined["Percentage"].astype(str) + "%", "")
-        
-        fig_tiers = px.bar(
-            sla_combined, 
-            y="Metric Type", 
-            x="Percentage", 
-            color="Time Tier",
-            orientation="h",
-            text="Label",
-            category_orders={"Time Tier": all_tiers},
+        # بناء الرسم الدائري الانفجاري المتطور
+        fig_sunburst = px.sunburst(
+            sunburst_df,
+            path=["SLA Category", "SLA Tier"],
+            values="Tickets",
+            color="SLA Tier",
             color_discrete_map={
-                "01. Under 15 Mins": "#2ea44f",
-                "02. 15 to 30 Mins": "#2188ff",
-                "03. 30 to 45 Mins": "#bc8cff",
-                "04. 45 to 60 Mins": "#f9c513",
-                "05. Over 1 Hour": "#ea4a5a"
-            }
+                "Under 15 Mins": "#2ea44f",
+                "15-30 Mins": "#2188ff",
+                "30-45 Mins": "#bc8cff",
+                "45-60 Mins": "#f9c513",
+                "Over 1 Hour": "#ea4a5a"
+            },
+            branchvalues="total"
         )
         
-        fig_tiers.update_layout(
+        fig_sunburst.update_layout(
             **THEME,
-            barmode="stack",
-            xaxis_title="Percentage Allocation (%)",
-            yaxis_title="",
-            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+            height=500
         )
-        fig_tiers.update_traces(textposition="inside")
-        st.plotly_chart(fig_tiers, use_container_width=True)
+        fig_sunburst.update_traces(
+            textinfo="label+percent parent",
+            hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
+        )
+        st.plotly_chart(fig_sunburst, use_container_width=True)
         
     else:
-        st.info("No data available to calculate time tier percentages.")
+        st.info("No data available to calculate SLA Sunburst tiers.")
 
     st.divider()
 
