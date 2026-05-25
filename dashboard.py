@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Sunburst SLA Design Edition)
+dashboard.py — In-Store Requests Dashboard (Unified 8 Operational Cards Edition)
 """
 
 import pandas as pd
@@ -28,11 +28,12 @@ st.markdown("""
     .kpi-card {
         background: linear-gradient(135deg, #161b22 0%, #21262d 100%);
         border: 1px solid #30363d; border-radius: 14px;
-        padding: 1.3rem 1.2rem; text-align: center;
+        padding: 1rem 0.8rem; text-align: center;
+        min-height: 120px; display: flex; flex-direction: column; justify-content: center;
     }
-    .kpi-label { font-size: 0.72rem; letter-spacing: .13em; text-transform: uppercase; color: #8b949e; margin-bottom: .4rem; }
-    .kpi-value { font-size: 1.8rem; font-weight: 800; background: linear-gradient(90deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .kpi-sub { font-size: 0.78rem; margin-top: .2rem; }
+    .kpi-label { font-size: 0.68rem; letter-spacing: .1em; text-transform: uppercase; color: #8b949e; margin-bottom: .3rem; }
+    .kpi-value { font-size: 1.5rem; font-weight: 800; background: linear-gradient(90deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .kpi-sub { font-size: 0.72rem; margin-top: .2rem; }
     [data-testid="stSidebar"] { background: #0d1117; border-right: 1px solid #21262d; }
     .stTabs [data-baseweb="tab-list"] { background-color: #161b22; border-radius: 8px; padding: 5px; }
     .stTabs [data-baseweb="tab"] { color: #8b949e; font-weight: bold; }
@@ -56,7 +57,7 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ── جلب البيانات من جوجل شيت (مؤمن ومحمي تماماً من البتر) ─────────────────────
+# ── جلب البيانات من جوجل شيت (عبر الـ Secrets حصرياً) ──────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -195,7 +196,10 @@ with tab1:
     comp_with_issue = closed_df[closed_df["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
     escalated_cases = total_tickets - (comp_success + comp_with_issue)
     
+    # حساب متوسط الـ Response والـ AHT المطلوبين للفلاش كاردز
+    avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
     avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
+    
     total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
     total_cumulative_hours = total_cumulative_minutes / 60
 
@@ -203,20 +207,24 @@ with tab1:
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # ── [A] كروت الـ KPI الرئيسية في القمة
-    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
-    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "System automation", '#58a6ff'), unsafe_allow_html=True)
+    # ── [A] الصف العلوي المحدث: تجميع الـ 8 فلاش كاردز كاملة بشكل متناسق جداً
+    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
+    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
     r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
     r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Pending / Open", '#f85149'), unsafe_allow_html=True)
-    r1_c5.markdown(kpi("Total Support Value", f"{total_support_value_sum:,.1f}", "Aggregate saved weight", '#2ea44f'), unsafe_allow_html=True)
-    r1_c6.markdown(kpi("Manual Support Cases", f"{total_logged_manual_cases:,}", "Off-system entries", '#bc8cff'), unsafe_allow_html=True)
+    
+    # الـ Flash Cards الجديدة المطلوبة لسرعة الاستجابة والتشغيل
+    r1_c5.markdown(kpi("Avr Response Time", f"{avg_response_global:.1f} m", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Avr Handling Time", f"{avg_aht_global:.1f} m", "Response + First Action", '#bc8cff'), unsafe_allow_html=True)
+    
+    # الكروت التشغيلية اليدوية المحتفظ بها
+    r1_c7.markdown(kpi("Total Support Value", f"{total_support_value_sum:,.1f}", "Saved weight sum", '#2ea44f'), unsafe_allow_html=True)
+    r1_c8.markdown(kpi("Manual Support Cases", f"{total_logged_manual_cases:,}", "Off-system logging", '#bc8cff'), unsafe_allow_html=True)
 
     st.write("")
-    st.markdown(f"⚡ **Average Handling Time (Response + First Action) Across Team:** {avg_aht_global:.1f} Minutes per ticket.")
-    st.write("")
 
-    # ── [B] المخطط الدائري التفاعلي الجديد كلياً (SLA Interactive Sunburst Chart)
+    # ── [B] المخطط الدائري التفاعلي (SLA Interactive Sunburst Chart)
     st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
     st.caption("اضغط على أي حلقة داخلية للتكبير وعرض النسب المئوية الدقيقة للتوزيع التراكمي للسرعة.")
     
@@ -226,20 +234,16 @@ with tab1:
         
         all_tiers = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
         
-        # تجميع وحساب أعداد الـ Response Time
         r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
         r_data["SLA Category"] = "Response Time"
         r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
         
-        # تجميع وحساب أعداد الـ Service Time
         s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
         s_data["SLA Category"] = "Service Resolution"
         s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
         
-        # دمج البيانات لتغذية الـ Sunburst
         sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
         
-        # بناء الرسم الدائري الانفجاري المتطور
         fig_sunburst = px.sunburst(
             sunburst_df,
             path=["SLA Category", "SLA Tier"],
@@ -255,10 +259,7 @@ with tab1:
             branchvalues="total"
         )
         
-        fig_sunburst.update_layout(
-            **THEME,
-            height=500
-        )
+        fig_sunburst.update_layout(**THEME, height=500)
         fig_sunburst.update_traces(
             textinfo="label+percent parent",
             hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
