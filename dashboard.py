@@ -104,17 +104,4 @@ def load_data_from_sheets():
         df["AHT (min)"] = df["Response Take (min)"] + df["First Action Take (min)"]
         
         if "Is Special Request(By Email)" in df.columns:
-            df["Is Email"] = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes"
-        else:
-            df["Is Email"] = False
-
-        return df
-    except Exception as e:
-        st.error(f"❌ Connection Error: {e}")
-        return pd.DataFrame()
-
-def assign_time_tier(minutes):
-    if minutes <= 15: return "01. Under 15 Mins"
-    if minutes <= 30: return "02. 15 to 30 Mins"
-    if minutes <= 45: return "03. 30 to 45 Mins"
-    if minutes <= 60: return "
+            df["Is Email"] = df
