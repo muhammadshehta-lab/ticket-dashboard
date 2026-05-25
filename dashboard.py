@@ -66,7 +66,7 @@ def load_data_from_sheets():
             creds_dict = json.loads(st.secrets["gspread"]["credentials"])
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على بيانات الاعتماد gspread.credentials في إعدادات Secrets.")
+            st.error("❌ لم يتم العثور على بيانات الاعتباط gspread.credentials في إعدادات Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
@@ -122,22 +122,4 @@ def assign_time_tier(minutes):
 
 # ── إدارة الحالات والبيانات اليدوية (Tab 2 States) ────────────────────────────
 if "manual_values_log" not in st.session_state:
-    st.session_state.manual_values_log = []
-if "manual_cases_log" not in st.session_state:
-    st.session_state.manual_cases_log = []
-
-# ── Sidebar Filters ───────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 💊 Navigation & Filters")
-    st.success("📡 Live Sync Active")
-    if st.button("🔄 Refresh Data Now", use_container_width=True):
-        load_data_from_sheets.clear()
-
-    df_raw = load_data_from_sheets()
-    if df_raw.empty:
-        st.warning("Waiting for data configuration...")
-        st.stop()
-
-    st.divider()
-    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
-    date_range = st.date_input("Date Range", value
+    st.session_state
