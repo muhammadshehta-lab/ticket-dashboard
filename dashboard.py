@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Multi-Tab Autodetect Edition)
+dashboard.py — In-Store Requests Dashboard (Precise Escalation Logic Edition)
 """
 
 import pandas as pd
@@ -57,7 +57,7 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ── جلب البيانات من جوجل شيت (محدث لدعم قراءة أي تابات جديدة تلقائياً) ───────
+# ── جلب البيانات من جوجل شيت (يدعم قراءة أي تابات جديدة تلقائياً) ───────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -81,7 +81,6 @@ def load_data_from_sheets():
         for worksheet in spreadsheet.worksheets():
             data = worksheet.get_all_values()
             if len(data) > 1:
-                # تنظيف أسماء الأعمدة من أي مسافات زائدة
                 cols = [str(c).strip() for c in data[0]]
                 df_tab = pd.DataFrame(data[1:], columns=cols)
                 all_dfs.append(df_tab)
@@ -89,11 +88,9 @@ def load_data_from_sheets():
         if not all_dfs: 
             return pd.DataFrame()
 
-        # دمج كل التابات معاً حتى لو اختلفت الأعمدة (Outer Join)
         df = pd.concat(all_dfs, ignore_index=True, sort=False)
         df.replace("", np.nan, inplace=True)
 
-        # التأكد من وجود الأعمدة الأساسية وتوليدها كـ فارغة لو لم توجد في التاب الجديدة
         req_cols = [
             "Request ID", "Request Date", "Request Type", 
             "Status", "Request Take", "Response Take", 
@@ -194,11 +191,27 @@ with tab1:
 
     # حساب الـ KPIs الأساسية للنظام الآلي
     total_tickets = len(df_metrics)
-    closed_df = df_metrics[df_metrics["Status"].astype(str).str.contains("Closed", na=False, case=False)]
+    status_series = df_metrics["Status"].astype(str).str.strip()
     
-    comp_success = closed_df[~closed_df["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
-    comp_with_issue = closed_df[closed_df["Status"].astype(str).str.lower().str.contains("issue")].shape[0]
-    escalated_cases = total_tickets - (comp_success + comp_with_issue)
+    # 1. Closed Completed: الحالات المغلقة بدون مشاكل
+    comp_success = df_metrics[
+        status_series.str.contains("Closed", na=False, case=False) & 
+        ~status_series.str.contains("issue", na=False, case=False)
+    ].shape[0]
+    
+    # 2. Closed with Issue: الحالات المغلقة ولكن كان بها مشكلة
+    comp_with_issue = df_metrics[
+        status_series.str.contains("Closed", na=False, case=False) & 
+        status_series.str.contains("issue", na=False, case=False)
+    ].shape[0]
+    
+    # 3. 🎯 التعديل الدقيق: حساب الـ Escalated Cases بناءً على الستاتس الفعلي المفتوح أو المعلق
+    escalated_cases = df_metrics[
+        status_series.str.contains("Escalated", na=False, case=False) |
+        status_series.str.contains("Pending", na=False, case=False) |
+        status_series.str.contains("Open", na=False, case=False) |
+        status_series.str.contains("In Progress", na=False, case=False)
+    ].shape[0]
     
     # حساب متوسط الـ Response والـ AHT المطلوبين للفلاش كاردز
     avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
@@ -216,7 +229,7 @@ with tab1:
     r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
     r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
-    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Pending / Open", '#f85149'), unsafe_allow_html=True)
+    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Active Pending / Open", '#f85149'), unsafe_allow_html=True)
     
     r1_c5.markdown(kpi("Avr Response Time", f"{avg_response_global:.1f} m", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
     r1_c6.markdown(kpi("Avr Handling Time", f"{avg_aht_global:.1f} m", "Response + First Action", '#bc8cff'), unsafe_allow_html=True)
