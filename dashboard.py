@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests & Ticket Analytics Dashboard (SLA Time Tiers Edition)
+dashboard.py — In-Store Requests & Ticket Analytics Dashboard (SLA Time Tiers Fixed)
 """
 
 import pandas as pd
@@ -66,7 +66,7 @@ def load_data_from_sheets():
             creds_dict = json.loads(st.secrets["gspread"]["credentials"])
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على جينات الصلاحيات gspread.credentials في إعدادات Secrets.")
+            st.error("❌ لم يتم العثور على بيانات الاعتماد gspread.credentials في إعدادات Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
@@ -113,7 +113,7 @@ def load_data_from_sheets():
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame()
 
-# دالة مساعدة لتصنيف الفترات الزمنية
+# دالة مساعدة لتصنيف الفترات الزمنية بالتفصيل المطلوب
 def assign_time_tier(minutes):
     if minutes <= 15: return "01. Under 15 Mins"
     if minutes <= 30: return "02. 15 to 30 Mins"
@@ -195,33 +195,39 @@ with tab1:
     st.markdown(f"⚡ **Average Handling Time (Response + First Action) Across Team:** {avg_aht_global:.1f} Minutes per ticket.")
     st.write("")
 
-    # ── 2. قسم الـ SLA وعرض الفترات الزمنية الجديد (SLA Time Tiers Breakdown)
+    # ── 2. قسم الـ SLA وعرض الفترات الزمنية المحدث والمصلح تماماً ──────────────────
     st.markdown("### 🎯 SLA Service & Response Tiers Percentage")
     st.caption("يوضح المخطط أدناه النسبة المئوية الدقيقة لتوزيع الحالات عبر فترات زمنية محددة (15، 30، 45، 60 دقيقة).")
     
     if not df_metrics.empty:
-        # تصنيف الحالات بناءً على التوزيع المطلوب
+        # تصنيف الحالات
         df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
         df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
         
+        # قائمة كاملة وموحدة لجميع الفترات الزمنية لضمان ترتيب المحاذاة ومطابقة الألوان
+        all_tiers = ["01. Under 15 Mins", "02. 15 to 30 Mins", "03. 30 to 45 Mins", "04. 45 to 60 Mins", "05. Over 1 Hour"]
+        
         # تحضير داتا الـ Response Time
-        resp_counts = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
+        resp_counts = df_metrics.groupby("Response Tier").size().reindex(all_tiers, fill_value=0).reset_index(name="Tickets")
         resp_counts["Metric Type"] = "01. Response Time"
         resp_counts.rename(columns={"Response Tier": "Time Tier"}, inplace=True)
         
         # تحضير داتا الـ Service Time
-        serv_counts = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
+        serv_counts = df_metrics.groupby("Service Tier").size().reindex(all_tiers, fill_value=0).reset_index(name="Tickets")
         serv_counts["Metric Type"] = "02. Service (Resolution) Time"
         serv_counts.rename(columns={"Service Tier": "Time Tier"}, inplace=True)
         
-        # دمج البيانات لبناء مخطط احترافي ومقارن
+        # دمج النماذج
         sla_combined = pd.concat([resp_counts, serv_counts], ignore_index=True)
         
-        # حساب النسب المئوية لإظهارها مباشرة على الأعمدة
-        sla_combined["Percentage"] = sla_combined.groupby("Metric Type")["Tickets"].transform(lambda x: (x / x.sum() * 100).round(1))
-        sla_combined["Label"] = sla_combined["Percentage"].astype(str) + "% (" + sla_combined["Tickets"].astype(str) + " Cases)"
+        # احتساب وتجهيز النصوص المئوية على الأعمدة بشكل آمن للتمثيل البياني
+        total_per_metric = sla_combined.groupby("Metric Type")["Tickets"].transform("sum")
+        sla_combined["Percentage"] = np.where(total_per_metric > 0, (sla_combined["Tickets"] / total_per_metric * 100).round(1), 0.0)
         
-        # رسم المخطط التراكمي المئوي (100% Stacked Horizontal Bar Chart)
+        # إظهار النص فقط في حال كانت النسبة أكبر من صفر لتجنب الازدحام غير المفيد
+        sla_combined["Label"] = np.where(sla_combined["Percentage"] > 0, sla_combined["Percentage"].astype(str) + "%", "")
+        
+        # بناء المخطط مع تفادي استخدام المعاملات المسببة للمشاكل
         fig_tiers = px.bar(
             sla_combined, 
             y="Metric Type", 
@@ -229,6 +235,7 @@ with tab1:
             color="Time Tier",
             orientation="h",
             text="Label",
+            category_orders={"Time Tier": all_tiers},
             color_discrete_map={
                 "01. Under 15 Mins": "#2ea44f",
                 "02. 15 to 30 Mins": "#2188ff",
@@ -246,7 +253,8 @@ with tab1:
             yaxis_title="",
             legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
         )
-        fig_tiers.update_traces(textposition="inside", insidetextanchor="center")
+        # استخدام التحديث القياسي الآمن للمخططات الشريطية المتراكمة
+        fig_tiers.update_traces(textposition="inside")
         st.plotly_chart(fig_tiers, use_container_width=True)
         
     else:
