@@ -1,5 +1,5 @@
 """
-dashboard.py — In-Store Requests Dashboard (Daily Time-Series Trend Edition)
+dashboard.py — In-Store Requests Dashboard (Standard Time Metrics Edition)
 """
 
 import pandas as pd
@@ -216,12 +216,10 @@ with tab1:
     
     escalated_cases = df_metrics[df_metrics["Is Email"] == True].shape[0]
     
-    # 🎯 حسبة الأوقات التفاعلية على مستوى الجلسة (Session/Interaction Level)
+    # حساب المتوسطات والمجاميع الزمنية المطلوبة بدقة للفلاش كاردز المجمعة
     avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
     avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
-    avg_tat_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
     
-    # الحسبة التراكمية للمجموع الإجمالي بالأسفل
     total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
     total_cumulative_hours = total_cumulative_minutes / 60
 
@@ -229,7 +227,7 @@ with tab1:
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # ── [A] الصف العلوي: كروت الـ KPI وعرض صف الأوقات الثلاثة (FRT, AHT, TAT) متجاورة بالدقائق
+    # ── [A] الصف العلوي: الـ 8 فلاش كاردز (عرض مؤشرات الوقت الثلاثة متجاورة FRT, AHT, TAT)
     r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
     
     r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
@@ -237,10 +235,10 @@ with tab1:
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
     r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume", '#f85149'), unsafe_allow_html=True)
     
-    # تجميع كروت الأوقات متجاورة ومقاسة بالدقائق لمنع الأرقام التراكمية الضخمة
-    r1_c5.markdown(kpi("Avg Response (FRT)", f"{avg_response_global:.1f} Min", "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
-    r1_c6.markdown(kpi("Avg Handling (AHT)", f"{avg_aht_global:.1f} Min", "Response + Action", '#bc8cff'), unsafe_allow_html=True)
-    r1_c7.markdown(kpi("Avg Service (TAT)", f"{avg_tat_global:.1f} Min", "Avg Turnaround Time", '#58a6ff'), unsafe_allow_html=True)
+    # 🎯 صف مقاييس الوقت الثلاثية الموحدة جنباً إلى جنب كما طلبت بالظبط:
+    r1_c5.markdown(kpi("Avg Response (FRT)", f"{avg_response_global:.1f} Min", "First Response Time", '#f0883e'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Avg Handling (AHT)", f"{avg_aht_global:.1f} Min", "Actual Process Time", '#bc8cff'), unsafe_allow_html=True)
+    r1_c7.markdown(kpi("Total Service (TAT)", f"{total_cumulative_hours:,.1f} Hrs", "Turnaround Total Time", '#58a6ff'), unsafe_allow_html=True)
     
     r1_c8.markdown(kpi("Manual Logs", f"{total_logged_manual_cases:,}", f"Value: {total_support_value_sum:,.1f}", '#2ea44f'), unsafe_allow_html=True)
 
@@ -293,46 +291,62 @@ with tab1:
 
     st.divider()
 
-    # ── [C] كيرف الـ 24 ساعة + كيرف التتبع اليومي على مدار الشهر المطلوب ───────────
-    col_c1, col_c2 = st.columns(2)
+    # ── [C] كيرف الـ Rush Hours المزدوج مع منحنى الـ Response Time ──
+    st.markdown("### 📈 24-Hour Rush Hours Curve & Response Time Trend")
+    st.caption("يوضح المنحنى حجم ضغط الحالات الكلي مقارنة بمتوسط سرعة الـ Response Time بالدقائق لكل ساعة.")
     
-    with col_c1:
-        st.markdown("##### 📈 24-Hour Shift Timeline Curves")
-        if not df_metrics.empty:
-            full_hours = list(range(24))
-            hourly_stats = df_metrics.groupby("Hour").agg(
-                Volume=("Request ID", "count"),
-                Avg_Response=("Response Take (min)", "mean")
-            ).reindex(full_hours).fillna(0).reset_index()
+    if not df_metrics.empty:
+        full_hours = list(range(24))
+        hourly_stats = df_metrics.groupby("Hour").agg(
+            Volume=("Request ID", "count"),
+            Avg_Response=("Response Take (min)", "mean")
+        ).reindex(full_hours).fillna(0).reset_index()
+        
+        h_labels = []
+        for h in hourly_stats["Hour"]:
+            if h == 0: lbl = "12 AM"
+            elif h == 12: lbl = "12 PM"
+            elif h < 12: lbl = f"{h} AM"
+            else: lbl = f"{h-12} PM"
+            h_labels.append(lbl)
             
-            h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
-            hourly_stats["Hour Label"] = h_labels
-            
-            fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
-            fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
-            fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-            fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
-            fig_rush_mobi.update_yaxes(title_text="Volume", secondary_y=False)
-            fig_rush_mobi.update_yaxes(title_text="FRT", secondary_y=True, showgrid=False)
-            st.plotly_chart(fig_rush_mobi, use_container_width=True)
-            
-    with col_c2:
-        # 🎯 المنحنى الجديد: حساب المتوسطات يومياً وعلى مدار الشهر لتتبع تكرار الفتح والسرعة اليومية
-        st.markdown("##### 📅 Day-by-Day Calendar SLA Trend (Over the Month)")
-        if not df_metrics.empty:
-            daily_stats = df_metrics.groupby("Date Only").agg(
-                Daily_FRT=("Response Take (min)", "mean"),
-                Daily_AHT=("AHT (min)", "mean"),
-                Daily_TAT=("Request Take (min)", "mean")
-            ).reset_index()
-            daily_stats["Date Label"] = daily_stats["Date Only"].astype(str)
-            
-            fig_calendar = go.Figure()
-            fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_FRT"], name="FRT (Response)", mode="lines+markers", line=dict(color="#f0883e", width=3)))
-            fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_AHT"], name="AHT (Process)", mode="lines+markers", line=dict(color="#bc8cff", width=3)))
-            fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_TAT"], name="TAT (Service)", mode="lines+markers", line=dict(color="#58a6ff", width=3)))
-            fig_calendar.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1), xaxis_title="Calendar Date", yaxis_title="Minutes")
-            st.plotly_chart(fig_calendar, use_container_width=True)
+        hourly_stats["Hour Label"] = h_labels
+        
+        fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        t1_x = hourly_stats["Hour Label"]
+        t1_y = hourly_stats["Volume"]
+        t1_trace = go.Scatter(
+            x=t1_x, y=t1_y,
+            name="Ticket Volume (Rush Hours)", fill='tozeroy',
+            line=dict(color="#58a6ff", width=2),
+            hovertemplate="Volume: %{y:,}<extra></extra>"
+        )
+        fig_rush_mobi.add_trace(t1_trace, secondary_y=False)
+        
+        t2_x = hourly_stats["Hour Label"]
+        t2_y = hourly_stats["Avg_Response"]
+        t2_trace = go.Scatter(
+            x=t2_x, y=t2_y,
+            name="Avg Response Time (Minutes)", mode="lines+markers",
+            line=dict(color="#f0883e", width=4, shape="spline"),
+            hovertemplate="Response: %{y:.1f} Min<extra></extra>"
+        )
+        fig_rush_mobi.add_trace(t2_trace, secondary_y=True)
+        
+        fig_rush_mobi.update_layout(
+            **THEME,
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5)
+        )
+        
+        fig_rush_mobi.update_xaxes(title_text="24-Hour Shift Timeline", tickmode="array", tickvals=hourly_stats["Hour Label"])
+        fig_rush_mobi.update_yaxes(title_text="Number of Tickets (Volume)", secondary_y=False)
+        fig_rush_mobi.update_yaxes(title_text="Avg Response Speed (Minutes)", secondary_y=True, showgrid=False)
+        
+        st.plotly_chart(fig_rush_mobi, use_container_width=True)
+    else:
+        st.info("No data available for timeline analysis.")
 
     st.info(f"⏱️ **Total Cumulative Service Time Spent Across All Tickets:** {total_cumulative_hours:,.1f} Active Operational Hours")
     st.write("")
