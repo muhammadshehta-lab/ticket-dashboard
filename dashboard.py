@@ -212,4 +212,43 @@ if not df_metrics.empty:
     s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
     s_data["SLA Category"] = "Service Resolution"
     s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
-    sunburst_df = pd.concat([r_data, s_data],
+    sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
+    fig_sunburst = px.sunburst(sunburst_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
+        color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
+    fig_sunburst.update_layout(**THEME, height=500)
+    fig_sunburst.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}")
+    st.plotly_chart(fig_sunburst, use_container_width=True)
+else:
+    st.info("No data available to calculate SLA Sunburst tiers.")
+
+st.divider()
+
+# ✅ [B] الاحتفاظ الصافي والمطلق بـ منحنى الـ 24 ساعة (Volume vs Response Curves) بعرض الصفحة كاملة
+st.markdown("##### 📈 24-Hour Shift Timeline Curves")
+if not df_metrics.empty:
+    full_hours = list(range(24))
+    hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
+    hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
+    
+    h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
+    hourly_stats["Hour Label"] = h_labels
+    
+    fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume (Total Tickets)", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
+    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
+    fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
+    st.plotly_chart(fig_rush_mobi, use_container_width=True)
+
+# التنويه الإحصائي وجدول التحليل السفلي المأمنين
+st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
+st.write("")
+st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
+if not df_metrics.empty:
+    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
+    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
+    
+    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
+    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
+    
+    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
+    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
