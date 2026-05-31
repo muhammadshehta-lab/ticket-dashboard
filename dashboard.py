@@ -7,6 +7,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+from datetime import datetime
 
 # ── تهيئة إعدادات الصفحة ──────────────────────────────────────────────────────
 st.set_page_config(
@@ -163,13 +164,14 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
+# ✅ تم تنظيف السطح تماماً وتظهر الـ 2 شيك بوكس التفاعلية مباشرة بشكل نقي جداً ومريح للعين
 col_check1, col_check2 = st.columns(2)
 with col_check1:
     escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
 with col_check2:
     non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
-# تطبيق لوجيك الفلترة التبادلي
+# تجميع وتطبيق لوجيك الفلترة التبادلي: الوضع الافتراضي يعرض الإجمالي بالكامل (Total)
 df_metrics = df.copy()
 
 if escalated_only_filter and not non_escalated_only_filter:
@@ -179,4 +181,86 @@ elif non_escalated_only_filter and not escalated_only_filter:
 
 total_tickets = len(df_metrics)
 status_series = df_metrics["Status"].astype(str).str.strip()
-comp_success = df_metrics
+comp_success = df_metrics[status_series.str.contains("Closed", na=False, case=False) & ~status_series.str.contains("issue", na=False, case=False)].shape[0]
+comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case=False) & status_series.str.contains("issue", na=False, case=False)].shape[0]
+
+avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
+avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
+avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
+
+h_frt = format_minutes_to_hhmmss(avg_response_global)
+h_aht = format_minutes_to_hhmmss(avg_aht_global)
+h_tat = format_minutes_to_hhmmss(avg_service_global)
+
+# ── [A] الصف العلوي: 6 كروت عريضة، موسعة وموزعة بالتساوي تماماً عبر كامل المساحة
+r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
+
+r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
+r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
+r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
+
+r1_c4.markdown(kpi("Avg Response (FRT)", h_frt, "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
+r1_c5.markdown(kpi("Avg Handling (AHT)", h_aht, "First Action SLA Only", '#bc8cff'), unsafe_allow_html=True)
+r1_c6.markdown(kpi("Avg Service (TAT)", h_tat, "Average Turnaround", '#58a6ff'), unsafe_allow_html=True)
+
+st.write("")
+st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
+if not df_metrics.empty:
+    df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
+    df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
+    r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
+    r_data["SLA Category"] = "Response Time"
+    r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
+    s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
+    s_data["SLA Category"] = "Service Resolution"
+    s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
+    sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
+    fig_sunburst = px.sunburst(sunburst_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
+        color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
+    fig_sunburst.update_layout(**THEME, height=500)
+    fig_sunburst.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}")
+    st.plotly_chart(fig_sunburst, use_container_width=True)
+else:
+    st.info("No data available to calculate SLA Sunburst tiers.")
+
+st.divider()
+col_c1, col_c2 = st.columns(2)
+with col_c1:
+    st.markdown("##### 📈 24-Hour Shift Timeline Curves")
+    if not df_metrics.empty:
+        full_hours = list(range(24))
+        hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
+        hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
+        
+        h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
+        hourly_stats["Hour Label"] = h_labels
+        fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
+        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
+        fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
+        st.plotly_chart(fig_rush_mobi, use_container_width=True)
+        
+with col_c2:
+    st.markdown("##### 📅 Day-by-Day Calendar SLA Trend (Over the Month)")
+    if not df_metrics.empty:
+        daily_stats = df_metrics.groupby("Date Only").agg(Daily_FRT=("Response Take (min)", "mean"), Daily_AHT=("AHT (min)", "mean"), Daily_TAT=("Request Take (min)", "mean")).reset_index()
+        daily_stats["Date Label"] = daily_stats["Date Only"].astype(str)
+        fig_calendar = go.Figure()
+        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_FRT"], name="FRT (Response)", mode="lines+markers", line=dict(color="#f0883e", width=3)))
+        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_AHT"], name="AHT (Process)", mode="lines+markers", line=dict(color="#bc8cff", width=3)))
+        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_TAT"], name="TAT (Service)", mode="lines+markers", line=dict(color="#58a6ff", width=3)))
+        fig_calendar.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1), xaxis_title="Calendar Date", yaxis_title="Minutes")
+        st.plotly_chart(fig_calendar, use_container_width=True)
+
+st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
+st.write("")
+st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
+if not df_metrics.empty:
+    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
+    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
+    
+    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
+    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
+    
+    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
+    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
