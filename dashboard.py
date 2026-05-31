@@ -42,7 +42,7 @@ THEME = dict(
     margin=dict(l=10, r=10, t=40, b=10)
 )
 
-# ✅ تعريف دالة بناء الكروت في مكان آمن في الأعلى لمنع أي NameError
+# ✅ دالة بناء الكروت المستقرة تماماً في الأعلى لمنع الـ NameError
 def kpi(label, value, sub="", sub_color='#3fb950'):
     return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
 
@@ -121,7 +121,7 @@ def load_data_from_sheets():
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
         
-        # وقت المعالجة AHT يعتمد حصرياً على عمود وقت الإجراء الأول
+        # وقت المعالجة AHT يعتمد حصرياً وصافياً على عمود وقت الإجراء الأول
         df["AHT (min)"] = df["First Action Take (min)"]
         
         mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
@@ -166,22 +166,16 @@ st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
 st.markdown("#### 🔍 Specific Filter Context")
 
-# ✅ تقسيم المساحة بالتساوي لثلاثة خيارات ذكية تفاعلية بدون أي تداخل
-col_check1, col_check2, col_check3 = st.columns(3)
+# ✅ عرض الـ 2 شيك بوكس فقط بالتساوي عبر الشاشة لتبسيط الفلترة بدون تشتيت التداخل
+col_check1, col_check2 = st.columns(2)
 with col_check1:
-    email_filter = st.checkbox("🎯 Filter Dashboard Content by Special Email Requests Only", value=False)
-with col_check2:
     escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
-with col_check3:
-    # 🟢 الفلتر التفاعلي الجديد والمطلب للحالات غير المتصعدة
+with col_check2:
     non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
-# تجميع شروط الفلترة المتبادلة ديناميكياً لحماية البيانات من التعارض
+# تجميع وتطبيق لوجيك الفلترة التبادلي: الوضع الافتراضي يعرض الإجمالي بالكامل (Total)
 df_metrics = df.copy()
-if email_filter:
-    df_metrics = df_metrics[df_metrics["Is Email"] == True]
 
-# منطق العزل التبادلي الذكي (Mutual Exclusion Logic)
 if escalated_only_filter and not non_escalated_only_filter:
     df_metrics = df_metrics[df_metrics["Is Email"] == True]
 elif non_escalated_only_filter and not escalated_only_filter:
@@ -195,12 +189,14 @@ comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case
 avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
 avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
 avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
+total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
+total_cumulative_hours = total_cumulative_minutes / 60
 
 h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
 h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-# ── [A] الصف العلوي: 6 كروت عريضة، موسعة، ومتناسقة تماماً ومؤمنة من أي خطأ
+# ── [A] الصف العلوي: 6 كروت عريضة، موسعة وموزعة بالتساوي تماماً عبر كامل المساحة
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
 
 r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
