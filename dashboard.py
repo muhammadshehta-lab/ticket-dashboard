@@ -87,7 +87,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ──────────────────
+# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ومغلق ──────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -128,3 +128,19 @@ def load_data_from_sheets():
                         assigned_targets.add(target)
                 df_tab.rename(columns=mapped_cols, inplace=True)
                 all_dfs.append(df_tab)
+
+        if not all_dfs: return pd.DataFrame()
+        df = pd.concat(all_dfs, ignore_index=True, sort=False)
+        df.replace("", np.nan, inplace=True)
+        
+        req_cols = ["Request ID", "Request Date", "Request Type", "Status", "Request Take", "Response Take", "First Action Take", "Assigned By", "Is Special Request(By Email)"]
+        for col in req_cols:
+            if col not in df.columns: df[col] = np.nan
+
+        df["Status"] = df["Status"].fillna("Unknown")
+        df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
+        
+        date_parsed = pd.to_datetime(df["Request Date"], errors="coerce")
+        df["Request Date"] = date_parsed
+        df["Date Only"] = date_parsed.dt.date
+        df["Hour"] = date_parsed.dt.hour.fillna(0
