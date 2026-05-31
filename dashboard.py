@@ -42,7 +42,7 @@ THEME = dict(
     margin=dict(l=10, r=10, t=40, b=10)
 )
 
-# ✅ تعريف دالة بناء الكروت في مكان آمن في الأعلى لمنع أي NameError
+# ✅ تعريف دالة بناء الكروت
 def kpi(label, value, sub="", sub_color='#3fb950'):
     return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
 
@@ -166,15 +166,26 @@ st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
 st.markdown("#### 🔍 Specific Filter Context")
 
-col_check1, col_check2 = st.columns(2)
+# ✅ تقسيم المساحة لثلاثة خيارات ذكية متناسقة تفاعلياً
+col_check1, col_check2, col_check3 = st.columns(3)
 with col_check1:
     email_filter = st.checkbox("🎯 Filter Dashboard Content by Special Email Requests Only", value=False)
 with col_check2:
-    escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
+    escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only", value=False)
+with col_check3:
+    # 🌀 الفلتر التفاعلي الجديد المطلب للحالات غير المتصعدة
+    non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
+# لوجيك المابينج التفاعلي لمنع أي تضارب بين الفلاتر وضمان تصفية الداتا بدقة
 df_metrics = df.copy()
-if email_filter or escalated_only_filter:
+if email_filter:
     df_metrics = df_metrics[df_metrics["Is Email"] == True]
+
+# تفعيل شروط العزل التبادلي بين المتصعد وغير المتصعد
+if escalated_only_filter and not non_escalated_only_filter:
+    df_metrics = df_metrics[df_metrics["Is Email"] == True]
+elif non_escalated_only_filter and not escalated_only_filter:
+    df_metrics = df_metrics[df_metrics["Is Email"] == False]
 
 total_tickets = len(df_metrics)
 status_series = df_metrics["Status"].astype(str).str.strip()
@@ -189,7 +200,7 @@ h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
 h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-# ── [A] الصف العلوي: 6 كروت عريضة، موسعة، ومتناسقة تماماً ومؤمنة من أي خطأ
+# ── [A] الصف العلوي: 6 كروت عريضة، موسعة، ومتناسقة تماماً ومؤمنة
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
 
 r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
@@ -222,42 +233,4 @@ else:
 
 st.divider()
 col_c1, col_c2 = st.columns(2)
-with col_c1:
-    st.markdown("##### 📈 24-Hour Shift Timeline Curves")
-    if not df_metrics.empty:
-        full_hours = list(range(24))
-        hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
-        hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
-        
-        h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
-        hourly_stats["Hour Label"] = h_labels
-        fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
-        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-        fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
-        st.plotly_chart(fig_rush_mobi, use_container_width=True)
-        
-with col_c2:
-    st.markdown("##### 📅 Day-by-Day Calendar SLA Trend (Over the Month)")
-    if not df_metrics.empty:
-        daily_stats = df_metrics.groupby("Date Only").agg(Daily_FRT=("Response Take (min)", "mean"), Daily_AHT=("AHT (min)", "mean"), Daily_TAT=("Request Take (min)", "mean")).reset_index()
-        daily_stats["Date Label"] = daily_stats["Date Only"].astype(str)
-        fig_calendar = go.Figure()
-        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_FRT"], name="FRT (Response)", mode="lines+markers", line=dict(color="#f0883e", width=3)))
-        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_AHT"], name="AHT (Process)", mode="lines+markers", line=dict(color="#bc8cff", width=3)))
-        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_TAT"], name="TAT (Service)", mode="lines+markers", line=dict(color="#58a6ff", width=3)))
-        fig_calendar.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1), xaxis_title="Calendar Date", yaxis_title="Minutes")
-        st.plotly_chart(fig_calendar, use_container_width=True)
-
-st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
-st.write("")
-st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
-if not df_metrics.empty:
-    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
-    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
-    
-    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
-    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
-    
-    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
-    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
+with
