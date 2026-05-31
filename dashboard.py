@@ -29,7 +29,6 @@ st.markdown("""
     .kpi-value { font-size: 1.4rem; font-weight: 800; background: linear-gradient(90deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .kpi-sub { font-size: 0.72rem; margin-top: .2rem; }
     [data-testid="stSidebar"] { background: #0d1117; border-right: 1px solid #21262d; }
-    .form-container { background-color: #161b22; border: 1px solid #30363d; padding: 1.5rem; border-radius: 14px; margin-bottom: 1rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -157,7 +156,6 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
-# واجهة نظيفة بدون تابات مانيوال لوجس
 st.markdown("#### 🔍 Specific Filter Context")
 
 col_check1, col_check2 = st.columns(2)
@@ -167,9 +165,7 @@ with col_check2:
     escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
 
 df_metrics = df.copy()
-if email_filter:
-    df_metrics = df_metrics[df_metrics["Is Email"] == True]
-if escalated_only_filter:
+if email_filter or escalated_only_filter:
     df_metrics = df_metrics[df_metrics["Is Email"] == True]
 
 total_tickets = len(df_metrics)
@@ -180,14 +176,12 @@ comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case
 avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
 avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
 avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
-total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
-total_cumulative_hours = total_cumulative_minutes / 60
 
 h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
 h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-# ── [A] الصف العلوي: 6 كروت عريضة ومتكاملة لتبسيط الرؤية الإدارية
+# الكروت الـ 6 العريضة بعد التوزيع المتناسق تماماً ومسح أي قيم قديمة مسببة للـ NameError
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
 
 r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
