@@ -52,7 +52,7 @@ THEME = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font_color="#c9d1d9",
-    margin=dict(l=10, r=10, t=40, b=10)
+    margin=dict(l=10, r=10, t=20, b=10)
 )
 
 # ✅ دالة بناء الكروت الملونة النظيفة بدون نصوص سفلية
@@ -177,7 +177,7 @@ df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].cop
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 
 # ── العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
-st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
+st.markdown("## 💊 In-Store Requests")
 st.caption(f"🔍 Search Period: {d_from} to {d_to}")
 
 col_check1, col_check2 = st.columns(2)
@@ -216,28 +216,60 @@ r1_c5.markdown(kpi_colored("Avg Handling (AHT)", h_aht, "card-aht"), unsafe_allo
 r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow_html=True)
 
 st.write("")
-st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
+
+# ✅ [B] تحديث مخطط الـ Sunburst ليرتب الساعات تصاعدياً متجاوراً بغض النظر عن النسبة
 if not df_metrics.empty:
     df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
     df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
+    
     r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
     r_data["SLA Category"] = "Response Time"
     r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
+    
     s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
     s_data["SLA Category"] = "Service Resolution"
     s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
+    
     sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
-    fig_sunburst = px.sunburst(sunburst_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
-        color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
-    fig_sunburst.update_layout(**THEME, height=500)
-    fig_sunburst.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}")
+    
+    # تحديد الترتيب الزمني المتتالي المتقارب يدوياً
+    time_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+    category_order = ["Response Time", "Service Resolution"]
+    
+    fig_sunburst = px.sunburst(
+        sunburst_df, 
+        path=["SLA Category", "SLA Tier"], 
+        values="Tickets", 
+        color="SLA Tier",
+        color_discrete_map={
+            "Under 15 Mins": "#2ea44f", 
+            "15-30 Mins": "#2188ff", 
+            "30-45 Mins": "#bc8cff", 
+            "45-60 Mins": "#f9c513", 
+            "Over 1 Hour": "#ea4a5a"
+        }, 
+        branchvalues="total"
+    )
+    
+    # 🌟 السحر هنا: إجبار البلوتلي على استخدام مصفوفة الترتيب الزمني وإلغاء الترتيب بحسب الحجم
+    fig_sunburst.update_traces(
+        sort=False,  # منع الترتيب التلقائي بناءً على حجم النسبة
+        textinfo="label+percent parent", 
+        hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
+    )
+    
+    # ترتيب قائمة الفئات الداخلية والخارجية بالتتابع
+    fig_sunburst.update_layout(
+        **THEME, 
+        height=520,
+        sunburstcolorway=["#2ea44f", "#2188ff", "#bc8cff", "#f9c513", "#ea4a5a"]
+    )
+    
     st.plotly_chart(fig_sunburst, use_container_width=True)
-else:
-    st.info("No data available to calculate SLA Sunburst tiers.")
 
 st.divider()
 
-# ✅ تم مسح اسم الـ chart وتظهر خطوط الـ 24 ساعة مباشرة ونقية وممتدة بكامل العرض
+# ── [C] منحنى الـ 24 ساعة المطور بالتسلسل الزمني المتتالي المتقارب ──────────────
 if not df_metrics.empty:
     full_hours = list(range(24))
     hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
@@ -249,7 +281,9 @@ if not df_metrics.empty:
     fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
     fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume (Total Tickets)", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
     fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-    fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
+    
+    fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
+    fig_rush_mobi.update_layout(**THEME, height=450, hovermode="x unified", legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
 st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
