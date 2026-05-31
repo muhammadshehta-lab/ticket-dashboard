@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
@@ -147,13 +146,6 @@ def load_data_from_sheets():
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame()
 
-def assign_time_tier(m):
-    if m <= 15: return "Under 15 Mins"
-    if m <= 30: return "15-30 Mins"
-    if m <= 45: return "30-45 Mins"
-    if m <= 60: return "45-60 Mins"
-    return "Over 1 Hour"
-
 # ── Sidebar Filters ───────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 💊 Navigation & Filters")
@@ -177,7 +169,8 @@ df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].cop
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 
 # ── العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
-st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
+# ✅ تم تبسيط العنوان هنا بناءً على طلبك ليصبح نظيفاً واحترافياً ومباشراً
+st.markdown("## 💊 In-Store Requests Dashboard")
 st.caption(f"🔍 Search Period: {d_from} to {d_to}")
 
 col_check1, col_check2 = st.columns(2)
@@ -216,28 +209,9 @@ r1_c5.markdown(kpi_colored("Avg Handling (AHT)", h_aht, "card-aht"), unsafe_allo
 r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow_html=True)
 
 st.write("")
-st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
-if not df_metrics.empty:
-    df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
-    df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
-    r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
-    r_data["SLA Category"] = "Response Time"
-    r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
-    s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
-    s_data["SLA Category"] = "Service Resolution"
-    s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
-    sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
-    fig_sunburst = px.sunburst(sunburst_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
-        color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
-    fig_sunburst.update_layout(**THEME, height=500)
-    fig_sunburst.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}")
-    st.plotly_chart(fig_sunburst, use_container_width=True)
-else:
-    st.info("No data available to calculate SLA Sunburst tiers.")
-
 st.divider()
 
-# ✅ تم مسح اسم الـ chart وتظهر خطوط الـ 24 ساعة مباشرة ونقية وممتدة بكامل العرض
+# ── [B] منحنى الـ 24 ساعة ممتد بكامل العرض ─────────────────────────────────────
 if not df_metrics.empty:
     full_hours = list(range(24))
     hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
@@ -249,7 +223,7 @@ if not df_metrics.empty:
     fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
     fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume (Total Tickets)", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
     fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-    fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
+    fig_rush_mobi.update_layout(**THEME, height=450, hovermode="x unified", legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
 st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
