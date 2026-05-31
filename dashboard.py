@@ -89,7 +89,7 @@ def load_data_from_sheets():
             creds_dict = json.loads(sec_json)
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على جينات الصلاحيات in Secrets.")
+            st.error("❌ لم يتم العثور على جينات الصلاحيات في Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
@@ -178,7 +178,7 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 
 # ── العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
-st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
+st.caption(f"🔍 Search Period: {d_from} to {d_to}")
 
 col_check1, col_check2 = st.columns(2)
 with col_check1:
@@ -237,8 +237,7 @@ else:
 
 st.divider()
 
-# ── [B] منحنى الـ 24 ساعة ممتد بكامل العرض ─────────────────────────────────────
-st.markdown("##### 📈 24-Hour Shift Timeline Curves")
+# ✅ تم مسح اسم الـ chart وتظهر خطوط الـ 24 ساعة مباشرة ونقية وممتدة بكامل العرض
 if not df_metrics.empty:
     full_hours = list(range(24))
     hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
