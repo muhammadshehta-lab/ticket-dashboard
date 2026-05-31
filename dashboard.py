@@ -9,6 +9,7 @@ from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime
 
+# ── تهيئة إعدادات الصفحة ──────────────────────────────────────────────────────
 st.set_page_config(
     page_title="In-Store Requests Dashboard",
     page_icon="💊",
@@ -16,6 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── تصميم الواجهة والألوان المتطورة (Modern UI/UX CSS) ─────────────────────────
 st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
@@ -39,6 +41,10 @@ THEME = dict(
     font_color="#c9d1d9",
     margin=dict(l=10, r=10, t=40, b=10)
 )
+
+# ✅ تعريف دالة بناء الكروت في مكان آمن في الأعلى لمنع أي NameError
+def kpi(label, value, sub="", sub_color='#3fb950'):
+    return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
 
 def time_to_minutes(s):
     try:
@@ -115,7 +121,7 @@ def load_data_from_sheets():
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
         
-        # وقت المعالجة AHT يعتمد حصرياً على وقت الإجراء الأول
+        # وقت المعالجة AHT يعتمد حصرياً على عمود وقت الإجراء الأول
         df["AHT (min)"] = df["First Action Take (min)"]
         
         mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
@@ -132,6 +138,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
+# ── Sidebar Filters ───────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 💊 Navigation & Filters")
     st.success("📡 Live Sync Active")
@@ -153,6 +160,7 @@ with st.sidebar:
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 
+# ── العنوان الرئيسي والواجهة النظيفة ───────────────────────────────────────────
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
@@ -181,7 +189,7 @@ h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
 h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-# الكروت الـ 6 العريضة بعد التوزيع المتناسق تماماً ومسح أي قيم قديمة مسببة للـ NameError
+# ── [A] الصف العلوي: 6 كروت عريضة، موسعة، ومتناسقة تماماً ومؤمنة من أي خطأ
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
 
 r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
