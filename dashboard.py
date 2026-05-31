@@ -51,7 +51,6 @@ def time_to_minutes(s):
     except:
         return 0
 
-# ✅ دالة سحرية جديدة لتحويل الدقائق إلى صيغة HH:MM:SS بدقة ثانية
 def format_minutes_to_hhmmss(minutes_val):
     if pd.isna(minutes_val) or minutes_val <= 0:
         return "00:00:00"
@@ -119,7 +118,10 @@ def load_data_from_sheets():
         df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
-        df["AHT (min)"] = df["Response Take (min)"] + df["First Action Take (min)"]
+        
+        # ✅ التعديل هنا: اعتماد الـ AHT كلياً وحصرياً على عمود وقت الإجراء الأول فقط تلبيةً لطلبك التشغيلي
+        df["AHT (min)"] = df["First Action Take (min)"]
+        
         mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
         df["Is Email"] = (mail_col == "yes")
         return df
@@ -182,7 +184,7 @@ with tab1:
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # ✅ تطبيق صيغة التحويل القياسية HH:MM:SS على المتوسطات للكروت العلوية
+    # تحويل المتوسطات للكروت العلوية بالتنسيق الجديد النظيف والمطلوب بالملي
     h_frt = format_minutes_to_hhmmss(avg_response_global)
     h_aht = format_minutes_to_hhmmss(avg_aht_global)
     h_tat = format_minutes_to_hhmmss(avg_service_global)
@@ -193,9 +195,9 @@ with tab1:
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
     r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume", '#f85149'), unsafe_allow_html=True)
     
-    # ✅ تحديث القيم المعروضة بالصيغة الزمنية الجديدة
+    # عرض الكروت الزمنية الثلاثة متجاورة ومعبرة بدقة متناهية عن المطلوب
     r1_c5.markdown(kpi("Avg Response (FRT)", h_frt, "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
-    r1_c6.markdown(kpi("Avg Handling (AHT)", h_aht, "Response + Action", '#bc8cff'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Avg Handling (AHT)", h_aht, "First Action SLA", '#bc8cff'), unsafe_allow_html=True)
     r1_c7.markdown(kpi("Avg Service (TAT)", h_tat, "Average Turnaround", '#58a6ff'), unsafe_allow_html=True)
     
     r1_c8.markdown(kpi("Manual Logs", f"{total_logged_manual_cases:,}", f"Value: {total_support_value_sum:,.1f}", '#2ea44f'), unsafe_allow_html=True)
@@ -249,7 +251,6 @@ with tab1:
             fig_calendar.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1), xaxis_title="Calendar Date", yaxis_title="Minutes")
             st.plotly_chart(fig_calendar, use_container_width=True)
 
-    # ✅ تحديث السطر السفلي ليظهر بصيغة النمط القياسي المقروء
     st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
     st.write("")
     st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
@@ -257,7 +258,6 @@ with tab1:
         breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
         breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
         
-        # ✅ تطبيق تحويل الصيغة الزمنية على أعمدة الجدول السفلي بالتفصيل لجميع أنواع الطلبات
         breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
         breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
         
