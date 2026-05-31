@@ -97,50 +97,10 @@ def load_data_from_sheets():
             creds_dict = json.loads(sec_json)
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على جينات الصلاحيات في Secrets.")
+            st.error("❌ لم يتم العثور على صلاحيات gspread في Streamlit Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
         spreadsheet = client.open("AlDawaa Tickets Data")
         all_dfs = []
-        for worksheet in spreadsheet.worksheets():
-            data = worksheet.get_all_values()
-            if len(data) > 1:
-                raw_cols = [str(c).strip() for c in data[0]]
-                df_tab = pd.DataFrame(data[1:], columns=raw_cols)
-                mapped_cols = {}
-                assigned_targets = set()
-                for col in df_tab.columns:
-                    c_low = col.lower()
-                    target = None
-                    if "id" in c_low and "req" in c_low: target = "Request ID"
-                    elif "date" in c_low: target = "Request Date"
-                    elif "type" in c_low: target = "Request Type"
-                    elif "status" in c_low: target = "Status"
-                    elif "assigned" in c_low or "agent" in c_low: target = "Assigned By"
-                    elif "response" in c_low and "take" in c_low: target = "Response Take"
-                    elif "action" in c_low and "take" in c_low: target = "First Action Take"
-                    elif "request" in c_low and "take" in c_low: target = "Request Take"
-                    elif "email" in c_low or "special" in c_low: target = "Is Special Request(By Email)"
-                    
-                    if target and target not in assigned_targets:
-                        mapped_cols[col] = target
-                        assigned_targets.add(target)
-                df_tab.rename(columns=mapped_cols, inplace=True)
-                all_dfs.append(df_tab)
-
-        if not all_dfs: return pd.DataFrame()
-        df = pd.concat(all_dfs, ignore_index=True, sort=False)
-        df.replace("", np.nan, inplace=True)
-        
-        req_cols = ["Request ID", "Request Date", "Request Type", "Status", "Request Take", "Response Take", "First Action Take", "Assigned By", "Is Special Request(By Email)"]
-        for col in req_cols:
-            if col not in df.columns: df[col] = np.nan
-
-        df["Status"] = df["Status"].fillna("Unknown")
-        df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
-        
-        date_parsed = pd.to_datetime(df["Request Date"], errors="coerce")
-        df["Request Date"] = date_parsed
-        df["Date Only"] = date_parsed.dt.date
-        df["Hour"] = date_parsed.dt.hour.fillna(0
+        for
