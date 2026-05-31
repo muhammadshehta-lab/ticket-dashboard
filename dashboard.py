@@ -55,7 +55,7 @@ THEME = dict(
     margin=dict(l=10, r=10, t=20, b=10)
 )
 
-# ✅ دالة بناء الكروت الملونة النظيفة مؤمنة بالكامل ومستقرة في الأعلى
+# ✅ دالة بناء الكروت الملونة النظيفة - مستقرة ومؤمنة في أعلى الملف
 def kpi_colored(label, value, card_class):
     return f"""
     <div class="kpi-container {card_class}">
@@ -80,6 +80,14 @@ def format_minutes_to_hhmmss(minutes_val):
     seconds = total_seconds % 60
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
+def assign_time_tier(m):
+    if m <= 15: return "Under 15 Mins"
+    if m <= 30: return "15-30 Mins"
+    if m <= 45: return "30-45 Mins"
+    if m <= 60: return "45-60 Mins"
+    return "Over 1 Hour"
+
+# ── 3. سحب البيانات الحيّة ومعالجتها برمجياً بداخل تكتل آمن ──────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -128,4 +136,13 @@ def load_data_from_sheets():
         for col in req_cols:
             if col not in df.columns: df[col] = np.nan
 
-        df["Status"]
+        df["Status"] = df["Status"].fillna("Unknown")
+        df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
+        date_parsed = pd.to_datetime(df["Request Date"], errors="coerce")
+        df["Request Date"] = date_parsed
+        df["Date Only"] = date_parsed.dt.date
+        df["Hour"] = date_parsed.dt.hour.fillna(0).astype(int)
+        df["Day Name"] = date_parsed.dt.day_name().fillna("Unknown")
+        df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
+        df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
+        df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).
