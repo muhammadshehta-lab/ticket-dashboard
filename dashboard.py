@@ -1,13 +1,10 @@
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-from datetime import datetime
 
 # ── تهيئة إعدادات الصفحة ──────────────────────────────────────────────────────
 st.set_page_config(
@@ -164,14 +161,13 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
-# ✅ تم تنظيف السطح تماماً وتظهر الـ 2 شيك بوكس التفاعلية مباشرة بشكل نقي جداً ومريح للعين
 col_check1, col_check2 = st.columns(2)
 with col_check1:
     escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
 with col_check2:
     non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
-# تجميع وتطبيق لوجيك الفلترة التبادلي: الوضع الافتراضي يعرض الإجمالي بالكامل (Total)
+# تطبيق لوجيك الفلترة التبادلي: الوضع الافتراضي يعرض الإجمالي بالكامل (Total)
 df_metrics = df.copy()
 
 if escalated_only_filter and not non_escalated_only_filter:
@@ -223,35 +219,7 @@ if not df_metrics.empty:
 else:
     st.info("No data available to calculate SLA Sunburst tiers.")
 
-st.divider()
-col_c1, col_c2 = st.columns(2)
-with col_c1:
-    st.markdown("##### 📈 24-Hour Shift Timeline Curves")
-    if not df_metrics.empty:
-        full_hours = list(range(24))
-        hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
-        hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
-        
-        h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
-        hourly_stats["Hour Label"] = h_labels
-        fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
-        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-        fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
-        st.plotly_chart(fig_rush_mobi, use_container_width=True)
-        
-with col_c2:
-    st.markdown("##### 📅 Day-by-Day Calendar SLA Trend (Over the Month)")
-    if not df_metrics.empty:
-        daily_stats = df_metrics.groupby("Date Only").agg(Daily_FRT=("Response Take (min)", "mean"), Daily_AHT=("AHT (min)", "mean"), Daily_TAT=("Request Take (min)", "mean")).reset_index()
-        daily_stats["Date Label"] = daily_stats["Date Only"].astype(str)
-        fig_calendar = go.Figure()
-        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_FRT"], name="FRT (Response)", mode="lines+markers", line=dict(color="#f0883e", width=3)))
-        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_AHT"], name="AHT (Process)", mode="lines+markers", line=dict(color="#bc8cff", width=3)))
-        fig_calendar.add_trace(go.Scatter(x=daily_stats["Date Label"], y=daily_stats["Daily_TAT"], name="TAT (Service)", mode="lines+markers", line=dict(color="#58a6ff", width=3)))
-        fig_calendar.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1), xaxis_title="Calendar Date", yaxis_title="Minutes")
-        st.plotly_chart(fig_calendar, use_container_width=True)
-
+# ── تم إزالة سطر الـ Divider ورسمة الـ Trends بناءً على طلبك ──────────────────
 st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
 st.write("")
 st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
