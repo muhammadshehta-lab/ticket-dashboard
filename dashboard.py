@@ -164,7 +164,7 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
-# ✅ تم إزالة جملة Specific Filter Context وعرض الـ 2 شيك بوكس مباشرة لراحة العين وتبسيط المساحة
+# ✅ تم إزالة سطر العنوان الجملة الفرعية كلياً وتظهر الفلاتر مباشرة وبأعلى دقة ومظهر نظيف
 col_check1, col_check2 = st.columns(2)
 with col_check1:
     escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
