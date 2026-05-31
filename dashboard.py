@@ -16,19 +16,33 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── تصميم الواجهة والألوان المتطورة (Modern UI/UX CSS) ─────────────────────────
+# ── تصميم الواجهة والألوان المتطورة الملونة للكروت (KPI Custom Colors CSS) ─────
 st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
-    .kpi-card {
-        background: linear-gradient(135deg, #161b22 0%, #21262d 100%);
-        border: 1px solid #30363d; border-radius: 14px;
-        padding: 1rem 0.8rem; text-align: center;
-        min-height: 120px; display: flex; flex-direction: column; justify-content: center;
+    
+    /* الستايل الأساسي الموحد للكروت */
+    .kpi-container {
+        border-radius: 14px;
+        padding: 1.2rem 0.8rem;
+        text-align: center;
+        min-height: 110px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        margin-bottom: 1rem;
     }
-    .kpi-label { font-size: 0.68rem; letter-spacing: .1em; text-transform: uppercase; color: #8b949e; margin-bottom: .3rem; }
-    .kpi-value { font-size: 1.4rem; font-weight: 800; background: linear-gradient(90deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .kpi-sub { font-size: 0.72rem; margin-top: .2rem; }
+    .kpi-label { font-size: 0.72rem; letter-spacing: .1em; text-transform: uppercase; color: #8b949e; margin-bottom: .4rem; font-weight: 600; }
+    .kpi-value { font-size: 1.5rem; font-weight: 800; }
+    
+    /* الألوان المخصصة لكل كارت مع إضاءة خفيفة مضيئة للحواف */
+    .card-total { background: #111a2e; border: 1px solid #58a6ff; color: #58a6ff; }
+    .card-completed { background: #12221b; border: 1px solid #3fb950; color: #3fb950; }
+    .card-issue { background: #261f12; border: 1px solid #d29922; color: #d29922; }
+    .card-frt { background: #2b1c11; border: 1px solid #f0883e; color: #f0883e; }
+    .card-aht { background: #221230; border: 1px solid #bc8cff; color: #bc8cff; }
+    .card-tat { background: #111a2e; border: 1px solid #58a6ff; color: #58a6ff; }
+
     [data-testid="stSidebar"] { background: #0d1117; border-right: 1px solid #21262d; }
 </style>
 """, unsafe_allow_html=True)
@@ -41,9 +55,14 @@ THEME = dict(
     margin=dict(l=10, r=10, t=40, b=10)
 )
 
-# ✅ دالة بناء الكروت المستقرة في الأعلى لمنع الـ NameError
-def kpi(label, value, sub="", sub_color='#3fb950'):
-    return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
+# ✅ دالة بناء الكروت الملونة النظيفة بدون نصوص سفلية
+def kpi_colored(label, value, card_class):
+    return f"""
+    <div class="kpi-container {card_class}">
+        <div class="kpi-label">{label}</div>
+        <div class="kpi-value">{value}</div>
+    </div>
+    """
 
 def time_to_minutes(s):
     try:
@@ -70,7 +89,7 @@ def load_data_from_sheets():
             creds_dict = json.loads(sec_json)
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         else:
-            st.error("❌ لم يتم العثور على جينات الصلاحيات في Secrets.")
+            st.error("❌ لم يتم العثور على جينات الصلاحيات in Secrets.")
             return pd.DataFrame()
         
         client = gspread.authorize(creds)
@@ -120,9 +139,7 @@ def load_data_from_sheets():
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
         
-        # وقت المعالجة الحقيقي الصافي للإجراء الأول
         df["AHT (min)"] = df["First Action Take (min)"]
-        
         mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
         df["Is Email"] = (mail_col == "yes")
         return df
@@ -159,7 +176,7 @@ with st.sidebar:
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 
-# ── العنوان الرئيسي والواجهة النظيفة ───────────────────────────────────────────
+# ── العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
@@ -169,9 +186,7 @@ with col_check1:
 with col_check2:
     non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
-# تطبيق لوجيك الفلترة التبادلي المعزول مسبقاً
 df_metrics = df.copy()
-
 if escalated_only_filter and not non_escalated_only_filter:
     df_metrics = df_metrics[df_metrics["Is Email"] == True]
 elif non_escalated_only_filter and not escalated_only_filter:
@@ -190,16 +205,15 @@ h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
 h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-# ── [A] الصف العلوي: 6 كروت عريضة ومتناسقة بالتساوي تماماً عبر الشاشة
+# ── [A] الصف العلوي: كروت ملونة ونظيفة تماماً وموزعة بالتساوي ──────────────────
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
 
-r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
-r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
-r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
-
-r1_c4.markdown(kpi("Avg Response (FRT)", h_frt, "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
-r1_c5.markdown(kpi("Avg Handling (AHT)", h_aht, "First Action SLA Only", '#bc8cff'), unsafe_allow_html=True)
-r1_c6.markdown(kpi("Avg Service (TAT)", h_tat, "Average Turnaround", '#58a6ff'), unsafe_allow_html=True)
+r1_c1.markdown(kpi_colored("Total Tickets", f"{total_tickets:,}", "card-total"), unsafe_allow_html=True)
+r1_c2.markdown(kpi_colored("Closed Completed", f"{comp_success:,}", "card-completed"), unsafe_allow_html=True)
+r1_c3.markdown(kpi_colored("Closed with Issue", f"{comp_with_issue:,}", "card-issue"), unsafe_allow_html=True)
+r1_c4.markdown(kpi_colored("Avg Response (FRT)", h_frt, "card-frt"), unsafe_allow_html=True)
+r1_c5.markdown(kpi_colored("Avg Handling (AHT)", h_aht, "card-aht"), unsafe_allow_html=True)
+r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow_html=True)
 
 st.write("")
 st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
@@ -223,7 +237,7 @@ else:
 
 st.divider()
 
-# ✅ [B] الاحتفاظ الصافي والمطلق بـ منحنى الـ 24 ساعة (Volume vs Response Curves) بعرض الصفحة كاملة
+# ── [B] منحنى الـ 24 ساعة ممتد بكامل العرض ─────────────────────────────────────
 st.markdown("##### 📈 24-Hour Shift Timeline Curves")
 if not df_metrics.empty:
     full_hours = list(range(24))
@@ -239,7 +253,6 @@ if not df_metrics.empty:
     fig_rush_mobi.update_layout(**THEME, hovermode="x unified", legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
-# التنويه الإحصائي وجدول التحليل السفلي المأمنين
 st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
 st.write("")
 st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
