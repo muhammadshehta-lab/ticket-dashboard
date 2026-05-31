@@ -55,7 +55,7 @@ THEME = dict(
     margin=dict(l=10, r=10, t=20, b=10)
 )
 
-# ✅ دالة بناء الكروت الملونة النظيفة - مؤمنة ومستقرة في الأعلى لمنع الـ NameError
+# ✅ دالة بناء الكروت الملونة النظيفة - مؤمنة ومستقرة في أعلى الملف لمنع الـ NameError
 def kpi_colored(label, value, card_class):
     return f"""
     <div class="kpi-container {card_class}">
@@ -103,4 +103,16 @@ def load_data_from_sheets():
         client = gspread.authorize(creds)
         spreadsheet = client.open("AlDawaa Tickets Data")
         all_dfs = []
-        for
+        for worksheet in spreadsheet.worksheets():
+            data = worksheet.get_all_values()
+            if len(data) > 1:
+                raw_cols = [str(c).strip() for c in data[0]]
+                df_tab = pd.DataFrame(data[1:], columns=raw_cols)
+                mapped_cols = {}
+                assigned_targets = set()
+                for col in df_tab.columns:
+                    c_low = col.lower()
+                    target = None
+                    if "id" in c_low and "req" in c_low: target = "Request ID"
+                    elif "date" in c_low: target = "Request Date"
+                    elif "type" in c_low: target = "Request Type"
