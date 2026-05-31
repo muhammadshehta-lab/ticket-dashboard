@@ -164,7 +164,7 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 st.markdown("## 💊 Ticket Control Panel & Operational Analytics")
 st.caption(f"Scannable views for performance metrics — {d_from} to {d_to}")
 
-# ✅ تم إزالة سطر العنوان الجملة الفرعية كلياً وتظهر الفلاتر مباشرة وبأعلى دقة ومظهر نظيف
+# ✅ تم تنظيف السطح تماماً وتظهر الـ 2 شيك بوكس التفاعلية مباشرة بشكل نقي جداً ومريح للعين
 col_check1, col_check2 = st.columns(2)
 with col_check1:
     escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
@@ -187,8 +187,6 @@ comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case
 avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
 avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
 avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
-total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
-total_cumulative_hours = total_cumulative_minutes / 60
 
 h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
