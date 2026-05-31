@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -167,7 +169,7 @@ with col_check1:
 with col_check2:
     non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
-# تطبيق لوجيك الفلترة التبادلي: الوضع الافتراضي يعرض الإجمالي بالكامل (Total)
+# تطبيق لوجيك الفلترة التبادلي
 df_metrics = df.copy()
 
 if escalated_only_filter and not non_escalated_only_filter:
@@ -177,58 +179,4 @@ elif non_escalated_only_filter and not escalated_only_filter:
 
 total_tickets = len(df_metrics)
 status_series = df_metrics["Status"].astype(str).str.strip()
-comp_success = df_metrics[status_series.str.contains("Closed", na=False, case=False) & ~status_series.str.contains("issue", na=False, case=False)].shape[0]
-comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case=False) & status_series.str.contains("issue", na=False, case=False)].shape[0]
-
-avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
-avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
-avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
-
-h_frt = format_minutes_to_hhmmss(avg_response_global)
-h_aht = format_minutes_to_hhmmss(avg_aht_global)
-h_tat = format_minutes_to_hhmmss(avg_service_global)
-
-# ── [A] الصف العلوي: 6 كروت عريضة، موسعة وموزعة بالتساوي تماماً عبر كامل المساحة
-r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
-
-r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
-r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
-r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
-
-r1_c4.markdown(kpi("Avg Response (FRT)", h_frt, "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
-r1_c5.markdown(kpi("Avg Handling (AHT)", h_aht, "First Action SLA Only", '#bc8cff'), unsafe_allow_html=True)
-r1_c6.markdown(kpi("Avg Service (TAT)", h_tat, "Average Turnaround", '#58a6ff'), unsafe_allow_html=True)
-
-st.write("")
-st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
-if not df_metrics.empty:
-    df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
-    df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
-    r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
-    r_data["SLA Category"] = "Response Time"
-    r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
-    s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
-    s_data["SLA Category"] = "Service Resolution"
-    s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
-    sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
-    fig_sunburst = px.sunburst(sunburst_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
-        color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
-    fig_sunburst.update_layout(**THEME, height=500)
-    fig_sunburst.update_traces(textinfo="label+percent parent", hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}")
-    st.plotly_chart(fig_sunburst, use_container_width=True)
-else:
-    st.info("No data available to calculate SLA Sunburst tiers.")
-
-# ── تم إزالة سطر الـ Divider ورسمة الـ Trends بناءً على طلبك ──────────────────
-st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
-st.write("")
-st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
-if not df_metrics.empty:
-    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
-    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
-    
-    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
-    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
-    
-    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
-    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
+comp_success = df_metrics
