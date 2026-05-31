@@ -119,7 +119,7 @@ def load_data_from_sheets():
         df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
         
-        # ✅ التعديل هنا: اعتماد الـ AHT كلياً وحصرياً على عمود وقت الإجراء الأول فقط تلبيةً لطلبك التشغيلي
+        # وقت المعالجة AHT يعتمد حصرياً على عمود وقت الإجراء الأول
         df["AHT (min)"] = df["First Action Take (min)"]
         
         mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
@@ -167,40 +167,55 @@ tab1, tab2 = st.tabs(["📊 Tab 1: Ticket Statistics & Core Metrics", "⚙️ Ta
 with tab1:
     def kpi(label, value, sub="", sub_color='#3fb950'):
         return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div><div class="kpi-sub" style="color: {sub_color}">{sub}</div></div>'
+    
     st.markdown("#### 🔍 Specific Filter Context")
-    email_filter = st.checkbox("🎯 Filter Dashboard Content by Special Email Requests Only", value=False)
-    df_metrics = df[df["Is Email"] == True].copy() if email_filter else df.copy()
+    
+    # ── الـ التعديل الجوهري التفاعلي المطلوب ──
+    col_check1, col_check2 = st.columns(2)
+    with col_check1:
+        email_filter = st.checkbox("🎯 Filter Dashboard Content by Special Email Requests Only", value=False)
+    with col_check2:
+        # 🌀 الفلتر التفاعلي الجديد السحري للحالات المتصعدة (يمثل بديل الكارد المحذوف بذكاء كامل)
+        escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
+    
+    # تجميع شروط الفلترة بناءً على الاختيارات
+    df_metrics = df.copy()
+    if email_filter:
+        df_metrics = df_metrics[df_metrics["Is Email"] == True]
+    if escalated_only_filter:
+        # فلترة اللوحة كلها لتعرض فقط الحالات التي تحتوي قيمتها على Yes في عمود الإيميل الاستثنائي
+        df_metrics = df_metrics[df_metrics["Is Email"] == True]
 
     total_tickets = len(df_metrics)
     status_series = df_metrics["Status"].astype(str).str.strip()
     comp_success = df_metrics[status_series.str.contains("Closed", na=False, case=False) & ~status_series.str.contains("issue", na=False, case=False)].shape[0]
     comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case=False) & status_series.str.contains("issue", na=False, case=False)].shape[0]
-    escalated_cases = df_metrics[df_metrics["Is Email"] == True].shape[0]
     
     avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
     avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
     avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
+    total_cumulative_minutes = df_metrics["Request Take (min)"].sum()
+    total_cumulative_hours = total_cumulative_minutes / 60
 
     total_logged_manual_cases = len(st.session_state.manual_cases_log)
     total_support_value_sum = sum([float(str(item["Value"]).replace(",", "")) for item in st.session_state.manual_values_log])
 
-    # تحويل المتوسطات للكروت العلوية بالتنسيق الجديد النظيف والمطلوب بالملي
     h_frt = format_minutes_to_hhmmss(avg_response_global)
     h_aht = format_minutes_to_hhmmss(avg_aht_global)
     h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7, r1_c8 = st.columns(8)
-    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Automated entries", '#58a6ff'), unsafe_allow_html=True)
+    # ── [A] الصف العلوي: تم إزالة كارد Escalated Cases وتوسيع بقية الكروت بالتساوي (7 كروت متناسقة)
+    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6, r1_c7 = st.columns(7)
+    
+    r1_c1.markdown(kpi("Total Tickets", f"{total_tickets:,}", "Filtered volume context", '#58a6ff'), unsafe_allow_html=True)
     r1_c2.markdown(kpi("Closed Completed", f"{comp_success:,}", "Resolved clean", '#3fb950'), unsafe_allow_html=True)
     r1_c3.markdown(kpi("Closed with Issue", f"{comp_with_issue:,}", "With complications", '#d29922'), unsafe_allow_html=True)
-    r1_c4.markdown(kpi("Escalated Cases", f"{escalated_cases:,}", "Email Yes volume", '#f85149'), unsafe_allow_html=True)
     
-    # عرض الكروت الزمنية الثلاثة متجاورة ومعبرة بدقة متناهية عن المطلوب
-    r1_c5.markdown(kpi("Avg Response (FRT)", h_frt, "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
-    r1_c6.markdown(kpi("Avg Handling (AHT)", h_aht, "First Action SLA", '#bc8cff'), unsafe_allow_html=True)
-    r1_c7.markdown(kpi("Avg Service (TAT)", h_tat, "Average Turnaround", '#58a6ff'), unsafe_allow_html=True)
+    r1_c4.markdown(kpi("Avg Response (FRT)", h_frt, "Avg acknowledgement", '#f0883e'), unsafe_allow_html=True)
+    r1_c5.markdown(kpi("Avg Handling (AHT)", h_aht, "First Action SLA Only", '#bc8cff'), unsafe_allow_html=True)
+    r1_c6.markdown(kpi("Avg Service (TAT)", h_tat, "Average Turnaround", '#58a6ff'), unsafe_allow_html=True)
     
-    r1_c8.markdown(kpi("Manual Logs", f"{total_logged_manual_cases:,}", f"Value: {total_support_value_sum:,.1f}", '#2ea44f'), unsafe_allow_html=True)
+    r1_c7.markdown(kpi("Manual Logs", f"{total_logged_manual_cases:,}", f"Value: {total_support_value_sum:,.1f}", '#2ea44f'), unsafe_allow_html=True)
 
     st.write("")
     st.markdown("### 🌀 SLA Performance Breakdown Sunburst Matrix")
