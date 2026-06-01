@@ -87,7 +87,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل كتل نظيفة ومؤمنة 100% ───────
+# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ومستقر ─────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -159,7 +159,7 @@ def load_data_from_sheets():
 
 # ── 4. شريط الفلاتر الجانبي (Sidebar Filters) ──────────────────────────────────
 with st.sidebar:
-    st.markdown("## ## 💊 Navigation & Filters")
+    st.markdown("## 💊 Navigation & Filters")
     st.success("📡 Live Sync Active")
     if st.button("🔄 Refresh Data Now", use_container_width=True): load_data_from_sheets.clear()
     df_raw = load_data_from_sheets()
@@ -173,17 +173,4 @@ with st.sidebar:
     max_d = df_raw["Date Only"].dropna().max()
     date_val = (min_d, max_d)
     date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
-    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
-    
-    # ب. فلتر الموظفين
-    raw_agents = df_raw["Assigned By"].dropna().unique()
-    sorted_agents = sorted(raw_agents)
-    sel_agents = st.multiselect("Agent Filter", sorted_agents)
-    
-    # ج. تصفية أنواع الطلبات (Request Type Filter)
-    raw_types = df_raw["Request Type"].dropna().unique()
-    sorted_types = sorted(raw_types)
-    sel_types = st.multiselect("Request Type Filter", sorted_types)
-
-# تطبيق شروط الفلترة الشاملة للقائمة الجانبية بناءً على الاختيارات
-df = df_raw[(df_raw["Date Only"] >= d_from)
+    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len
