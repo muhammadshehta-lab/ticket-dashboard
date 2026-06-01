@@ -52,10 +52,9 @@ THEME = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font_color="#c9d1d9",
-    margin=dict(l=10, r=10, t=50, b=10) # مساحة علوية مريحة للعنوان الجديد
+    margin=dict(l=10, r=10, t=50, b=10)
 )
 
-# ✅ دالة بناء الكروت الملونة النظيفة بدون نصوص سفلية
 def kpi_colored(label, value, card_class):
     return f"""
     <div class="kpi-container {card_class}">
@@ -87,7 +86,6 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# قاموس ترجمة أسماء الأيام للعربية
 DAYS_ARABIC = {
     "Saturday": "السبت",
     "Sunday": "الأحد",
@@ -98,7 +96,7 @@ DAYS_ARABIC = {
     "Friday": "الجمعة"
 }
 
-# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ومستقر ─────────────
+# ── 3. سحب ومعالجة البيانات ──────────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -168,7 +166,7 @@ def load_data_from_sheets():
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame()
 
-# ── 4. شريط الفلاتر الجانبي (Sidebar Filters) ──────────────────────────────────
+# ── 4. شريط الفلاتر الجانبي (Sidebar) ─────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 💊 Navigation & Filters")
     st.success("📡 Live Sync Active")
@@ -179,39 +177,31 @@ with st.sidebar:
         st.stop()
     st.divider()
     
-    # أ. فلتر نطاق التاريخ
     min_d = df_raw["Date Only"].dropna().min()
     max_d = df_raw["Date Only"].dropna().max()
     date_val = (min_d, max_d)
     date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
-    
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     
-    # عرض اسم اليوم المختار بالعربية إذا اختار المستخدم يوماً واحداً
     if d_from == d_to:
         day_en = pd.to_datetime(d_from).day_name()
         day_ar = DAYS_ARABIC.get(day_en, day_en)
         st.caption(f"📅 اليوم المحدد: **{day_ar}**")
     
     st.divider()
-    # ب. فلتر الموظفين
     raw_agents = df_raw["Assigned By"].dropna().unique()
     sorted_agents = sorted(raw_agents)
     sel_agents = st.multiselect("Agent Filter", sorted_agents)
     
-    # ج. تصفية أنواع الطلبات (Request Type Filter)
     raw_types = df_raw["Request Type"].dropna().unique()
     sorted_types = sorted(raw_types)
     sel_types = st.multiselect("Request Type Filter", sorted_types)
 
-# تطبيق شروط الفلترة الشاملة للقائمة الجانبية بناءً على الاختيارات
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-if sel_agents: 
-    df = df[df["Assigned By"].isin(sel_agents)]
-if sel_types: 
-    df = df[df["Request Type"].isin(sel_types)]
+if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
+if sel_types: df = df[df["Request Type"].isin(sel_types)]
 
-# ── 5. العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
+# ── 5. العناوين الرئيسية والفلاتر التفاعلية ──────────────────────────────────
 if d_from == d_to:
     day_en = pd.to_datetime(d_from).day_name()
     day_ar = DAYS_ARABIC.get(day_en, day_en)
@@ -247,7 +237,7 @@ h_frt = format_minutes_to_hhmmss(avg_response_global)
 h_aht = format_minutes_to_hhmmss(avg_aht_global)
 h_tat = format_minutes_to_hhmmss(avg_service_global)
 
-# ── [A] الصف العلوي: كروت ملونة ونظيفة تماماً وموزعة بالتساوي ──────────────────
+# ── [A] الصف العلوي: كروت الأداء ──────────────────────────────────────────────
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
 
 r1_c1.markdown(kpi_colored("Total Tickets", f"{total_tickets:,}", "card-total"), unsafe_allow_html=True)
@@ -259,7 +249,7 @@ r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow
 
 st.write("")
 
-# ── [B] مخطط الـ Sunburst المرتب زمنياً بالتتابع المتجاور الصحيح 100% ───────────
+# ── [B] مخطط الـ Sunburst ─────────────────────────────────────────────────────
 if not df_metrics.empty:
     df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
     df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
@@ -284,7 +274,7 @@ if not df_metrics.empty:
     sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
     sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
     
-    # تم تمرير الاسم هنا مباشرة بداخل البناء الأساسي للشارت
+    # ✅ إزالة العنوان من هنا تماماً لتجنب التضارب
     fig_sunburst = px.sunburst(
         sunburst_df, 
         path=["SLA Category", "SLA Tier"], 
@@ -297,8 +287,7 @@ if not df_metrics.empty:
             "45-60 Mins": "#f9c513", 
             "Over 1 Hour": "#ea4a5a"
         }, 
-        branchvalues="total",
-        title="SLA Compliance & Time Tiers Breakdown"
+        branchvalues="total"
     )
     
     fig_sunburst.update_traces(
@@ -307,23 +296,24 @@ if not df_metrics.empty:
         hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
     )
     
-    # ✅ الحل الجذري: تم دمج إعدادات حجم ولون خط العنوان بداخل قاموس الـ title الحديث لتجنب الـ ValueError كلياً
+    # ✅ وضع العنوان والخط بشكل متكامل وصحيح داخل قاموس الـ title
     fig_sunburst.update_layout(
         **THEME, 
         height=520,
+        title=dict(
+            text="SLA Compliance & Time Tiers Breakdown",
+            font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
+        ),
         hoverlabel=dict(
             font_size=14,
             font_family="Inter, sans-serif"
-        ),
-        title=dict(
-            font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
         )
     )
     st.plotly_chart(fig_sunburst, use_container_width=True)
 
 st.divider()
 
-# ── [C] منحنى الـ 24 ساعة المطور بالتسلسل الزمني المتتالي المتقارب ──────────────
+# ── [C] منحنى الـ 24 ساعة ──────────────────────────────────────────────────────
 if not df_metrics.empty:
     full_hours = list(range(24))
     hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
@@ -338,7 +328,7 @@ if not df_metrics.empty:
     
     fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
     
-    # ✅ تم دمج العنوان والخط بداخل هيكل الـ title الموحد لعدم حدوث أي تضارب
+    # ✅ نفس المبدأ هنا، كل ما يخص العنوان تم دمجه بنظافة
     fig_rush_mobi.update_layout(
         **THEME, 
         height=450, 
@@ -355,7 +345,7 @@ if not df_metrics.empty:
     )
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
-# ── [D] الجدول الإحصائي التحليلي السفلي ─────────────────────────────────────────
+# ── [D] الجدول الإحصائي السفلي ────────────────────────────────────────────────
 st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
 st.write("")
 st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
