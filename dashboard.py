@@ -173,4 +173,150 @@ with st.sidebar:
     max_d = df_raw["Date Only"].dropna().max()
     date_val = (min_d, max_d)
     date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
-    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len
+    
+    # ✅ تم تقفيل السطر وإصلاح الـ SyntaxError بالملي هنا
+    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
+    
+    # ب. فلتر الموظفين
+    raw_agents = df_raw["Assigned By"].dropna().unique()
+    sorted_agents = sorted(raw_agents)
+    sel_agents = st.multiselect("Agent Filter", sorted_agents)
+    
+    # j. تصفية أنواع الطلبات (Request Type Filter)
+    raw_types = df_raw["Request Type"].dropna().unique()
+    sorted_types = sorted(raw_types)
+    sel_types = st.multiselect("Request Type Filter", sorted_types)
+
+# تطبيق شروط الفلترة الشاملة للقائمة الجانبية بناءً على الاختيارات
+df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+if sel_agents: 
+    df = df[df["Assigned By"].isin(sel_agents)]
+if sel_types: 
+    df = df[df["Request Type"].isin(sel_types)]
+
+# ── 5. العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
+st.markdown("## 💊 In-Store Requests")
+st.caption(f"🔍 Search Period: {d_from} to {d_to}")
+
+col_check1, col_check2 = st.columns(2)
+with col_check1:
+    escalated_only_filter = st.checkbox("🔥 Show Escalated Cases Only (Interactive Data Mapping)", value=False)
+with col_check2:
+    non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
+
+df_metrics = df.copy()
+if escalated_only_filter and not non_escalated_only_filter:
+    df_metrics = df_metrics[df_metrics["Is Email"] == True]
+elif non_escalated_only_filter and not escalated_only_filter:
+    df_metrics = df_metrics[df_metrics["Is Email"] == False]
+
+total_tickets = len(df_metrics)
+status_series = df_metrics["Status"].astype(str).str.strip()
+comp_success = df_metrics[status_series.str.contains("Closed", na=False, case=False) & ~status_series.str.contains("issue", na=False, case=False)].shape[0]
+comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case=False) & status_series.str.contains("issue", na=False, case=False)].shape[0]
+
+avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
+avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
+avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
+
+h_frt = format_minutes_to_hhmmss(avg_response_global)
+h_aht = format_minutes_to_hhmmss(avg_aht_global)
+h_tat = format_minutes_to_hhmmss(avg_service_global)
+
+# ── [A] الصف العلوي: كروت ملونة ونظيفة تماماً وموزعة بالتساوي ──────────────────
+r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
+
+r1_c1.markdown(kpi_colored("Total Tickets", f"{total_tickets:,}", "card-total"), unsafe_allow_html=True)
+r1_c2.markdown(kpi_colored("Closed Completed", f"{comp_success:,}", "card-completed"), unsafe_allow_html=True)
+r1_c3.markdown(kpi_colored("Closed with Issue", f"{comp_with_issue:,}", "card-issue"), unsafe_allow_html=True)
+r1_c4.markdown(kpi_colored("Avg Response (FRT)", h_frt, "card-frt"), unsafe_allow_html=True)
+r1_c5.markdown(kpi_colored("Avg Handling (AHT)", h_aht, "card-aht"), unsafe_allow_html=True)
+r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow_html=True)
+
+st.write("")
+
+# ── [B] مخطط الـ Sunburst المرتب زمنياً بالتتابع المتجاور الصحيح 100% ───────────
+if not df_metrics.empty:
+    df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
+    df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
+    
+    r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
+    r_data["SLA Category"] = "Response Time"
+    r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
+    
+    s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
+    s_data["SLA Category"] = "Service Resolution"
+    s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
+    
+    sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
+    
+    time_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+    category_order = ["Response Time", "Service Resolution"]
+    
+    sunburst_df["SLA Category"] = pd.Categorical(sunburst_df["SLA Category"], categories=category_order, ordered=True)
+    sunburst_df["SLA Tier"] = pd.Categorical(sunburst_df["SLA Tier"], categories=time_order, ordered=True)
+    sunburst_df = sunburst_df.sort_values(["SLA Category", "SLA Tier"]).reset_index(drop=True)
+    
+    sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
+    sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
+    
+    fig_sunburst = px.sunburst(
+        sunburst_df, 
+        path=["SLA Category", "SLA Tier"], 
+        values="Tickets", 
+        color="SLA Tier",
+        color_discrete_map={
+            "Under 15 Mins": "#2ea44f", 
+            "15-30 Mins": "#2188ff", 
+            "30-45 Mins": "#bc8cff", 
+            "45-60 Mins": "#f9c513", 
+            "Over 1 Hour": "#ea4a5a"
+        }, 
+        branchvalues="total",
+        category_orders={
+            "SLA Category": category_order,
+            "SLA Tier": time_order
+        }
+    )
+    
+    fig_sunburst.update_traces(
+        sort=False,  
+        textinfo="label+percent parent", 
+        hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
+    )
+    
+    fig_sunburst.update_layout(**THEME, height=520)
+    st.plotly_chart(fig_sunburst, use_container_width=True)
+
+st.divider()
+
+# ── [C] منحنى الـ 24 ساعة المطور بالتسلسل الزمني المتتالي المتقارب ──────────────
+if not df_metrics.empty:
+    full_hours = list(range(24))
+    hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
+    hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
+    
+    h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
+    hourly_stats["Hour Label"] = h_labels
+    
+    fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume (Total Tickets)", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
+    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
+    
+    fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
+    fig_rush_mobi.update_layout(**THEME, height=450, hovermode="x unified", legend=dict(orientation="h", y=1.1))
+    st.plotly_chart(fig_rush_mobi, use_container_width=True)
+
+# ── [D] الجدول الإحصائي التحليلي السفلي ─────────────────────────────────────────
+st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
+st.write("")
+st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
+if not df_metrics.empty:
+    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
+    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
+    
+    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
+    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
+    
+    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
+    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
