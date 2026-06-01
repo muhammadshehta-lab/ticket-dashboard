@@ -22,29 +22,44 @@ st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
     .kpi-container {
-        border-radius: 14px; padding: 1.2rem 0.8rem; text-align: center;
-        min-height: 110px; display: flex; flex-direction: column;
-        justify-content: center; margin-bottom: 1rem;
+        border-radius: 14px; 
+        padding: 1.2rem 0.8rem; 
+        text-align: center;
+        min-height: 110px; 
+        display: flex; 
+        flex-direction: column;
+        justify-content: center; 
+        margin-bottom: 1rem;
     }
     .kpi-label { 
-        font-size: 0.72rem; letter-spacing: .1em; 
-        text-transform: uppercase; color: #8b949e; 
-        margin-bottom: .4rem; font-weight: 600; 
+        font-size: 0.72rem; 
+        letter-spacing: .1em; 
+        text-transform: uppercase; 
+        color: #8b949e; 
+        margin-bottom: .4rem; 
+        font-weight: 600; 
     }
-    .kpi-value { font-size: 1.5rem; font-weight: 800; }
+    .kpi-value { 
+        font-size: 1.5rem; 
+        font-weight: 800; 
+    }
     .card-total { background: #111a2e; border: 1px solid #58a6ff; color: #58a6ff; }
     .card-completed { background: #12221b; border: 1px solid #3fb950; color: #3fb950; }
     .card-issue { background: #261f12; border: 1px solid #d29922; color: #d29922; }
     .card-frt { background: #2b1c11; border: 1px solid #f0883e; color: #f0883e; }
     .card-aht { background: #221230; border: 1px solid #bc8cff; color: #bc8cff; }
     .card-tat { background: #111a2e; border: 1px solid #58a6ff; color: #58a6ff; }
+    
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
     .stTabs [data-baseweb="tab"] { 
-        background-color: #161b22; border-radius: 10px 10px 0 0; 
-        padding: 10px 20px; color: #8b949e; 
+        background-color: #161b22; 
+        border-radius: 10px 10px 0 0; 
+        padding: 10px 20px; 
+        color: #8b949e; 
     }
     .stTabs [aria-selected="true"] { 
-        background-color: #1e3a8a !important; color: white !important; 
+        background-color: #1e3a8a !important; 
+        color: white !important; 
     }
 </style>
 """, unsafe_allow_html=True)
@@ -84,4 +99,14 @@ def format_minutes_to_hhmmss(minutes_val):
 
 def assign_time_tier(m):
     if m <= 15: return "Under 15 Mins"
-    if m <= 30: return
+    if m <= 30: return "15-30 Mins"
+    if m <= 45: return "30-45 Mins"
+    if m <= 60: return "45-60 Mins"
+    return "Over 1 Hour"
+
+DAYS_ARABIC = {
+    "Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", 
+    "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"
+}
+
+# ── 4.
