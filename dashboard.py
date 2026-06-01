@@ -87,7 +87,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ──────────────────
+# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ومستقر ─────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -114,3 +114,8 @@ def load_data_from_sheets():
                     c_low = col.lower()
                     target = None
                     if "id" in c_low and "req" in c_low: target = "Request ID"
+                    elif "date" in c_low: target = "Request Date"
+                    elif "type" in c_low: target = "Request Type"
+                    elif "status" in c_low: target = "Status"
+                    elif "assigned" in c_low or "agent" in c_low: target = "Assigned By"
+                    elif "response" in c_low and "
