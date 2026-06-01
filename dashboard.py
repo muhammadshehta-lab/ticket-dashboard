@@ -9,15 +9,10 @@ from google.oauth2.service_account import Credentials
 import json
 import urllib.parse
 
-# ── 1. تهيئة إعدادات الصفحة التشغيلية ──────────────────────────────────────────
-st.set_page_config(
-    page_title="In-Store Performance Hub",
-    page_icon="💊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ── 1. إعدادات الصفحة ──────────────────────────────────────────────────────────
+st.set_page_config(page_title="In-Store Performance Hub", page_icon="💊", layout="wide", initial_sidebar_state="expanded")
 
-# ── 2. تصميم الواجهة (Custom CSS) ──────────────────────────────────────────
+# ── 2. تصميم الواجهة (CSS) ───────────────────────────────────────────────────
 st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
@@ -28,38 +23,23 @@ st.markdown("""
     }
     .kpi-label { font-size: 0.72rem; letter-spacing: .1em; text-transform: uppercase; color: #8b949e; margin-bottom: .4rem; font-weight: 600; }
     .kpi-value { font-size: 1.5rem; font-weight: 800; }
-    
     .card-total { background: #111a2e; border: 1px solid #58a6ff; color: #58a6ff; }
     .card-completed { background: #12221b; border: 1px solid #3fb950; color: #3fb950; }
     .card-issue { background: #261f12; border: 1px solid #d29922; color: #d29922; }
     .card-frt { background: #2b1c11; border: 1px solid #f0883e; color: #f0883e; }
     .card-aht { background: #221230; border: 1px solid #bc8cff; color: #bc8cff; }
     .card-tat { background: #111a2e; border: 1px solid #58a6ff; color: #58a6ff; }
-
-    /* Styling for Tabs */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #161b22; border-radius: 10px 10px 0 0;
-        padding: 10px 20px; color: #8b949e;
-    }
+    .stTabs [data-baseweb="tab"] { background-color: #161b22; border-radius: 10px 10px 0 0; padding: 10px 20px; color: #8b949e; }
     .stTabs [aria-selected="true"] { background-color: #1e3a8a !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
-THEME = dict(
-    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9",
-    margin=dict(l=10, r=10, t=50, b=10)
-)
+THEME = dict(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#c9d1d9", margin=dict(l=10, r=10, t=50, b=10))
 
-# ── 3. دوال مساعدة (Helpers) ─────────────────────────────────────────────────
+# ── 3. دوال مساعدة ───────────────────────────────────────────────────────────
 def kpi_colored(label, value, card_class):
-    return f"""
-    <div class="kpi-container {card_class}">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value">{value}</div>
-    </div>
-    """
+    return f'<div class="kpi-container {card_class}"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>'
 
 def time_to_minutes(s):
     try:
@@ -80,12 +60,9 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-DAYS_ARABIC = {
-    "Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين",
-    "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"
-}
+DAYS_ARABIC = {"Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"}
 
-# ── 4. سحب البيانات من Google Sheets ─────────────────────────────────────────
+# ── 4. سحب البيانات ──────────────────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -104,7 +81,8 @@ def load_data_from_sheets():
         for worksheet in spreadsheet.worksheets():
             data = worksheet.get_all_values()
             if len(data) > 1:
-                df_tab = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                raw_cols = [str(c).strip() for c in data[0]]
+                df_tab = pd.DataFrame(data[1:], columns=raw_cols)
                 mapped = {}
                 assigned_targets = set()
                 for col in df_tab.columns:
@@ -152,7 +130,7 @@ def load_data_from_sheets():
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame()
 
-# ── 5. تشغيل اللوحة والشريط الجانبي ──────────────────────────────────────────
+# ── 5. الفلاتر ───────────────────────────────────────────────────────────────
 df_raw = load_data_from_sheets()
 
 with st.sidebar:
@@ -164,16 +142,14 @@ with st.sidebar:
         st.stop()
     st.divider()
     
-    min_d = df_raw["Date Only"].dropna().min()
-    max_d = df_raw["Date Only"].dropna().max()
+    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
     date_val = (min_d, max_d)
     date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     
     if d_from == d_to:
         day_en = pd.to_datetime(d_from).day_name()
-        day_ar = DAYS_ARABIC.get(day_en, day_en)
-        st.caption(f"📅 اليوم المحدد: **{day_ar}**")
+        st.caption(f"📅 اليوم المحدد: **{DAYS_ARABIC.get(day_en, day_en)}**")
     
     st.divider()
     agents = sorted(df_raw["Assigned By"].dropna().unique())
@@ -186,22 +162,14 @@ df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].cop
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 if sel_types: df = df[df["Request Type"].isin(sel_types)]
 
-if d_from == d_to:
-    day_en = pd.to_datetime(d_from).day_name()
-    day_ar = DAYS_ARABIC.get(day_en, day_en)
-    caption_text = f"🔍 Search Period: {d_from} ({day_ar})"
-else:
-    caption_text = f"🔍 Search Period: {d_from} to {d_to}"
-
+caption_text = f"🔍 Search Period: {d_from} ({DAYS_ARABIC.get(pd.to_datetime(d_from).day_name(), pd.to_datetime(d_from).day_name())})" if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
 st.markdown("## 💊 In-Store Requests Dashboard")
 st.caption(caption_text)
 
-# ── 6. نظام التابات (Tabs) ───────────────────────────────────────────────────
+# ── 6. التابات ───────────────────────────────────────────────────────────────
 tab1, tab2 = st.tabs(["📊 In-Store Overview", "👥 Team Performance & KPIs"])
 
-# =============================================================================
-# ── TAB 1: IN-STORE OVERVIEW ─────────────────────────────────────────────────
-# =============================================================================
+# == TAB 1: OVERVIEW ==
 with tab1:
     col_check1, col_check2 = st.columns(2)
     with col_check1:
@@ -210,31 +178,25 @@ with tab1:
         non_escalated_only_filter = st.checkbox("🟢 Show Non-Escalated Cases Only", value=False)
 
     df_metrics = df.copy()
-    if escalated_only_filter and not non_escalated_only_filter:
-        df_metrics = df_metrics[df_metrics["Is Email"] == True]
-    elif non_escalated_only_filter and not escalated_only_filter:
-        df_metrics = df_metrics[df_metrics["Is Email"] == False]
+    if escalated_only_filter and not non_escalated_only_filter: df_metrics = df_metrics[df_metrics["Is Email"] == True]
+    elif non_escalated_only_filter and not escalated_only_filter: df_metrics = df_metrics[df_metrics["Is Email"] == False]
 
     total_tickets = len(df_metrics)
-    status_series = df_metrics["Status"].astype(str).str.strip()
-    comp_success = df_metrics[status_series.str.contains("Closed", na=False, case=False) & ~status_series.str.contains("issue", na=False, case=False)].shape[0]
-    comp_with_issue = df_metrics[status_series.str.contains("Closed", na=False, case=False) & status_series.str.contains("issue", na=False, case=False)].shape[0]
+    status_s = df_metrics["Status"].astype(str).str.strip().str.lower()
+    comp_success = df_metrics[status_s.str.contains("closed", na=False) & ~status_s.str.contains("issue", na=False)].shape[0]
+    comp_with_issue = df_metrics[status_s.str.contains("closed", na=False) & status_s.str.contains("issue", na=False)].shape[0]
 
-    avg_response_global = df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0
-    avg_aht_global = df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0
-    avg_service_global = df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0
-
-    h_frt = format_minutes_to_hhmmss(avg_response_global)
-    h_aht = format_minutes_to_hhmmss(avg_aht_global)
-    h_tat = format_minutes_to_hhmmss(avg_service_global)
+    h_frt = format_minutes_to_hhmmss(df_metrics["Response Take (min)"].mean() if not df_metrics.empty else 0)
+    h_aht = format_minutes_to_hhmmss(df_metrics["AHT (min)"].mean() if not df_metrics.empty else 0)
+    h_tat = format_minutes_to_hhmmss(df_metrics["Request Take (min)"].mean() if not df_metrics.empty else 0)
 
     r1_c1, r1_c2, r1_c3, r1_c4, r1_c5, r1_c6 = st.columns(6)
     r1_c1.markdown(kpi_colored("Total Tickets", f"{total_tickets:,}", "card-total"), unsafe_allow_html=True)
     r1_c2.markdown(kpi_colored("Closed Completed", f"{comp_success:,}", "card-completed"), unsafe_allow_html=True)
     r1_c3.markdown(kpi_colored("Closed with Issue", f"{comp_with_issue:,}", "card-issue"), unsafe_allow_html=True)
-    r1_c4.markdown(kpi_colored("Avg Response (FRT)", h_frt, "card-frt"), unsafe_allow_html=True)
-    r1_c5.markdown(kpi_colored("Avg Handling (AHT)", h_aht, "card-aht"), unsafe_allow_html=True)
-    r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow_html=True)
+    r1_c4.markdown(kpi_colored("Avg Response", h_frt, "card-frt"), unsafe_allow_html=True)
+    r1_c5.markdown(kpi_colored("Avg Handling", h_aht, "card-aht"), unsafe_allow_html=True)
+    r1_c6.markdown(kpi_colored("Avg Service", h_tat, "card-tat"), unsafe_allow_html=True)
 
     st.write("")
 
@@ -242,4 +204,24 @@ with tab1:
         df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
         df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
         
-        r_data = df_metrics.groupby("Response Tier").size().reset_index(name="
+        r_data = df_metrics.groupby("Response Tier").size().reset_index(name="Tickets")
+        r_data["SLA Category"] = "Response Time"
+        r_data.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
+        
+        s_data = df_metrics.groupby("Service Tier").size().reset_index(name="Tickets")
+        s_data["SLA Category"] = "Service Resolution"
+        s_data.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
+        
+        sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
+        time_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+        category_order = ["Response Time", "Service Resolution"]
+        
+        sunburst_df["SLA Category"] = pd.Categorical(sunburst_df["SLA Category"], categories=category_order, ordered=True)
+        sunburst_df["SLA Tier"] = pd.Categorical(sunburst_df["SLA Tier"], categories=time_order, ordered=True)
+        sunburst_df = sunburst_df.sort_values(["SLA Category", "SLA Tier"]).reset_index(drop=True)
+        sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
+        sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
+        
+        fig_sunburst = px.sunburst(
+            sunburst_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
+            color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5
