@@ -180,7 +180,7 @@ with st.sidebar:
     sorted_agents = sorted(raw_agents)
     sel_agents = st.multiselect("Agent Filter", sorted_agents)
     
-    # ج. الفلتر الجديد المطلب: تصفية أنواع الطلبات (Request Type Filter)
+    # ج. تصفية أنواع الطلبات (Request Type Filter)
     raw_types = df_raw["Request Type"].dropna().unique()
     sorted_types = sorted(raw_types)
     sel_types = st.multiselect("Request Type Filter", sorted_types)
@@ -233,7 +233,7 @@ r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow
 
 st.write("")
 
-# ── [B] مخطط الـ Sunburst المحدث المرتب فئوياً وزمنياً بشكل متجاور ──────────────
+# ── [B] مخطط الـ Sunburst المحدث والمثبت برمجياً لحل الـ TypeError ──────────────
 if not df_metrics.empty:
     df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
     df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
@@ -251,9 +251,14 @@ if not df_metrics.empty:
     time_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
     category_order = ["Response Time", "Service Resolution"]
     
+    # خطوة أ: فرز وترتيب البيانات داخلياً كـ Categorical أولاً لربط الخلايا جنب بعضها قسرياً
     sunburst_df["SLA Category"] = pd.Categorical(sunburst_df["SLA Category"], categories=category_order, ordered=True)
     sunburst_df["SLA Tier"] = pd.Categorical(sunburst_df["SLA Tier"], categories=time_order, ordered=True)
     sunburst_df = sunburst_df.sort_values(["SLA Category", "SLA Tier"]).reset_index(drop=True)
+    
+    # 🌟 خطوة ب (الحل الجذري): تحويل الأعمدة لسلاسل نصية (String) لمنع تصادم الـ Where الخاص بـ Pandas بداخل Plotly
+    sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
+    sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
     
     fig_sunburst = px.sunburst(
         sunburst_df, 
@@ -271,7 +276,7 @@ if not df_metrics.empty:
     )
     
     fig_sunburst.update_traces(
-        sort=False,  
+        sort=False,  # قفل لوجيك الترتيب بحسب الحجم تماماً
         textinfo="label+percent parent", 
         hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
     )
@@ -292,29 +297,4 @@ st.divider()
 if not df_metrics.empty:
     full_hours = list(range(24))
     hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
-    hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
-    
-    h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
-    hourly_stats["Hour Label"] = h_labels
-    
-    fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
-    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume (Total Tickets)", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
-    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-    
-    fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
-    fig_rush_mobi.update_layout(**THEME, height=450, hovermode="x unified", legend=dict(orientation="h", y=1.1))
-    st.plotly_chart(fig_rush_mobi, use_container_width=True)
-
-# ── [D] الجدول الإحصائي التحليلي السفلي ─────────────────────────────────────────
-st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
-st.write("")
-st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
-if not df_metrics.empty:
-    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
-    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
-    
-    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
-    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
-    
-    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
-    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
+    hourly
