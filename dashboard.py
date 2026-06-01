@@ -87,7 +87,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# قاموس ترجمة أسماء الأيام للعربية بشكل منسق وطبيعي
+# قاموس ترجمة أسماء الأيام للعربية بشكل منسق
 DAYS_ARABIC = {
     "Saturday": "السبت",
     "Sunday": "الأحد",
@@ -187,7 +187,7 @@ with st.sidebar:
     
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     
-    # ✅ إضافة ذكية: التحقق وعرض اليوم المختار بالعربية إذا اختار المستخدم يوماً واحداً
+    # التحقق وعرض اسم اليوم المختار بالعربية إذا اختار المستخدم يوماً واحداً
     if d_from == d_to:
         day_en = pd.to_datetime(d_from).day_name()
         day_ar = DAYS_ARABIC.get(day_en, day_en)
@@ -212,7 +212,6 @@ if sel_types:
     df = df[df["Request Type"].isin(sel_types)]
 
 # ── 5. العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
-# ✅ تعديل مريح آخر لعرض اسم اليوم المختار بداخل عنوان اللوحة الرئيسي أيضاً
 if d_from == d_to:
     day_en = pd.to_datetime(d_from).day_name()
     day_ar = DAYS_ARABIC.get(day_en, day_en)
@@ -321,4 +320,41 @@ st.divider()
 # ── [C] منحنى الـ 24 ساعة المطور بالتسلسل الزمني المتتالي المتقارب ──────────────
 if not df_metrics.empty:
     full_hours = list(range(24))
-    hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_
+    # ✅ تم إصلاح البتر هنا وإضافة الدالة كاملة لإنهاء الـ AttributeError كلياً
+    hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
+    hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
+    
+    h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
+    hourly_stats["Hour Label"] = h_labels
+    
+    fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
+    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume (Total Tickets)", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
+    fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
+    
+    fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
+    
+    fig_rush_mobi.update_layout(
+        **THEME, 
+        height=450, 
+        hovermode="x unified", 
+        legend=dict(orientation="h", y=1.1),
+        hoverlabel=dict(
+            font_size=14,
+            font_family="Inter, sans-serif"
+        )
+    )
+    st.plotly_chart(fig_rush_mobi, use_container_width=True)
+
+# ── [D] الجدول الإحصائي التحليلي السفلي ─────────────────────────────────────────
+st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
+st.write("")
+st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
+if not df_metrics.empty:
+    breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
+    breakdown["Percentage of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
+    
+    breakdown["Average Handling Time (AHT)"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
+    breakdown["Avg Service Time"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
+    
+    display_breakdown = breakdown[["Request Type", "Count", "Percentage of Total", "Average Handling Time (AHT)", "Avg Service Time"]].sort_values("Count", ascending=False)
+    st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
