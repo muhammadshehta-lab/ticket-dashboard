@@ -8,7 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 
-# ── تهيئة إعدادات الصفحة ──────────────────────────────────────────────────────
+# ── 1. تهيئة إعدادات الصفحة التشغيلية ──────────────────────────────────────────
 st.set_page_config(
     page_title="In-Store Requests Dashboard",
     page_icon="💊",
@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── تصميم الواجهة والألوان المتطورة الملونة للكروت (KPI Custom Colors CSS) ─────
+# ── 2. تصميم الواجهة والألوان المتطورة الملونة للكروت (KPI Custom Colors CSS) ─────
 st.markdown("""
 <style>
     .stApp { background: #0d1117; color: #e6edf3; }
@@ -80,6 +80,14 @@ def format_minutes_to_hhmmss(minutes_val):
     seconds = total_seconds % 60
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
+def assign_time_tier(m):
+    if m <= 15: return "Under 15 Mins"
+    if m <= 30: return "15-30 Mins"
+    if m <= 45: return "30-45 Mins"
+    if m <= 60: return "45-60 Mins"
+    return "Over 1 Hour"
+
+# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ──────────────────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -130,6 +138,8 @@ def load_data_from_sheets():
 
         df["Status"] = df["Status"].fillna("Unknown")
         df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
+        df["Request Type"] = df["Request Type"].fillna("Unknown Type")
+        
         date_parsed = pd.to_datetime(df["Request Date"], errors="coerce")
         df["Request Date"] = date_parsed
         df["Date Only"] = date_parsed.dt.date
@@ -147,14 +157,7 @@ def load_data_from_sheets():
         st.error(f"❌ Connection Error: {e}")
         return pd.DataFrame()
 
-def assign_time_tier(m):
-    if m <= 15: return "Under 15 Mins"
-    if m <= 30: return "15-30 Mins"
-    if m <= 45: return "30-45 Mins"
-    if m <= 60: return "45-60 Mins"
-    return "Over 1 Hour"
-
-# ── Sidebar Filters ───────────────────────────────────────────────────────────
+# ── 4. شريط الفلاتر الجانبي (Sidebar Filters) ──────────────────────────────────
 with st.sidebar:
     st.markdown("## 💊 Navigation & Filters")
     st.success("📡 Live Sync Active")
@@ -164,19 +167,32 @@ with st.sidebar:
         st.warning("Waiting for data configuration...")
         st.stop()
     st.divider()
+    
+    # أ. فلتر نطاق التاريخ
     min_d = df_raw["Date Only"].dropna().min()
     max_d = df_raw["Date Only"].dropna().max()
     date_val = (min_d, max_d)
     date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
+    
+    # ب. فلتر الموظفين
     raw_agents = df_raw["Assigned By"].dropna().unique()
     sorted_agents = sorted(raw_agents)
     sel_agents = st.multiselect("Agent Filter", sorted_agents)
+    
+    # ج. الفلتر الجديد المطلب: تصفية أنواع الطلبات (Request Type Filter)
+    raw_types = df_raw["Request Type"].dropna().unique()
+    sorted_types = sorted(raw_types)
+    sel_types = st.multiselect("Request Type Filter", sorted_types)
 
+# تطبيق شروط الفلترة الشاملة للقائمة الجانبية بناءً على الاختيارات
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
+if sel_agents: 
+    df = df[df["Assigned By"].isin(sel_agents)]
+if sel_types: 
+    df = df[df["Request Type"].isin(sel_types)]
 
-# ── العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
+# ── 5. العناوين الرئيسية والفلاتر التفاعلية ───────────────────────────────────────
 st.markdown("## 💊 In-Store Requests")
 st.caption(f"🔍 Search Period: {d_from} to {d_to}")
 
@@ -217,7 +233,7 @@ r1_c6.markdown(kpi_colored("Avg Service (TAT)", h_tat, "card-tat"), unsafe_allow
 
 st.write("")
 
-# ✅ [B] تحديث مخطط الـ Sunburst ليرتب الساعات تصاعدياً متجاوراً بغض النظر عن النسبة
+# ── [B] مخطط الـ Sunburst المحدث المرتب فئوياً وزمنياً بشكل متجاور ──────────────
 if not df_metrics.empty:
     df_metrics["Response Tier"] = df_metrics["Response Take (min)"].apply(assign_time_tier)
     df_metrics["Service Tier"] = df_metrics["Request Take (min)"].apply(assign_time_tier)
@@ -232,9 +248,12 @@ if not df_metrics.empty:
     
     sunburst_df = pd.concat([r_data, s_data], ignore_index=True)
     
-    # تحديد الترتيب الزمني المتتالي المتقارب يدوياً
     time_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
     category_order = ["Response Time", "Service Resolution"]
+    
+    sunburst_df["SLA Category"] = pd.Categorical(sunburst_df["SLA Category"], categories=category_order, ordered=True)
+    sunburst_df["SLA Tier"] = pd.Categorical(sunburst_df["SLA Tier"], categories=time_order, ordered=True)
+    sunburst_df = sunburst_df.sort_values(["SLA Category", "SLA Tier"]).reset_index(drop=True)
     
     fig_sunburst = px.sunburst(
         sunburst_df, 
@@ -251,20 +270,20 @@ if not df_metrics.empty:
         branchvalues="total"
     )
     
-    # 🌟 السحر هنا: إجبار البلوتلي على استخدام مصفوفة الترتيب الزمني وإلغاء الترتيب بحسب الحجم
     fig_sunburst.update_traces(
-        sort=False,  # منع الترتيب التلقائي بناءً على حجم النسبة
+        sort=False,  
         textinfo="label+percent parent", 
         hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
     )
     
-    # ترتيب قائمة الفئات الداخلية والخارجية بالتتابع
     fig_sunburst.update_layout(
         **THEME, 
         height=520,
-        sunburstcolorway=["#2ea44f", "#2188ff", "#bc8cff", "#f9c513", "#ea4a5a"]
+        category_orders={
+            "SLA Category": category_order,
+            "SLA Tier": time_order
+        }
     )
-    
     st.plotly_chart(fig_sunburst, use_container_width=True)
 
 st.divider()
@@ -286,6 +305,7 @@ if not df_metrics.empty:
     fig_rush_mobi.update_layout(**THEME, height=450, hovermode="x unified", legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
+# ── [D] الجدول الإحصائي التحليلي السفلي ─────────────────────────────────────────
 st.info(f"⏱️ **Average Service Resolution Time (TAT) Across Selected Filter:** {h_tat} (HH:MM:SS) Per Ticket")
 st.write("")
 st.markdown("### 📋 Detailed Request Type Breakdown & Handling SLA")
