@@ -52,7 +52,7 @@ THEME = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font_color="#c9d1d9",
-    margin=dict(l=10, r=10, t=40, b=10) # تم زيادة الـ Top Margin لإعطاء مساحة مريحة لأسماء الشارتات
+    margin=dict(l=10, r=10, t=50, b=10) # مساحة علوية مريحة للعنوان الجديد
 )
 
 # ✅ دالة بناء الكروت الملونة النظيفة بدون نصوص سفلية
@@ -284,7 +284,7 @@ if not df_metrics.empty:
     sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
     sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
     
-    # 🌟 تم إضافة اسم التارت هنا: title="SLA Compliance & Time Tiers Breakdown"
+    # تم تمرير الاسم هنا مباشرة بداخل البناء الأساسي للشارت
     fig_sunburst = px.sunburst(
         sunburst_df, 
         path=["SLA Category", "SLA Tier"], 
@@ -307,6 +307,7 @@ if not df_metrics.empty:
         hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
     )
     
+    # ✅ الحل الجذري: تم دمج إعدادات حجم ولون خط العنوان بداخل قاموس الـ title الحديث لتجنب الـ ValueError كلياً
     fig_sunburst.update_layout(
         **THEME, 
         height=520,
@@ -314,7 +315,9 @@ if not df_metrics.empty:
             font_size=14,
             font_family="Inter, sans-serif"
         ),
-        title_font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
+        title=dict(
+            font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
+        )
     )
     st.plotly_chart(fig_sunburst, use_container_width=True)
 
@@ -335,18 +338,20 @@ if not df_metrics.empty:
     
     fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
     
-    # 🌟 تم إضافة اسم التارت هنا: title_text="Hourly Performance: Ticket Volume vs Average Response Time (FRT)"
+    # ✅ تم دمج العنوان والخط بداخل هيكل الـ title الموحد لعدم حدوث أي تضارب
     fig_rush_mobi.update_layout(
         **THEME, 
         height=450, 
         hovermode="x unified", 
         legend=dict(orientation="h", y=1.1),
-        title_text="Hourly Performance: Ticket Volume vs Average Response Time (FRT)",
+        title=dict(
+            text="Hourly Performance: Ticket Volume vs Average Response Time (FRT)",
+            font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
+        ),
         hoverlabel=dict(
             font_size=14,
             font_family="Inter, sans-serif"
-        ),
-        title_font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
+        )
     )
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
