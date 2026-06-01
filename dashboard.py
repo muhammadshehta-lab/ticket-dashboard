@@ -174,7 +174,6 @@ with st.sidebar:
     date_val = (min_d, max_d)
     date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
     
-    # جلب التواريخ المفلترة بشكل صحيح مغلق ومؤمن يمنع الـ SyntaxError تماماً
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     
     # ب. فلتر الموظفين
@@ -253,16 +252,13 @@ if not df_metrics.empty:
     time_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
     category_order = ["Response Time", "Service Resolution"]
     
-    # فرز وترتيب البيانات داخلياً كـ Categorical أولاً لربط الخلايا جنب بعضها قسرياً
     sunburst_df["SLA Category"] = pd.Categorical(sunburst_df["SLA Category"], categories=category_order, ordered=True)
     sunburst_df["SLA Tier"] = pd.Categorical(sunburst_df["SLA Tier"], categories=time_order, ordered=True)
     sunburst_df = sunburst_df.sort_values(["SLA Category", "SLA Tier"]).reset_index(drop=True)
     
-    # تحويل الأعمدة لسلاسل نصية (String) لمنع الـ TypeError وحماية الـ Where
     sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
     sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
     
-    # التمرير النظيف لفرز الـ DataFrame التلقائي مع تحييد الـ ValueError والـ TypeError كلياً
     fig_sunburst = px.sunburst(
         sunburst_df, 
         path=["SLA Category", "SLA Tier"], 
@@ -279,12 +275,20 @@ if not df_metrics.empty:
     )
     
     fig_sunburst.update_traces(
-        sort=False,  # قفل الفرز بحسب الشريحة الأكبر لتظهر متجاورة زمنياً 100% كما هي في الـ DataFrame
+        sort=False,  
         textinfo="label+percent parent", 
         hovertemplate="<b>%{label}</b><br>Tickets: %{value:,}<br>Percentage: %{percentParent:.1%}"
     )
     
-    fig_sunburst.update_layout(**THEME, height=520)
+    # ✅ تم تكبير حجم خط الـ Tooltip للمخطط الدائري هنا ليكون مقروءاً ومريحاً جداً
+    fig_sunburst.update_layout(
+        **THEME, 
+        height=520,
+        hoverlabel=dict(
+            font_size=14,
+            font_family="Inter, sans-serif"
+        )
+    )
     st.plotly_chart(fig_sunburst, use_container_width=True)
 
 st.divider()
@@ -303,7 +307,18 @@ if not df_metrics.empty:
     fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Avg Response Take Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
     
     fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
-    fig_rush_mobi.update_layout(**THEME, height=450, hovermode="x unified", legend=dict(orientation="h", y=1.1))
+    
+    # ✅ تم تكبير حجم خط الـ Tooltip وزيادة مساحته للمنحنى هنا لمنع أي قص في الأرقام
+    fig_rush_mobi.update_layout(
+        **THEME, 
+        height=450, 
+        hovermode="x unified", 
+        legend=dict(orientation="h", y=1.1),
+        hoverlabel=dict(
+            font_size=14,
+            font_family="Inter, sans-serif"
+        )
+    )
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
 # ── [D] الجدول الإحصائي التحليلي السفلي ─────────────────────────────────────────
