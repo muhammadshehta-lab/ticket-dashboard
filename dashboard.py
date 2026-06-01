@@ -102,7 +102,7 @@ def load_data_from_sheets():
             if len(data) > 1:
                 raw_cols = [str(c).strip() for c in data[0]]
                 df_tab = pd.DataFrame(data[1:], columns=raw_cols)
-                mapped = {}
+                mapped_cols = {}
                 assigned_targets = set()
                 
                 for col in df_tab.columns:
@@ -119,10 +119,10 @@ def load_data_from_sheets():
                     elif "email" in c_low or "special" in c_low: target = "Is Special Request(By Email)"
                     
                     if target and target not in assigned_targets:
-                        mapped[col] = target
+                        mapped_cols[col] = target
                         assigned_targets.add(target)
                         
-                df_tab.rename(columns=mapped, inplace=True)
+                df_tab.rename(columns=mapped_cols, inplace=True)
                 all_dfs.append(df_tab)
                 
         if not all_dfs: return pd.DataFrame()
@@ -191,8 +191,10 @@ with st.sidebar:
         
     st.divider()
     
-    agents = sorted(df_raw["Assigned By"].dropna().unique())
-    sel_agents = st.multiselect("Agent Filter", agents)
+    # فلتر الموظفين (استبعاد محمد حربي لأنه مش معانا في الفريق)
+    all_agents = sorted(df_raw["Assigned By"].dropna().unique())
+    agents_for_filter = [a for a in all_agents if a not in ["Mohamed Harby"]]
+    sel_agents = st.multiselect("Agent Filter", agents_for_filter)
     
     req_types = sorted(df_raw["Request Type"].dropna().unique())
     sel_types = st.multiselect("Request Type Filter", req_types)
@@ -201,6 +203,10 @@ df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].cop
 
 if sel_agents: 
     df = df[df["Assigned By"].isin(sel_agents)]
+else:
+    # لو مختارش حد، نستبعد حربي كإعداد افتراضي
+    df = df[df["Assigned By"] != "Mohamed Harby"]
+
 if sel_types: 
     df = df[df["Request Type"].isin(sel_types)]
 
@@ -299,153 +305,4 @@ with tab1:
         fig_sunburst.update_layout(
             **THEME, 
             height=520, 
-            title_text="SLA Compliance & Time Tiers Breakdown", 
-            title_font_size=18, 
-            title_font_family="Inter", 
-            title_font_color="#e6edf3", 
-            hoverlabel_font_size=14
-        )
-        st.plotly_chart(fig_sunburst, use_container_width=True)
-
-    st.divider()
-
-    if not df_metrics.empty:
-        full_hours = list(range(24))
-        hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
-        hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
-        
-        h_labels = [ "12 AM" if h==0 else ("12 PM" if h==12 else (f"{h} AM" if h<12 else f"{h-12} PM")) for h in hourly_stats["Hour"] ]
-        hourly_stats["Hour Label"] = h_labels
-        
-        fig_rush_mobi = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Volume"], name="Volume", fill='tozeroy', line=dict(color="#58a6ff", width=2)), secondary_y=False)
-        fig_rush_mobi.add_trace(go.Scatter(x=hourly_stats["Hour Label"], y=hourly_stats["Avg_Response"], name="FRT (Min)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-        
-        fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
-        
-        fig_rush_mobi.update_layout(
-            **THEME, 
-            height=450, 
-            hovermode="x unified", 
-            legend_orientation="h", 
-            legend_y=1.1, 
-            title_text="Hourly Performance: Volume vs FRT", 
-            title_font_size=18, 
-            title_font_family="Inter", 
-            title_font_color="#e6edf3", 
-            hoverlabel_font_size=14
-        )
-        st.plotly_chart(fig_rush_mobi, use_container_width=True)
-
-    st.info(f"⏱️ **Average TAT:** {h_tat}")
-    
-    if not df_metrics.empty:
-        breakdown = df_metrics.groupby("Request Type").agg(Count=("Request ID", "count"), Avg_Service=("Request Take (min)", "mean"), Avg_AHT=("AHT (min)", "mean")).reset_index()
-        breakdown["% of Total"] = (breakdown["Count"] / total_tickets * 100).round(1).astype(str) + "%"
-        breakdown["Avg AHT"] = breakdown["Avg_AHT"].apply(format_minutes_to_hhmmss)
-        breakdown["Avg Service"] = breakdown["Avg_Service"].apply(format_minutes_to_hhmmss)
-        display_breakdown = breakdown[["Request Type", "Count", "% of Total", "Avg AHT", "Avg Service"]].sort_values("Count", ascending=False)
-        st.dataframe(display_breakdown, hide_index=True, use_container_width=True)
-
-
-# =============================================================================
-# ── TAB 2: TEAM PERFORMANCE & KPIs ───────────────────────────────────────────
-# =============================================================================
-with tab2:
-    st.markdown("### 👥 Team Productivity & KPI Tracker")
-    st.caption("احسب أيام العمل الفعلية وأدخل بيانات الجودة يدوياً لإرسال التقييمات.")
-    
-    if not df.empty:
-        daily_work = df.groupby(["Assigned By", "Date Only"]).size().reset_index(name="Case Count")
-        working_days = daily_work[daily_work["Case Count"] > 20].groupby("Assigned By").size().reset_index(name="Days Count")
-        
-        perf_stats = df.groupby("Assigned By").agg(
-            Total_Req=("Request ID", "count"),
-            Avg_Response=("Response Take (min)", "mean"),
-            Avg_Handling=("First Action Take (min)", "mean"),
-            Avg_Service=("Request Take (min)", "mean")
-        ).reset_index()
-        
-        final_perf = pd.merge(perf_stats, working_days, on="Assigned By", how="left").fillna(0)
-        final_perf["Days Count"] = final_perf["Days Count"].astype(int)
-        
-        if 'manual_data' not in st.session_state or len(st.session_state.manual_data) != len(final_perf):
-            st.session_state.manual_data = pd.DataFrame({
-                "Assigned By": final_perf["Assigned By"],
-                "Escalated Cases": [0] * len(final_perf),
-                "JHAH Requests": [0] * len(final_perf),
-                "Feedback": [0] * len(final_perf),
-                "Quality %": [100] * len(final_perf),
-                "Bonus": [0] * len(final_perf)
-            })
-
-        st.markdown("##### 📝 Editable KPI Data")
-        edited_df = st.data_editor(
-            st.session_state.manual_data, 
-            use_container_width=True, 
-            hide_index=True, 
-            disabled=["Assigned By"]
-        )
-        st.session_state.manual_data = edited_df
-        
-        display_df = pd.merge(final_perf, edited_df, on="Assigned By")
-        display_df["Avg Response"] = display_df["Avg_Response"].apply(format_minutes_to_hhmmss)
-        display_df["Avg Handling"] = display_df["Avg_Handling"].apply(format_minutes_to_hhmmss)
-        display_df["Avg Service"] = display_df["Avg_Service"].apply(format_minutes_to_hhmmss)
-        
-        final_display_cols = [
-            "Assigned By", "Days Count", "Total_Req", "Avg Response", 
-            "Avg Handling", "Avg Service", "Escalated Cases", 
-            "JHAH Requests", "Feedback", "Quality %", "Bonus"
-        ]
-        
-        display_df = display_df[final_display_cols]
-        display_df.rename(columns={"Days Count": "Working Days (>20)", "Total_Req": "Total Requests"}, inplace=True)
-        
-        st.divider()
-        st.markdown("##### 📧 Forward Draft Emails")
-        
-        def get_email_link(row):
-            subject = urllib.parse.quote(f"Performance & KPI Update - {row['Assigned By']}")
-            body = urllib.parse.quote(f"""Dear {row['Assigned By']},
-
-Below is your performance summary for the selected period:
-
-[ Quantitative Metrics ]
-- Working Days (>20 cases): {row['Working Days (>20)']}
-- Total Requests Handled: {row['Total Requests']}
-- Average Response Time (FRT): {row['Avg Response']}
-- Average Handling Time (AHT): {row['Avg Handling']}
-- Average Service Time (TAT): {row['Avg Service']}
-
-[ Qualitative Metrics ]
-- Escalated Cases: {row['Escalated Cases']}
-- JHAH Requests: {row['JHAH Requests']}
-- Positive Feedback Score: {row['Feedback']}
-- Quality Assurance Score: {row['Quality %']}%
-- Total Bonus Points Achieved: {row['Bonus']}
-
-Keep up the great work!
-Best Regards,
-Operations Management""")
-            return f"mailto:?subject={subject}&body={body}"
-
-        cols = st.columns(3)
-        for i, (_, row) in enumerate(display_df.iterrows()):
-            with cols[i % 3]:
-                st.markdown(f"""
-                <div style="background:#111a2e; padding:15px; border-radius:10px; border:1px solid #58a6ff; margin-bottom:15px;">
-                    <h4 style="margin:0; color:#c9d1d9;">{row['Assigned By']}</h4>
-                    <p style="font-size:13px; color:#8b949e; margin:5px 0;">
-                        Requests: <b>{row['Total Requests']}</b> | Days: <b>{row['Working Days (>20)']}</b>
-                    </p>
-                    <a href="{get_email_link(row)}" style="text-decoration:none;">
-                        <button style="width:100%; background:#1e3a8a; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer; font-weight:bold;">
-                            📧 Draft Email
-                        </button>
-                    </a>
-                </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.warning("No data available.")
+            title_text="SLA
