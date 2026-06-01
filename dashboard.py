@@ -102,4 +102,10 @@ def load_data():
         for ws in spreadsheet.worksheets():
             data = ws.get_all_values()
             if len(data) > 1:
-                df_tab = pd.DataFrame(data
+                df_tab = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                mapped = {}
+                for col in df_tab.columns:
+                    c_low = col.lower()
+                    if "id" in c_low and "req" in c_low: mapped[col] = "Request ID"
+                    elif "date" in c_low: mapped[col] = "Request Date"
+                    elif "type" in c_low: mapped[col] = "Request Type
