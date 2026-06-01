@@ -52,7 +52,7 @@ THEME = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font_color="#c9d1d9",
-    margin=dict(l=10, r=10, t=20, b=10)
+    margin=dict(l=10, r=10, t=40, b=10) # تم زيادة الـ Top Margin لإعطاء مساحة مريحة لأسماء الشارتات
 )
 
 # ✅ دالة بناء الكروت الملونة النظيفة بدون نصوص سفلية
@@ -87,7 +87,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# قاموس ترجمة أسماء الأيام للعربية بشكل منسق
+# قاموس ترجمة أسماء الأيام للعربية
 DAYS_ARABIC = {
     "Saturday": "السبت",
     "Sunday": "الأحد",
@@ -187,7 +187,7 @@ with st.sidebar:
     
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     
-    # التحقق وعرض اسم اليوم المختار بالعربية إذا اختار المستخدم يوماً واحداً
+    # عرض اسم اليوم المختار بالعربية إذا اختار المستخدم يوماً واحداً
     if d_from == d_to:
         day_en = pd.to_datetime(d_from).day_name()
         day_ar = DAYS_ARABIC.get(day_en, day_en)
@@ -284,6 +284,7 @@ if not df_metrics.empty:
     sunburst_df["SLA Category"] = sunburst_df["SLA Category"].astype(str)
     sunburst_df["SLA Tier"] = sunburst_df["SLA Tier"].astype(str)
     
+    # 🌟 تم إضافة اسم التارت هنا: title="SLA Compliance & Time Tiers Breakdown"
     fig_sunburst = px.sunburst(
         sunburst_df, 
         path=["SLA Category", "SLA Tier"], 
@@ -296,7 +297,8 @@ if not df_metrics.empty:
             "45-60 Mins": "#f9c513", 
             "Over 1 Hour": "#ea4a5a"
         }, 
-        branchvalues="total"
+        branchvalues="total",
+        title="SLA Compliance & Time Tiers Breakdown"
     )
     
     fig_sunburst.update_traces(
@@ -311,7 +313,8 @@ if not df_metrics.empty:
         hoverlabel=dict(
             font_size=14,
             font_family="Inter, sans-serif"
-        )
+        ),
+        title_font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
     )
     st.plotly_chart(fig_sunburst, use_container_width=True)
 
@@ -320,7 +323,6 @@ st.divider()
 # ── [C] منحنى الـ 24 ساعة المطور بالتسلسل الزمني المتتالي المتقارب ──────────────
 if not df_metrics.empty:
     full_hours = list(range(24))
-    # ✅ تم إصلاح البتر هنا وإضافة الدالة كاملة لإنهاء الـ AttributeError كلياً
     hourly_stats = df_metrics.groupby("Hour").agg(Volume=("Request ID", "count"), Avg_Response=("Response Take (min)", "mean")).reset_index()
     hourly_stats = hourly_stats.set_index("Hour").reindex(full_hours).fillna(0).reset_index()
     
@@ -333,15 +335,18 @@ if not df_metrics.empty:
     
     fig_rush_mobi.update_xaxes(type='category', categoryorder='array', categoryarray=h_labels)
     
+    # 🌟 تم إضافة اسم التارت هنا: title_text="Hourly Performance: Ticket Volume vs Average Response Time (FRT)"
     fig_rush_mobi.update_layout(
         **THEME, 
         height=450, 
         hovermode="x unified", 
         legend=dict(orientation="h", y=1.1),
+        title_text="Hourly Performance: Ticket Volume vs Average Response Time (FRT)",
         hoverlabel=dict(
             font_size=14,
             font_family="Inter, sans-serif"
-        )
+        ),
+        title_font=dict(size=18, font_family="Inter, sans-serif", color="#e6edf3")
     )
     st.plotly_chart(fig_rush_mobi, use_container_width=True)
 
