@@ -87,7 +87,7 @@ def assign_time_tier(m):
     if m <= 60: return "45-60 Mins"
     return "Over 1 Hour"
 
-# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل تكتل آمن ومستقر ─────────────
+# ── 3. سحب ومعالجة البيانات من Google Sheets بداخل كتل نظيفة ومؤمنة 100% ───────
 @st.cache_data(ttl=600, show_spinner="Fetching live data from Google Sheets...")
 def load_data_from_sheets():
     try:
@@ -118,4 +118,72 @@ def load_data_from_sheets():
                     elif "type" in c_low: target = "Request Type"
                     elif "status" in c_low: target = "Status"
                     elif "assigned" in c_low or "agent" in c_low: target = "Assigned By"
-                    elif "response" in c_low and "
+                    elif "response" in c_low and "take" in c_low: target = "Response Take"
+                    elif "action" in c_low and "take" in c_low: target = "First Action Take"
+                    elif "request" in c_low and "take" in c_low: target = "Request Take"
+                    elif "email" in c_low or "special" in c_low: target = "Is Special Request(By Email)"
+                    
+                    if target and target not in assigned_targets:
+                        mapped_cols[col] = target
+                        assigned_targets.add(target)
+                df_tab.rename(columns=mapped_cols, inplace=True)
+                all_dfs.append(df_tab)
+
+        if not all_dfs: return pd.DataFrame()
+        df = pd.concat(all_dfs, ignore_index=True, sort=False)
+        df.replace("", np.nan, inplace=True)
+        req_cols = ["Request ID", "Request Date", "Request Type", "Status", "Request Take", "Response Take", "First Action Take", "Assigned By", "Is Special Request(By Email)"]
+        for col in req_cols:
+            if col not in df.columns: df[col] = np.nan
+
+        df["Status"] = df["Status"].fillna("Unknown")
+        df["Assigned By"] = df["Assigned By"].fillna("Unassigned")
+        df["Request Type"] = df["Request Type"].fillna("Unknown Type")
+        
+        date_parsed = pd.to_datetime(df["Request Date"], errors="coerce")
+        df["Request Date"] = date_parsed
+        df["Date Only"] = date_parsed.dt.date
+        df["Hour"] = date_parsed.dt.hour.fillna(0).astype(int)
+        df["Day Name"] = date_parsed.dt.day_name().fillna("Unknown")
+        df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
+        df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
+        df["First Action Take (min)"] = df["First Action Take"].apply(time_to_minutes).fillna(0)
+        
+        df["AHT (min)"] = df["First Action Take (min)"]
+        mail_col = df["Is Special Request(By Email)"].astype(str).str.strip().str.lower()
+        df["Is Email"] = (mail_col == "yes")
+        return df
+    except Exception as e:
+        st.error(f"❌ Connection Error: {e}")
+        return pd.DataFrame()
+
+# ── 4. شريط الفلاتر الجانبي (Sidebar Filters) ──────────────────────────────────
+with st.sidebar:
+    st.markdown("## ## 💊 Navigation & Filters")
+    st.success("📡 Live Sync Active")
+    if st.button("🔄 Refresh Data Now", use_container_width=True): load_data_from_sheets.clear()
+    df_raw = load_data_from_sheets()
+    if df_raw.empty:
+        st.warning("Waiting for data configuration...")
+        st.stop()
+    st.divider()
+    
+    # أ. فلتر نطاق التاريخ
+    min_d = df_raw["Date Only"].dropna().min()
+    max_d = df_raw["Date Only"].dropna().max()
+    date_val = (min_d, max_d)
+    date_range = st.date_input("Date Range", value=date_val, min_value=min_d, max_value=max_d)
+    d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
+    
+    # ب. فلتر الموظفين
+    raw_agents = df_raw["Assigned By"].dropna().unique()
+    sorted_agents = sorted(raw_agents)
+    sel_agents = st.multiselect("Agent Filter", sorted_agents)
+    
+    # ج. تصفية أنواع الطلبات (Request Type Filter)
+    raw_types = df_raw["Request Type"].dropna().unique()
+    sorted_types = sorted(raw_types)
+    sel_types = st.multiselect("Request Type Filter", sorted_types)
+
+# تطبيق شروط الفلترة الشاملة للقائمة الجانبية بناءً على الاختيارات
+df = df_raw[(df_raw["Date Only"] >= d_from)
