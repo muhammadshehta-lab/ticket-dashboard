@@ -688,101 +688,202 @@ with tab2:
     st.write(""); st.divider()
     st.markdown("### 📊 Expert Performance Scorecard")
 
-    EXCL=["mohammed shehta"]
-    df_t2=df_t2[~df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(EXCL)].copy()
+    # Exclude team leader AND unassigned AND muhammad shehta (variant spellings)
+    EXCL = ["mohammed shehta", "muhammad shehta", "muhammed shehta", "unassigned"]
+    df_t2 = df_t2[~df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(EXCL)].copy()
 
     if df_t2.empty:
         st.warning("No data available.")
     else:
-        rtl=df_t2["Request Type"].astype(str).str.lower()
-        df_t2["_jhah"] =rtl.str.contains("jhah",na=False)
-        df_t2["_rfb"]  =rtl.str.contains("report|feedback",na=False)
-        df_t2["_c_ok"] =(df_t2["Status"].astype(str).str.contains("Closed",case=False,na=False)&
-                         ~df_t2["Status"].astype(str).str.contains("issue",case=False,na=False))
-        df_t2["_c_all"]=df_t2["Status"].astype(str).str.contains("Closed",case=False,na=False)
+        rtl = df_t2["Request Type"].astype(str).str.lower()
+        df_t2["_jhah"]  = rtl.str.contains("jhah", na=False)
+        df_t2["_rfb"]   = rtl.str.contains("report|feedback", na=False)
+        df_t2["_c_ok"]  = (df_t2["Status"].astype(str).str.contains("Closed", case=False, na=False) &
+                           ~df_t2["Status"].astype(str).str.contains("issue",  case=False, na=False))
+        df_t2["_c_all"] = df_t2["Status"].astype(str).str.contains("Closed", case=False, na=False)
 
-        dc=(df_t2.groupby(["Assigned By","Date Only"])["Request ID"]
-            .count().reset_index(name="_n"))
-        active_days=(dc[dc["_n"]>15].groupby("Assigned By")["Date Only"]
-                     .nunique().rename("Working Days"))
+        dc = (df_t2.groupby(["Assigned By","Date Only"])["Request ID"]
+              .count().reset_index(name="_n"))
+        active_days = (dc[dc["_n"] > 15].groupby("Assigned By")["Date Only"]
+                       .nunique().rename("Working Days"))
 
-        grp=df_t2.groupby("Assigned By")
-        sc=pd.DataFrame(index=grp.groups.keys())
-        sc.index.name="Assigned By"
-        sc["Working Days"]        =active_days.reindex(sc.index).fillna(0).astype(int)
-        sc["Tickets Count"]       =grp["Request ID"].count()
-        sc["JHAH Requests"]       =grp["_jhah"].sum().astype(int)
-        sc["Reporting & Feedback"]=grp["_rfb"].sum().astype(int)
-        sc["Email Counts"]        =grp["Is Email"].sum().astype(int)
-        tavg=sc["Tickets Count"].mean()
-        sc["% Achievement from Target"]=(
-            (sc["Tickets Count"]/tavg*100).round(1).astype(str)+"%"
-            if tavg>0 else "0.0%")
-        avg_svc=grp["Request Take (min)"].mean()
-        sc["Service Time"]=avg_svc.apply(fmt_m)
-        ca=grp["_c_all"].sum(); co=grp["_c_ok"].sum()
-        sq=(co/ca.replace(0,np.nan)*100).round(1)
-        sc["Service Quality"]=sq.fillna(0).astype(str)+"%"
-        sc=sc.reset_index().rename(columns={"Assigned By":"Expert"})
+        grp = df_t2.groupby("Assigned By")
+        sc  = pd.DataFrame(index=grp.groups.keys())
+        sc.index.name = "Assigned By"
+        sc["Working Days"]         = active_days.reindex(sc.index).fillna(0).astype(int)
+        sc["Tickets Count"]        = grp["Request ID"].count()
+        sc["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
+        sc["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
+        sc["Email Counts"]         = grp["Is Email"].sum().astype(int)
+        tavg = sc["Tickets Count"].mean()
+        sc["% Achievement from Target"] = (
+            (sc["Tickets Count"] / tavg * 100).round(1).astype(str) + "%"
+            if tavg > 0 else "0.0%")
+        avg_svc = grp["Request Take (min)"].mean()
+        sc["Service Time"] = avg_svc.apply(fmt_m)
+        ca = grp["_c_all"].sum(); co = grp["_c_ok"].sum()
+        sq = (co / ca.replace(0, np.nan) * 100).round(1)
+        sc["Service Quality"] = sq.fillna(0).astype(str) + "%"
+        sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
 
         # Apply saved overrides
-        for i,row in sc.iterrows():
-            ov=overrides().get(row["Expert"],{})
-            for col,val in ov.items():
-                sc.at[i,col]=val
+        for i, row in sc.iterrows():
+            ov = overrides().get(row["Expert"], {})
+            for col, val in ov.items():
+                sc.at[i, col] = val
 
         def _pct_avg(s):
             return f"{s.astype(str).str.rstrip('%').astype(float).mean():.1f}%"
 
-        tl_ov=overrides().get("__TL__",{})
-        tl_row={
-            "Expert":"👑 Mohammed Shehta (TL)",
-            "Working Days":        tl_ov.get("Working Days",0),
-            "Tickets Count":       tl_ov.get("Tickets Count",0),
-            "JHAH Requests":       tl_ov.get("JHAH Requests",0),
-            "Reporting & Feedback":tl_ov.get("Reporting & Feedback",0),
-            "Email Counts":        tl_ov.get("Email Counts",0),
-            "% Achievement from Target":tl_ov.get("% Achievement from Target","0.0%"),
-            "Service Time":        tl_ov.get("Service Time","00:00:00"),
-            "Service Quality":     tl_ov.get("Service Quality","0.0%"),
+        tl_ov = overrides().get("__TL__", {})
+        tl_row = {
+            "Expert":                    "👑 Mohammed Shehta (TL)",
+            "Working Days":              tl_ov.get("Working Days", 0),
+            "Tickets Count":             tl_ov.get("Tickets Count", 0),
+            "JHAH Requests":             tl_ov.get("JHAH Requests", 0),
+            "Reporting & Feedback":      tl_ov.get("Reporting & Feedback", 0),
+            "Email Counts":              tl_ov.get("Email Counts", 0),
+            "% Achievement from Target": tl_ov.get("% Achievement from Target", "0.0%"),
+            "Service Time":              tl_ov.get("Service Time", "00:00:00"),
+            "Service Quality":           tl_ov.get("Service Quality", "0.0%"),
         }
-        team_row={
-            "Expert":"🏆 Team AVG",
-            "Working Days":        round(sc["Working Days"].astype(float).mean(),1),
-            "Tickets Count":       round(sc["Tickets Count"].astype(float).mean(),1),
-            "JHAH Requests":       round(sc["JHAH Requests"].astype(float).mean(),1),
-            "Reporting & Feedback":round(sc["Reporting & Feedback"].astype(float).mean(),1),
-            "Email Counts":        round(sc["Email Counts"].astype(float).mean(),1),
-            "% Achievement from Target":"100.0%",
-            "Service Time":        fmt_m(avg_svc.mean()),
-            "Service Quality":     _pct_avg(sc["Service Quality"]),
+        team_row = {
+            "Expert":                    "🏆 Team AVG",
+            "Working Days":              round(sc["Working Days"].astype(float).mean(), 1),
+            "Tickets Count":             round(sc["Tickets Count"].astype(float).mean(), 1),
+            "JHAH Requests":             round(sc["JHAH Requests"].astype(float).mean(), 1),
+            "Reporting & Feedback":      round(sc["Reporting & Feedback"].astype(float).mean(), 1),
+            "Email Counts":              round(sc["Email Counts"].astype(float).mean(), 1),
+            "% Achievement from Target": "100.0%",
+            "Service Time":              fmt_m(avg_svc.mean()),
+            "Service Quality":           _pct_avg(sc["Service Quality"]),
         }
 
-        sc_final=pd.concat(
-            [pd.DataFrame([team_row]),sc,pd.DataFrame([tl_row])],
+        sc_final = pd.concat(
+            [pd.DataFrame([team_row]), sc, pd.DataFrame([tl_row])],
             ignore_index=True
         )
 
-        col_cfg={
-            "Expert":                    st.column_config.TextColumn("Expert"),
-            "Working Days":              st.column_config.NumberColumn("Working Days",         format="%g"),
-            "Tickets Count":             st.column_config.NumberColumn("Tickets Count",        format="%g"),
-            "JHAH Requests":             st.column_config.NumberColumn("JHAH Requests",        format="%g"),
-            "Reporting & Feedback":      st.column_config.NumberColumn("Reporting & Feedback", format="%g"),
-            "Email Counts":              st.column_config.NumberColumn("Email Counts",          format="%g"),
-            "% Achievement from Target": st.column_config.TextColumn("% Achievement"),
-            "Service Time":              st.column_config.TextColumn("Service Time (HH:MM:SS)"),
-            "Service Quality":           st.column_config.TextColumn("Service Quality"),
-        }
+        # ── Identify top performers (top 3 by Tickets Count among real agents) ────
+        agent_only = sc.copy()
+        agent_only["_tc_num"] = pd.to_numeric(agent_only["Tickets Count"], errors="coerce")
+        agent_only["_sq_num"] = agent_only["Service Quality"].astype(str).str.rstrip("%").apply(
+            pd.to_numeric, errors="coerce")
+        top3_tc = set(agent_only.nlargest(3, "_tc_num")["Expert"].tolist())
+        top_sq  = set(agent_only.nlargest(1, "_sq_num")["Expert"].tolist())
+        top_performers = top3_tc | top_sq
 
-        # ── VIEWER: read-only scorecard ───────────────────────────────────────────
+        # ── Build styled HTML table ───────────────────────────────────────────────
+        COLS = ["Expert", "Working Days", "Tickets Count", "JHAH Requests",
+                "Reporting & Feedback", "Email Counts",
+                "% Achievement from Target", "Service Time (HH:MM:SS)", "Service Quality"]
+
+        def _row_style(expert: str) -> tuple[str, str]:
+            """Return (row background css, badge html) for a given expert label."""
+            if expert == "🏆 Team AVG":
+                return "background:#1a2744;border-left:4px solid #58a6ff;", ""
+            if expert == "👑 Mohammed Shehta (TL)":
+                return "background:#1a2233;border-left:4px solid #bc8cff;", ""
+            clean = expert.lstrip("🥇🥈🥉⭐ ")
+            if clean in top_performers:
+                ach_num = float(
+                    str(sc.loc[sc["Expert"] == expert, "% Achievement from Target"].values[0])
+                    .rstrip("%") or 0)
+                sq_num  = float(
+                    str(sc.loc[sc["Expert"] == expert, "Service Quality"].values[0])
+                    .rstrip("%") or 0)
+                badge_parts = []
+                if expert in [sc.loc[sc["Expert"].isin(top3_tc)]["Expert"].iloc[i]
+                               if len(sc.loc[sc["Expert"].isin(top3_tc)]) > i else None
+                               for i in range(3)]:
+                    rank = agent_only.sort_values("_tc_num", ascending=False)["Expert"].tolist().index(expert)
+                    medal = ["🥇", "🥈", "🥉"][rank] if rank < 3 else "⭐"
+                    badge_parts.append(f"<span style='font-size:.75rem'>{medal} Top Volume</span>")
+                if expert in top_sq:
+                    badge_parts.append("<span style='font-size:.75rem'>⭐ Best Quality</span>")
+                badge_html = " ".join(badge_parts)
+                return "background:#0d2218;border-left:4px solid #3fb950;", badge_html
+            # default alternating
+            return "", ""
+
+        header_cells = "".join(
+            f"<th style='padding:10px 14px;text-align:left;font-size:.75rem;"
+            f"letter-spacing:.08em;text-transform:uppercase;color:#8b949e;"
+            f"border-bottom:1px solid #30363d;white-space:nowrap'>{c}</th>"
+            for c in COLS)
+
+        rows_html = ""
+        for _, row in sc_final.iterrows():
+            expert_raw = str(row["Expert"])
+            row_bg, badge = _row_style(expert_raw)
+
+            # achievement color
+            ach_str = str(row.get("% Achievement from Target", "0%"))
+            try:
+                ach_num = float(ach_str.rstrip("%"))
+            except: ach_num = 0
+            if ach_num >= 120:   ach_color = "#3fb950"
+            elif ach_num >= 100: ach_color = "#58a6ff"
+            elif ach_num >= 80:  ach_color = "#d29922"
+            else:                ach_color = "#f85149"
+
+            # quality color
+            sq_str = str(row.get("Service Quality", "0%"))
+            try:
+                sq_num = float(sq_str.rstrip("%"))
+            except: sq_num = 0
+            if sq_num >= 90:   sq_color = "#3fb950"
+            elif sq_num >= 75: sq_color = "#58a6ff"
+            elif sq_num >= 60: sq_color = "#d29922"
+            else:              sq_color  = "#f85149"
+
+            expert_display = (
+                f"{expert_raw}"
+                + (f" <span style='background:#0d2218;border:1px solid #3fb950;color:#3fb950;"
+                   f"border-radius:5px;padding:1px 7px;margin-left:6px;font-size:.7rem'>{badge}</span>"
+                   if badge else "")
+            )
+
+            def cell(val, color=None, bold=False):
+                style = f"padding:9px 14px;border-bottom:1px solid #21262d;font-size:.85rem;color:{'#e6edf3' if not color else color};{'font-weight:700;' if bold else ''}"
+                return f"<td style='{style}'>{val}</td>"
+
+            rows_html += (
+                f"<tr style='{row_bg}'>"
+                + f"<td style='padding:9px 14px;border-bottom:1px solid #21262d;font-size:.85rem;color:#e6edf3;font-weight:{'700' if expert_raw in ('🏆 Team AVG','👑 Mohammed Shehta (TL)') else '400'}'>{expert_display}</td>"
+                + cell(row.get("Working Days","—"))
+                + cell(f"{int(float(str(row.get('Tickets Count',0)).replace(',',''))) if str(row.get('Tickets Count',0)).replace('.','').replace(',','').isdigit() else row.get('Tickets Count','—'):,}" if str(row.get("Tickets Count",0)).replace(".","").replace(",","").isdigit() else row.get("Tickets Count","—"))
+                + cell(row.get("JHAH Requests","—"))
+                + cell(row.get("Reporting & Feedback","—"))
+                + cell(row.get("Email Counts","—"))
+                + cell(ach_str, color=ach_color, bold=True)
+                + cell(row.get("Service Time","00:00:00"))
+                + cell(sq_str, color=sq_color, bold=True)
+                + "</tr>"
+            )
+
+        table_html = f"""
+        <div style='overflow-x:auto;border-radius:12px;border:1px solid #30363d;'>
+        <table style='width:100%;border-collapse:collapse;background:#0d1117;font-family:Inter,sans-serif;'>
+            <thead><tr style='background:#161b22'>{header_cells}</tr></thead>
+            <tbody>{rows_html}</tbody>
+        </table></div>
+        <div style='margin-top:10px;font-size:.75rem;color:#8b949e'>
+            🥇🥈🥉 Top 3 by volume &nbsp;|&nbsp; ⭐ Best service quality &nbsp;|&nbsp;
+            <span style='color:#3fb950'>■</span> ≥120% achievement &nbsp;
+            <span style='color:#58a6ff'>■</span> ≥100% &nbsp;
+            <span style='color:#d29922'>■</span> ≥80% &nbsp;
+            <span style='color:#f85149'>■</span> &lt;80%
+        </div>"""
+
+        # ── VIEWER: styled table only ─────────────────────────────────────────────
         if not is_admin():
-            st.dataframe(sc_final,hide_index=True,use_container_width=True,column_config=col_cfg)
+            st.markdown(table_html, unsafe_allow_html=True)
 
-        # ── ADMIN: scorecard + per-agent editor ───────────────────────────────────
+        # ── ADMIN: styled table + per-agent editor ────────────────────────────────
         else:
             st.info("✏️ **Admin Mode** — Scorecard is live below. Use the editor to override any agent's KPI values.")
-            st.dataframe(sc_final,hide_index=True,use_container_width=True,column_config=col_cfg)
+            st.markdown(table_html, unsafe_allow_html=True)
 
             st.divider()
             st.markdown("#### ✏️ Manual KPI Override — Per Agent Editor")
