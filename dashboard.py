@@ -493,11 +493,16 @@ with tab2:
     if df_t2.empty:
         st.warning("No data available for the selected filters.")
     else:
+        # ── Exclude team leader from scorecard ───────────────────────────────
+        EXCLUDED_AGENTS = ["mohammed shehta"]   # lowercase for case-insensitive match
+        df_t2 = df_t2[
+            ~df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(EXCLUDED_AGENTS)
+        ].copy()
+
         # ── Helper columns ───────────────────────────────────────────────────
         rt_lower = df_t2["Request Type"].astype(str).str.lower()
 
-        df_t2 = df_t2.copy()
-        df_t2["_is_jhah"]       = rt_lower.str.contains("jhah",     na=False)
+        df_t2["_is_jhah"]       = rt_lower.str.contains("jhah",            na=False)
         df_t2["_is_rep_or_fb"]  = rt_lower.str.contains("report|feedback", na=False)
         df_t2["_is_closed_ok"]  = (
             df_t2["Status"].astype(str).str.contains("Closed", case=False, na=False) &
@@ -505,14 +510,27 @@ with tab2:
         )
         df_t2["_is_closed_all"] = df_t2["Status"].astype(str).str.contains("Closed", case=False, na=False)
 
+        # ── Working Days: only days where agent handled > 15 tickets ─────────
+        daily_counts = (
+            df_t2.groupby(["Assigned By", "Date Only"])["Request ID"]
+            .count()
+            .reset_index(name="_daily_count")
+        )
+        active_days = (
+            daily_counts[daily_counts["_daily_count"] > 15]
+            .groupby("Assigned By")["Date Only"]
+            .nunique()
+            .rename("Working Days")
+        )
+
         # ── Per-expert aggregation ───────────────────────────────────────────
         grp = df_t2.groupby("Assigned By")
 
-        scorecard = pd.DataFrame()
-        scorecard["Expert"]               = grp["Date Only"].apply(lambda x: x.nunique()).index
-        scorecard = scorecard.set_index("Expert")
+        scorecard = pd.DataFrame(index=grp.groups.keys())
+        scorecard.index.name = "Assigned By"
 
-        scorecard["Working Days"]         = grp["Date Only"].nunique()
+        scorecard["Working Days"]         = active_days                          # days with >15 tickets
+        scorecard["Working Days"]         = scorecard["Working Days"].fillna(0).astype(int)
         scorecard["Tickets Count"]        = grp["Request ID"].count()
         scorecard["JHAH Requests"]        = grp["_is_jhah"].sum().astype(int)
         scorecard["Reporting & Feedback"] = grp["_is_rep_or_fb"].sum().astype(int)
@@ -532,8 +550,8 @@ with tab2:
         scorecard["Service Time"] = avg_service_min.apply(fmt_m)
 
         # ── Service Quality (% closed tickets with no issue) ─────────────────
-        closed_all_cnt = grp["_is_closed_all"].sum()
-        closed_ok_cnt  = grp["_is_closed_ok"].sum()
+        closed_all_cnt  = grp["_is_closed_all"].sum()
+        closed_ok_cnt   = grp["_is_closed_ok"].sum()
         service_quality = (closed_ok_cnt / closed_all_cnt.replace(0, np.nan) * 100).round(1)
         scorecard["Service Quality"] = service_quality.fillna(0).astype(str) + "%"
 
@@ -541,7 +559,6 @@ with tab2:
 
         # ── Team AVG baseline row (injected as first row) ─────────────────────
         def _avg_pct_str(series):
-            """Average of numeric values that were stored as 'XX.X%' strings."""
             nums = series.str.rstrip("%").astype(float)
             return f"{nums.mean():.1f}%"
 
@@ -552,7 +569,7 @@ with tab2:
             "JHAH Requests":             round(scorecard["JHAH Requests"].mean(), 1),
             "Reporting & Feedback":      round(scorecard["Reporting & Feedback"].mean(), 1),
             "Email Counts":              round(scorecard["Email Counts"].mean(), 1),
-            "% Achievement from Target": "100.0%",   # baseline is always 100 %
+            "% Achievement from Target": "100.0%",
             "Service Time":              fmt_m(avg_service_min.mean()),
             "Service Quality":           _avg_pct_str(scorecard["Service Quality"]),
         }
@@ -579,3 +596,37 @@ with tab2:
                 "Service Quality":           st.column_config.TextColumn("Service Quality"),
             }
         )
+
+        # ── Manual Data Entry — Mohammed Shehta (Team Leader) ────────────────
+        st.divider()
+        st.markdown("### ✏️ Team Leader Manual Entry — Mohammed Shehta")
+        st.caption("This section is not linked to the data source. Enter the team leader's figures manually.")
+
+        ml_c1, ml_c2, ml_c3, ml_c4 = st.columns(4)
+        with ml_c1:
+            ml_working_days  = st.number_input("Working Days",         min_value=0, value=0, step=1,   key="ml_wd")
+            ml_tickets       = st.number_input("Tickets Count",        min_value=0, value=0, step=1,   key="ml_tc")
+        with ml_c2:
+            ml_jhah          = st.number_input("JHAH Requests",        min_value=0, value=0, step=1,   key="ml_jhah")
+            ml_rep_fb        = st.number_input("Reporting & Feedback", min_value=0, value=0, step=1,   key="ml_rfb")
+        with ml_c3:
+            ml_email         = st.number_input("Email Counts",         min_value=0, value=0, step=1,   key="ml_email")
+            ml_achievement   = st.text_input("% Achievement from Target", value="0.0%",                key="ml_ach")
+        with ml_c4:
+            ml_service_time  = st.text_input("Service Time (HH:MM:SS)", value="00:00:00",              key="ml_st")
+            ml_quality       = st.text_input("Service Quality (%)",      value="0.0%",                 key="ml_sq")
+
+        if st.button("💾 Save & Preview Team Leader Row", use_container_width=True):
+            leader_row = {
+                "Expert":                    "👑 Mohammed Shehta (TL)",
+                "Working Days":              ml_working_days,
+                "Tickets Count":             ml_tickets,
+                "JHAH Requests":             ml_jhah,
+                "Reporting & Feedback":      ml_rep_fb,
+                "Email Counts":              ml_email,
+                "% Achievement from Target": ml_achievement,
+                "Service Time":              ml_service_time,
+                "Service Quality":           ml_quality,
+            }
+            st.success("✅ Team Leader row saved for this session.")
+            st.dataframe(pd.DataFrame([leader_row]), hide_index=True, use_container_width=True)
