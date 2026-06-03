@@ -152,4 +152,9 @@ hr { border-color:#cbd5e1 !important; }
     border: 1px solid #1d4ed8 !important; color: #ffffff !important;
     border-radius: 10px !important; font-weight: 700 !important;
     transition: all .2s ease;
-    box-shadow: 0 2px
+    box-shadow: 0 2px 4px rgba(37,99,235,0.2);
+}
+.stButton > button:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+    border-color: #1e40af !important; color: #ffffff !important;
+    transform: translateY(-1px); box-shadow: 0 4px 12px rgba(29,78,216,0.3);
