@@ -59,57 +59,226 @@ def _hash(pw: str) -> str:
 # ══════════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ── base ── */
-.stApp{background:#0d1117;color:#e6edf3;}
-[data-testid="stSidebar"]{background:#0d1117;border-right:1px solid #21262d;}
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
 
-/* ── KPI cards ── */
-.kpi-container{border-radius:14px;padding:1.2rem .8rem;text-align:center;
-  min-height:110px;display:flex;flex-direction:column;
-  justify-content:center;margin-bottom:1rem;}
-.kpi-label{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
-  color:#8b949e;margin-bottom:.4rem;font-weight:600;}
-.kpi-value{font-size:1.5rem;font-weight:800;}
-.card-total    {background:#111a2e;border:1px solid #58a6ff;color:#58a6ff;}
-.card-completed{background:#12221b;border:1px solid #3fb950;color:#3fb950;}
-.card-issue    {background:#261f12;border:1px solid #d29922;color:#d29922;}
-.card-frt      {background:#2b1c11;border:1px solid #f0883e;color:#f0883e;}
-.card-aht      {background:#221230;border:1px solid #bc8cff;color:#bc8cff;}
-.card-tat      {background:#111a2e;border:1px solid #58a6ff;color:#58a6ff;}
+/* ══ BASE — Deep Space Plum / Magenta ══════════════════════════════ */
+.stApp {
+    background: radial-gradient(ellipse at 20% 10%, #1a0533 0%, #0e0120 40%, #060012 100%);
+    color: #e8d5ff;
+    font-family: 'Syne', sans-serif;
+}
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0d0120 0%, #120028 60%, #0a001e 100%);
+    border-right: 1px solid #3d1060;
+}
+[data-testid="stSidebar"] * { color: #cda8ff !important; }
+[data-testid="stSidebar"] .stButton button {
+    background: linear-gradient(135deg,#1e0545,#2a0660) !important;
+    border: 1px solid #7b2fff !important;
+    color: #d4a8ff !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+}
+[data-testid="stSidebar"] .stButton button:hover {
+    background: linear-gradient(135deg,#2e0870,#3a0a88) !important;
+    border-color: #b060ff !important;
+    color: #f0d8ff !important;
+}
 
-/* ── login card ── */
-.login-wrap{max-width:430px;margin:5rem auto 0;padding:2.5rem 2rem;
-  background:#161b22;border:1px solid #30363d;border-radius:16px;}
-.login-title{font-size:1.6rem;font-weight:800;text-align:center;
-  margin-bottom:.3rem;color:#e6edf3;}
-.login-sub{font-size:.85rem;text-align:center;color:#8b949e;margin-bottom:1.6rem;}
+/* ── Tab headers ── */
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    background: transparent;
+    color: #7a4aaa;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: .04em;
+    border-bottom: 2px solid transparent;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    color: #e040fb !important;
+    border-bottom: 2px solid #e040fb !important;
+}
 
-/* ── role badges ── */
-.badge{display:inline-block;font-size:.68rem;border-radius:6px;
-  padding:2px 8px;margin-left:6px;font-weight:700;letter-spacing:.06em;}
-.badge-admin {background:#1f2d1f;border:1px solid #3fb950;color:#3fb950;}
-.badge-viewer{background:#1a2236;border:1px solid #58a6ff;color:#58a6ff;}
+/* ── Global text ── */
+h1,h2,h3,h4,h5,h6,p,label,span,div { font-family:'Syne',sans-serif !important; }
+h2,h3 { color:#f0d8ff !important; letter-spacing:.02em; }
+.stMarkdown p { color:#c09ee0; }
+hr { border-color:#3d1060 !important; }
 
-/* ── request status banners ── */
-.req-pending {background:#1f1f00;border:1px solid #d29922;border-radius:10px;
-  padding:.7rem 1rem;margin-bottom:.8rem;color:#d29922;font-size:.88rem;}
-.req-approved{background:#0d2218;border:1px solid #3fb950;border-radius:10px;
-  padding:.7rem 1rem;margin-bottom:.8rem;color:#3fb950;font-size:.88rem;}
-.req-rejected{background:#2a0d0d;border:1px solid #f85149;border-radius:10px;
-  padding:.7rem 1rem;margin-bottom:.8rem;color:#f85149;font-size:.88rem;}
+/* ── Inputs ── */
+.stTextInput input, .stNumberInput input, .stSelectbox select, .stDateInput input {
+    background: #12002a !important;
+    border: 1px solid #6020b0 !important;
+    color: #e8d5ff !important;
+    border-radius: 10px !important;
+    font-family: 'Syne', sans-serif !important;
+}
+.stTextInput input:focus, .stNumberInput input:focus {
+    border-color: #e040fb !important;
+    box-shadow: 0 0 0 3px rgba(224,64,251,.18) !important;
+}
 
-/* ── section card ── */
-.section-card{background:#161b22;border:1px solid #30363d;border-radius:12px;
-  padding:1.4rem 1.6rem;margin-bottom:1.2rem;}
+/* ── Buttons ── */
+.stButton > button {
+    background: linear-gradient(135deg, #2a0060 0%, #48009a 100%) !important;
+    border: 1px solid #9030e0 !important;
+    color: #e8b8ff !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    font-family: 'Syne', sans-serif !important;
+    letter-spacing: .04em !important;
+    transition: all .2s ease;
+}
+.stButton > button:hover {
+    background: linear-gradient(135deg, #3a0090 0%, #6000cc 100%) !important;
+    border-color: #d060ff !important;
+    color: #f8e0ff !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(180,60,255,.3);
+}
+
+/* ── Alerts ── */
+.stAlert { border-radius: 12px !important; }
+
+/* ══ KPI CARDS ═══════════════════════════════════════════════════════ */
+.kpi-container {
+    border-radius: 18px;
+    padding: 1.3rem 1rem;
+    text-align: center;
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform .25s, box-shadow .25s;
+}
+.kpi-container:hover { transform: translateY(-4px); }
+.kpi-container::before {
+    content:'';
+    position:absolute;inset:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 55%);
+    pointer-events:none;
+}
+.kpi-label {
+    font-size: .66rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-bottom: .45rem;
+    font-weight: 700;
+    opacity: .7;
+}
+.kpi-value { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
+
+/* Card 1 — Hot Magenta */
+.card-total {
+    background: linear-gradient(135deg, #2a0040 0%, #3d006a 100%);
+    border: 1px solid #e040fb;
+    color: #f580ff;
+    box-shadow: 0 0 24px rgba(224,64,251,.2), inset 0 1px 0 rgba(224,64,251,.12);
+}
+/* Card 2 — Neon Lime */
+.card-completed {
+    background: linear-gradient(135deg, #0a2000 0%, #163400 100%);
+    border: 1px solid #76ff03;
+    color: #aaff57;
+    box-shadow: 0 0 24px rgba(118,255,3,.15), inset 0 1px 0 rgba(118,255,3,.1);
+}
+/* Card 3 — Electric Orange */
+.card-issue {
+    background: linear-gradient(135deg, #2a0e00 0%, #401800 100%);
+    border: 1px solid #ff6d00;
+    color: #ff9e40;
+    box-shadow: 0 0 24px rgba(255,109,0,.18), inset 0 1px 0 rgba(255,109,0,.1);
+}
+/* Card 4 — Hot Pink */
+.card-frt {
+    background: linear-gradient(135deg, #2a0020 0%, #400035 100%);
+    border: 1px solid #f50057;
+    color: #ff6090;
+    box-shadow: 0 0 24px rgba(245,0,87,.18), inset 0 1px 0 rgba(245,0,87,.1);
+}
+/* Card 5 — Cosmic Blue */
+.card-aht {
+    background: linear-gradient(135deg, #00103a 0%, #001a5a 100%);
+    border: 1px solid #2979ff;
+    color: #6ea8ff;
+    box-shadow: 0 0 24px rgba(41,121,255,.18), inset 0 1px 0 rgba(41,121,255,.1);
+}
+/* Card 6 — Cyber Teal */
+.card-tat {
+    background: linear-gradient(135deg, #001e22 0%, #003038 100%);
+    border: 1px solid #00e5ff;
+    color: #40f8ff;
+    box-shadow: 0 0 24px rgba(0,229,255,.16), inset 0 1px 0 rgba(0,229,255,.1);
+}
+
+/* ══ LOGIN ════════════════════════════════════════════════════════════ */
+.login-wrap {
+    max-width: 440px;
+    margin: 5rem auto 0;
+    padding: 2.8rem 2.4rem;
+    background: linear-gradient(160deg, #0e0025 0%, #180038 100%);
+    border: 1px solid #6020b0;
+    border-radius: 22px;
+    box-shadow: 0 24px 70px rgba(160,0,255,.25);
+}
+.login-title {
+    font-size: 1.75rem; font-weight: 800;
+    text-align: center; margin-bottom: .3rem;
+    background: linear-gradient(90deg, #e040fb, #40c4ff, #76ff03);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: .04em;
+}
+.login-sub { font-size:.86rem;text-align:center;color:#8050b0;margin-bottom:1.8rem; }
+
+/* ══ BADGES ══════════════════════════════════════════════════════════ */
+.badge {
+    display:inline-block; font-size:.64rem; border-radius:7px;
+    padding:2px 9px; margin-left:6px; font-weight:800; letter-spacing:.1em;
+}
+.badge-admin  { background:#1a0030;border:1px solid #e040fb;color:#f580ff; }
+.badge-viewer { background:#001020;border:1px solid #00e5ff;color:#40f8ff; }
+
+/* ══ REQUEST BANNERS ══════════════════════════════════════════════════ */
+.req-pending {
+    background: linear-gradient(90deg,#1e1000,#2a1800);
+    border:1px solid #ff6d00; border-radius:12px;
+    padding:.75rem 1.2rem; margin-bottom:.8rem;
+    color:#ff9e40; font-size:.88rem;
+}
+.req-approved {
+    background: linear-gradient(90deg,#0a2000,#102800);
+    border:1px solid #76ff03; border-radius:12px;
+    padding:.75rem 1.2rem; margin-bottom:.8rem;
+    color:#aaff57; font-size:.88rem;
+}
+.req-rejected {
+    background: linear-gradient(90deg,#200010,#2e0018);
+    border:1px solid #f50057; border-radius:12px;
+    padding:.75rem 1.2rem; margin-bottom:.8rem;
+    color:#ff6090; font-size:.88rem;
+}
+
+/* ══ SECTION CARD ═════════════════════════════════════════════════════ */
+.section-card {
+    background: linear-gradient(135deg, #0e0025 0%, #16003a 100%);
+    border: 1px solid #4a1080;
+    border-radius: 16px;
+    padding: 1.5rem 1.8rem;
+    margin-bottom: 1.2rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
 THEME = dict(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font_color="#c9d1d9",
-    margin=dict(l=10,r=10,t=50,b=10)
+    plot_bgcolor="rgba(18,0,40,.5)",
+    font_color="#cda8ff",
+    font_family="Syne, sans-serif",
+    margin=dict(l=10,r=10,t=55,b=10)
 )
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -776,104 +945,184 @@ with tab2:
         # ── Build styled HTML table ───────────────────────────────────────────────
         COLS = ["Expert", "Working Days", "Tickets Count", "JHAH Requests",
                 "Reporting & Feedback", "Email Counts",
-                "% Achievement from Target", "Service Time (HH:MM:SS)", "Service Quality"]
+                "% Achievement", "Service Time", "Service Quality"]
 
-        def _row_style(expert: str) -> tuple[str, str]:
-            """Return (row background css, badge html) for a given expert label."""
+        # Rank top-3 agents by volume for medal assignment
+        ranked_agents = agent_only.sort_values("_tc_num", ascending=False)["Expert"].tolist()
+
+        def _medal(expert):
+            if expert in ranked_agents[:3]:
+                return ["🥇","🥈","🥉"][ranked_agents.index(expert)]
+            return None
+
+        def _row_meta(expert):
+            """Return (row_style_str, left_accent_color, badge_html)"""
             if expert == "🏆 Team AVG":
-                return "background:#1a2744;border-left:4px solid #58a6ff;", ""
+                return (
+                    "background:linear-gradient(90deg,#1a003a,#22004e);",
+                    "#e040fb",
+                    "<span style='background:#2a0050;border:1px solid #e040fb;color:#f580ff;"
+                    "border-radius:6px;padding:2px 10px;font-size:.68rem;font-weight:800;"
+                    "letter-spacing:.1em'>BASELINE</span>"
+                )
             if expert == "👑 Mohammed Shehta (TL)":
-                return "background:#1a2233;border-left:4px solid #bc8cff;", ""
-            clean = expert.lstrip("🥇🥈🥉⭐ ")
-            if clean in top_performers:
-                ach_num = float(
-                    str(sc.loc[sc["Expert"] == expert, "% Achievement from Target"].values[0])
-                    .rstrip("%") or 0)
-                sq_num  = float(
-                    str(sc.loc[sc["Expert"] == expert, "Service Quality"].values[0])
-                    .rstrip("%") or 0)
-                badge_parts = []
-                if expert in [sc.loc[sc["Expert"].isin(top3_tc)]["Expert"].iloc[i]
-                               if len(sc.loc[sc["Expert"].isin(top3_tc)]) > i else None
-                               for i in range(3)]:
-                    rank = agent_only.sort_values("_tc_num", ascending=False)["Expert"].tolist().index(expert)
-                    medal = ["🥇", "🥈", "🥉"][rank] if rank < 3 else "⭐"
-                    badge_parts.append(f"<span style='font-size:.75rem'>{medal} Top Volume</span>")
-                if expert in top_sq:
-                    badge_parts.append("<span style='font-size:.75rem'>⭐ Best Quality</span>")
-                badge_html = " ".join(badge_parts)
-                return "background:#0d2218;border-left:4px solid #3fb950;", badge_html
-            # default alternating
-            return "", ""
+                return (
+                    "background:linear-gradient(90deg,#001a38,#002050);",
+                    "#00e5ff",
+                    "<span style='background:#001830;border:1px solid #00e5ff;color:#40f8ff;"
+                    "border-radius:6px;padding:2px 10px;font-size:.68rem;font-weight:800;"
+                    "letter-spacing:.1em'>TEAM LEAD</span>"
+                )
+            badge_parts = []
+            medal = _medal(expert)
+            if medal:
+                medal_colors = {"🥇":("#332000","#ffd740","#ffe57f"),
+                                "🥈":("#1a1a2a","#90a4ae","#cfd8dc"),
+                                "🥉":("#1e0e00","#ff6d00","#ffab40")}
+                bg,bd,fc = medal_colors.get(medal,("#111","#fff","#fff"))
+                badge_parts.append(
+                    f"<span style='background:{bg};border:1px solid {bd};color:{fc};"
+                    f"border-radius:6px;padding:2px 9px;font-size:.68rem;font-weight:800;"
+                    f"margin-left:5px'>{medal} #{ranked_agents.index(expert)+1} VOL</span>"
+                )
+            if expert in top_sq:
+                badge_parts.append(
+                    "<span style='background:#001a00;border:1px solid #76ff03;color:#aaff57;"
+                    "border-radius:6px;padding:2px 9px;font-size:.68rem;font-weight:800;"
+                    "margin-left:4px'>⭐ QUALITY</span>"
+                )
+            bg_style = (
+                "background:linear-gradient(90deg,#0a1e00,#102800);"
+                if expert in top_performers
+                else ""
+            )
+            left_col = "#76ff03" if expert in top_performers else "#3d1060"
+            return bg_style, left_col, " ".join(badge_parts)
+
+        # ── column header colors — each column gets its own accent ───────────────
+        COL_COLORS = {
+            "Expert":               "#e040fb",
+            "Working Days":         "#00e5ff",
+            "Tickets Count":        "#ffd740",
+            "JHAH Requests":        "#ff6090",
+            "Reporting & Feedback": "#76ff03",
+            "Email Counts":         "#6ea8ff",
+            "% Achievement":        "#ff9e40",
+            "Service Time":         "#c77dff",
+            "Service Quality":      "#40f8ff",
+        }
 
         header_cells = "".join(
-            f"<th style='padding:10px 14px;text-align:left;font-size:.75rem;"
-            f"letter-spacing:.08em;text-transform:uppercase;color:#8b949e;"
-            f"border-bottom:1px solid #30363d;white-space:nowrap'>{c}</th>"
+            f"<th style='padding:12px 16px;text-align:left;font-size:.7rem;"
+            f"letter-spacing:.12em;text-transform:uppercase;"
+            f"color:{COL_COLORS.get(c,'#aaa')};font-weight:800;"
+            f"border-bottom:2px solid {COL_COLORS.get(c,'#333')}33;"
+            f"white-space:nowrap;font-family:Syne,sans-serif'>{c}</th>"
             for c in COLS)
 
         rows_html = ""
-        for _, row in sc_final.iterrows():
-            expert_raw = str(row["Expert"])
-            row_bg, badge = _row_style(expert_raw)
+        for idx, row in sc_final.iterrows():
+            expert_raw   = str(row["Expert"])
+            bg_str, left_col, badge_html = _row_meta(expert_raw)
 
-            # achievement color
+            # ── % Achievement pill ─────────────────────────────────────────────
             ach_str = str(row.get("% Achievement from Target", "0%"))
-            try:
-                ach_num = float(ach_str.rstrip("%"))
+            try:    ach_num = float(ach_str.rstrip("%"))
             except: ach_num = 0
-            if ach_num >= 120:   ach_color = "#3fb950"
-            elif ach_num >= 100: ach_color = "#58a6ff"
-            elif ach_num >= 80:  ach_color = "#d29922"
-            else:                ach_color = "#f85149"
-
-            # quality color
-            sq_str = str(row.get("Service Quality", "0%"))
-            try:
-                sq_num = float(sq_str.rstrip("%"))
-            except: sq_num = 0
-            if sq_num >= 90:   sq_color = "#3fb950"
-            elif sq_num >= 75: sq_color = "#58a6ff"
-            elif sq_num >= 60: sq_color = "#d29922"
-            else:              sq_color  = "#f85149"
-
-            expert_display = (
-                f"{expert_raw}"
-                + (f" <span style='background:#0d2218;border:1px solid #3fb950;color:#3fb950;"
-                   f"border-radius:5px;padding:1px 7px;margin-left:6px;font-size:.7rem'>{badge}</span>"
-                   if badge else "")
+            if ach_num >= 120:
+                ach_bg,ach_bd,ach_fc = "#1a2e00","#76ff03","#aaff57"
+            elif ach_num >= 100:
+                ach_bg,ach_bd,ach_fc = "#001530","#2979ff","#6ea8ff"
+            elif ach_num >= 80:
+                ach_bg,ach_bd,ach_fc = "#1e1000","#ff6d00","#ff9e40"
+            else:
+                ach_bg,ach_bd,ach_fc = "#200010","#f50057","#ff6090"
+            ach_pill = (
+                f"<span style='background:{ach_bg};border:1px solid {ach_bd};"
+                f"color:{ach_fc};border-radius:20px;padding:3px 12px;"
+                f"font-weight:800;font-size:.82rem;letter-spacing:.04em'>{ach_str}</span>"
             )
 
-            def cell(val, color=None, bold=False):
-                style = f"padding:9px 14px;border-bottom:1px solid #21262d;font-size:.85rem;color:{'#e6edf3' if not color else color};{'font-weight:700;' if bold else ''}"
-                return f"<td style='{style}'>{val}</td>"
+            # ── Service Quality pill ───────────────────────────────────────────
+            sq_str = str(row.get("Service Quality","0%"))
+            try:    sq_num = float(sq_str.rstrip("%"))
+            except: sq_num = 0
+            if sq_num >= 90:
+                sq_bg,sq_bd,sq_fc = "#001e00","#76ff03","#aaff57"
+            elif sq_num >= 75:
+                sq_bg,sq_bd,sq_fc = "#001530","#00e5ff","#40f8ff"
+            elif sq_num >= 60:
+                sq_bg,sq_bd,sq_fc = "#1e1000","#ffd740","#ffe57f"
+            else:
+                sq_bg,sq_bd,sq_fc = "#200010","#f50057","#ff6090"
+            sq_pill = (
+                f"<span style='background:{sq_bg};border:1px solid {sq_bd};"
+                f"color:{sq_fc};border-radius:20px;padding:3px 12px;"
+                f"font-weight:800;font-size:.82rem;letter-spacing:.04em'>{sq_str}</span>"
+            )
+
+            # ── service time with mono font ────────────────────────────────────
+            svc_time = str(row.get("Service Time","00:00:00"))
+            svc_cell = (
+                f"<span style='font-family:JetBrains Mono,monospace;"
+                f"color:#c77dff;font-size:.82rem;letter-spacing:.06em'>{svc_time}</span>"
+            )
+
+            is_special = expert_raw in ("🏆 Team AVG","👑 Mohammed Shehta (TL)")
+            name_fw    = "800" if is_special else "600"
+            name_color = "#f580ff" if expert_raw=="🏆 Team AVG" else (
+                         "#40f8ff" if expert_raw=="👑 Mohammed Shehta (TL)" else "#e8d5ff")
+
+            def cell(val, accent=None):
+                c = accent if accent else "#c0a0e8"
+                return (f"<td style='padding:11px 16px;border-bottom:1px solid #2a0550;"
+                        f"font-size:.84rem;color:{c};font-family:Syne,sans-serif'>{val}</td>")
 
             rows_html += (
-                f"<tr style='{row_bg}'>"
-                + f"<td style='padding:9px 14px;border-bottom:1px solid #21262d;font-size:.85rem;color:#e6edf3;font-weight:{'700' if expert_raw in ('🏆 Team AVG','👑 Mohammed Shehta (TL)') else '400'}'>{expert_display}</td>"
-                + cell(row.get("Working Days","—"))
-                + cell(f"{int(float(str(row.get('Tickets Count',0)).replace(',',''))) if str(row.get('Tickets Count',0)).replace('.','').replace(',','').isdigit() else row.get('Tickets Count','—'):,}" if str(row.get("Tickets Count",0)).replace(".","").replace(",","").isdigit() else row.get("Tickets Count","—"))
-                + cell(row.get("JHAH Requests","—"))
-                + cell(row.get("Reporting & Feedback","—"))
-                + cell(row.get("Email Counts","—"))
-                + cell(ach_str, color=ach_color, bold=True)
-                + cell(row.get("Service Time","00:00:00"))
-                + cell(sq_str, color=sq_color, bold=True)
+                f"<tr style='{bg_str}border-left:3px solid {left_col};"
+                f"transition:background .2s' "
+                f"onmouseover=\"this.style.background='rgba(160,60,255,.07)'\" "
+                f"onmouseout=\"this.style.background=''\">"
+                + f"<td style='padding:11px 16px;border-bottom:1px solid #2a0550;"
+                  f"color:{name_color};font-weight:{name_fw};font-size:.88rem;"
+                  f"font-family:Syne,sans-serif'>{expert_raw} {badge_html}</td>"
+                + cell(row.get("Working Days","—"), "#00e5ff" if not is_special else None)
+                + cell(f"{int(float(str(row.get('Tickets Count',0)).replace(',',''))) :,}"
+                       if str(row.get("Tickets Count","0")).replace(".","").replace(",","").isdigit()
+                       else row.get("Tickets Count","—"), "#ffd740" if not is_special else None)
+                + cell(row.get("JHAH Requests","—"), "#ff6090")
+                + cell(row.get("Reporting & Feedback","—"), "#76ff03")
+                + cell(row.get("Email Counts","—"), "#6ea8ff")
+                + f"<td style='padding:11px 16px;border-bottom:1px solid #2a0550'>{ach_pill}</td>"
+                + f"<td style='padding:11px 16px;border-bottom:1px solid #2a0550'>{svc_cell}</td>"
+                + f"<td style='padding:11px 16px;border-bottom:1px solid #2a0550'>{sq_pill}</td>"
                 + "</tr>"
             )
 
         table_html = f"""
-        <div style='overflow-x:auto;border-radius:12px;border:1px solid #30363d;'>
-        <table style='width:100%;border-collapse:collapse;background:#0d1117;font-family:Inter,sans-serif;'>
-            <thead><tr style='background:#161b22'>{header_cells}</tr></thead>
+        <div style='overflow-x:auto;border-radius:16px;
+          border:1px solid #4a1080;
+          box-shadow:0 0 40px rgba(180,0,255,.12),0 8px 32px rgba(0,0,0,.5);
+          margin-bottom:1rem;'>
+        <table style='width:100%;border-collapse:collapse;
+          background:linear-gradient(160deg,#0e0025 0%,#0a001e 100%);
+          font-family:Syne,sans-serif;'>
+            <thead>
+              <tr style='background:linear-gradient(90deg,#1a003a,#26004e);
+                         border-bottom:2px solid #6020b0'>
+                {header_cells}
+              </tr>
+            </thead>
             <tbody>{rows_html}</tbody>
         </table></div>
-        <div style='margin-top:10px;font-size:.75rem;color:#8b949e'>
-            🥇🥈🥉 Top 3 by volume &nbsp;|&nbsp; ⭐ Best service quality &nbsp;|&nbsp;
-            <span style='color:#3fb950'>■</span> ≥120% achievement &nbsp;
-            <span style='color:#58a6ff'>■</span> ≥100% &nbsp;
-            <span style='color:#d29922'>■</span> ≥80% &nbsp;
-            <span style='color:#f85149'>■</span> &lt;80%
+        <div style='font-size:.73rem;color:#7a50a0;letter-spacing:.06em;
+          display:flex;flex-wrap:wrap;gap:14px;margin-top:4px;font-family:Syne,sans-serif'>
+            <span>🥇🥈🥉 Top 3 volume</span>
+            <span>⭐ Best quality</span>
+            <span style='color:#aaff57'>■ ≥120% achievement</span>
+            <span style='color:#6ea8ff'>■ ≥100%</span>
+            <span style='color:#ff9e40'>■ ≥80%</span>
+            <span style='color:#ff6090'>■ &lt;80%</span>
         </div>"""
 
         # ── VIEWER: styled table only ─────────────────────────────────────────────
