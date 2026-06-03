@@ -214,7 +214,7 @@ hr { border-color:#cbd5e1 !important; }
 
 # 👥 إعدادات ثيم القوالب لـ Plotly بالوضع الفاتح
 THEME = dict(
-    template="plotly_blue",
+    template="plotly_white",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(248,250,252,0.8)",
     font_color="#334155",
