@@ -27,7 +27,6 @@ def _hash(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def _load_store() -> dict:
-    # نقوم ببناء الحسابات الافتراضية الثابتة أولاً
     default_store = {
         "users": {
             "admin": {
@@ -86,7 +85,6 @@ def _load_store() -> dict:
     if _DATA_FILE.exists():
         try:
             loaded = json.loads(_DATA_FILE.read_text())
-            # نضمن دمج أي مستخدمين مسجلين جدد أو تعديلات مع الحسابات الافتراضية
             if "users" in loaded:
                 for k, v in loaded["users"].items():
                     default_store["users"][k] = v
@@ -103,122 +101,123 @@ def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  CSS  — تصميم الواجهة المعتمد بخطوط المتصفح القياسية الافتراضية
+#  CSS  — PREMIUM, HIGH-CONTRAST LIGHT THEME STYLE BLOCK
 # ══════════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ══ BASE ════════════════════════════════════════════════════════════ */
+/* ══ BASE LIGHT LAYOUT ═══════════════════════════════════════════════ */
 .stApp {
-    background: radial-gradient(ellipse at 20% 10%, #1a0533 0%, #0e0120 40%, #060012 100%);
-    color: #e8d5ff;
+    background: radial-gradient(ellipse at 20% 10%, #f4f6fa 0%, #edf0f5 40%, #e4e8f0 100%);
+    color: #1e293b;
 }
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0d0120 0%, #120028 60%, #0a001e 100%);
-    border-right: 1px solid #3d1060;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border-right: 1px solid #cbd5e1;
 }
-[data-testid="stSidebar"] * { color: #cda8ff !important; }
+[data-testid="stSidebar"] * { color: #334155 !important; }
 [data-testid="stSidebar"] .stButton button {
-    background: linear-gradient(135deg,#1e0545,#2a0660) !important;
-    border: 1px solid #7b2fff !important;
-    color: #d4a8ff !important;
+    background: linear-gradient(135deg,#ffffff,#f1f5f9) !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
     border-radius: 10px !important;
     font-weight: 700 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 [data-testid="stSidebar"] .stButton button:hover {
-    background: linear-gradient(135deg,#2e0870,#3a0a88) !important;
-    border-color: #b060ff !important;
-    color: #f0d8ff !important;
+    background: linear-gradient(135deg,#e2e8f0,#cbd5e1) !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
 }
 [data-testid="stTabs"] [data-baseweb="tab"] {
-    background: transparent; color: #7a4aaa; font-weight: 700;
+    background: transparent; color: #64748b; font-weight: 700;
     border-bottom: 2px solid transparent;
 }
 [data-testid="stTabs"] [aria-selected="true"] {
-    color: #e040fb !important; border-bottom: 2px solid #e040fb !important;
+    color: #2563eb !important; border-bottom: 2px solid #2563eb !important;
 }
-h2,h3 { color:#f0d8ff !important; }
-.stMarkdown p { color:#c09ee0; }
-hr { border-color:#3d1060 !important; }
+h2,h3 { color:#0f172a !important; font-weight: 800; }
+.stMarkdown p { color:#334155; }
+hr { border-color:#cbd5e1 !important; }
+
 .stTextInput input, .stNumberInput input, .stSelectbox select, .stDateInput input {
-    background: #12002a !important; border: 1px solid #6020b0 !important;
-    color: #e8d5ff !important; border-radius: 10px !important;
+    background: #ffffff !important; border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important; border-radius: 10px !important;
 }
 .stTextInput input:focus, .stNumberInput input:focus {
-    border-color: #e040fb !important;
-    box-shadow: 0 0 0 3px rgba(224,64,251,.18) !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important;
 }
 .stButton > button {
-    background: linear-gradient(135deg, #2a0060 0%, #48009a 100%) !important;
-    border: 1px solid #9030e0 !important; color: #e8b8ff !important;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    border: 1px solid #1d4ed8 !important; color: #ffffff !important;
     border-radius: 10px !important; font-weight: 700 !important;
     transition: all .2s ease;
+    box-shadow: 0 2px 4px rgba(37,99,235,0.2);
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, #3a0090 0%, #6000cc 100%) !important;
-    border-color: #d060ff !important; color: #f8e0ff !important;
-    transform: translateY(-2px); box-shadow: 0 6px 20px rgba(180,60,255,.3);
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+    border-color: #1e40af !important; color: #ffffff !important;
+    transform: translateY(-1px); box-shadow: 0 4px 12px rgba(29,78,216,0.3);
 }
-.stAlert { border-radius: 12px !important; }
+.stAlert { border-radius: 12px !important; background-color: #eff6ff !important; color: #1e40af !important; border: 1px solid #bfdbfe !important; }
 
-/* ══ KPI CARDS ═══════════════════════════════════════════════════════ */
+/* ══ CRISP LIGHT KPI CARDS ═══════════════════════════════════════════ */
 .kpi-container {
     border-radius: 18px; padding: 1.3rem 1rem; text-align: center;
     min-height: 118px; display: flex; flex-direction: column;
     justify-content: center; margin-bottom: 1rem;
     position: relative; overflow: hidden; transition: transform .25s, box-shadow .25s;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
 }
-.kpi-container:hover { transform: translateY(-4px); }
-.kpi-container::before {
-    content:''; position:absolute; inset:0;
-    background:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 55%);
-    pointer-events:none;
-}
+.kpi-container:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08); }
 .kpi-label {
     font-size: .66rem; letter-spacing: .14em; text-transform: uppercase;
-    margin-bottom: .45rem; font-weight: 700; opacity: .7;
+    margin-bottom: .45rem; font-weight: 700; color: #475569; opacity: .8;
 }
 .kpi-value { font-size: 1.55rem; font-weight: 800; letter-spacing: -.01em; }
-.card-total     { background:linear-gradient(135deg,#2a0040,#3d006a); border:1px solid #e040fb; color:#f580ff; box-shadow:0 0 24px rgba(224,64,251,.2); }
-.card-completed { background:linear-gradient(135deg,#0a2000,#163400); border:1px solid #76ff03; color:#aaff57; box-shadow:0 0 24px rgba(118,255,3,.15); }
-.card-issue     { background:linear-gradient(135deg,#2a0e00,#401800); border:1px solid #ff6d00; color:#ff9e40; box-shadow:0 0 24px rgba(255,109,0,.18); }
-.card-frt       { background:linear-gradient(135deg,#2a0020,#400035); border:1px solid #f50057; color:#ff6090; box-shadow:0 0 24px rgba(245,0,87,.18); }
-.card-aht       { background:linear-gradient(135deg,#00103a,#001a5a); border:1px solid #2979ff; color:#6ea8ff; box-shadow:0 0 24px rgba(41,121,255,.18); }
-.card-tat       { background:linear-gradient(135deg,#001e22,#003038); border:1px solid #00e5ff; color:#40f8ff; box-shadow:0 0 24px rgba(0,229,255,.16); }
 
-/* ══ LOGIN ════════════════════════════════════════════════════════════ */
+.card-total     { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.card-completed { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.card-issue     { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.card-frt       { background: #fdf2f8; border: 1px solid #fbcfe8; color: #be185d; }
+.card-aht       { background: #faf5ff; border: 1px solid #e9d5ff; color: #6b21a8; }
+.card-tat       { background: #ecfeff; border: 1px solid #c5f6fa; color: #0e7490; }
+
+/* ══ LIGHT BUSINESS LOGIN ═════════════════════════════════════════════ */
 .login-wrap {
-    max-width:440px; margin:5rem auto 0; padding:2rem 2.4rem 1rem;
-    background:linear-gradient(160deg,#0e0025,#180038);
-    border:1px solid #6020b0; border-radius:22px;
-    box-shadow:0 24px 70px rgba(160,0,255,.25);
+    max-width:440px; margin:5rem auto 0; padding:2.5rem 2.4rem 1rem;
+    background: #ffffff;
+    border:1px solid #e2e8f0; border-radius:22px;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
 }
 .login-title {
     font-size:1.75rem; font-weight:800; text-align:center; margin-bottom:.3rem;
-    background:linear-gradient(90deg,#e040fb,#40c4ff,#76ff03);
+    background: linear-gradient(90deg, #1d4ed8, #2563eb, #059669);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
 }
-.login-sub { font-size:.86rem; text-align:center; color:#8050b0; margin-bottom:1.2rem; }
+.login-sub { font-size:.86rem; text-align:center; color:#64748b; margin-bottom:1.8rem; }
 
-/* ══ BADGES ══════════════════════════════════════════════════════════ */
+/* ══ SYSTEM BADGES ════════════════════════════════════════════════════ */
 .badge { display:inline-block; font-size:.64rem; border-radius:7px; padding:2px 9px; margin-left:6px; font-weight:800; letter-spacing:.1em; }
-.badge-admin  { background:#1a0030; border:1px solid #e040fb; color:#f580ff; }
-.badge-expert { background:#001020; border:1px solid #00e5ff; color:#40f8ff; }
+.badge-admin  { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+.badge-expert { background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
 
-/* ══ REQUEST BANNERS ══════════════════════════════════════════════════ */
-.req-pending  { background:linear-gradient(90deg,#1e1000,#2a1800); border:1px solid #ff6d00; border-radius:12px; padding:.75rem 1.2rem; margin-bottom:.8rem; color:#ff9e40; font-size:.88rem; }
-.req-approved { background:linear-gradient(90deg,#0a2000,#102800); border:1px solid #76ff03; border-radius:12px; padding:.75rem 1.2rem; margin-bottom:.8rem; color:#aaff57; font-size:.88rem; }
-.req-rejected { background:linear-gradient(90deg,#200010,#2e0018); border:1px solid #f50057; border-radius:12px; padding:.75rem 1.2rem; margin-bottom:.8rem; color:#ff6090; font-size:.88rem; }
+/* ══ SYSTEM NOTIFICATION BANNERS ═══════════════════════════════════════ */
+.req-pending  { background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:.75rem 1.2rem; margin-bottom:.8rem; color:#b45309; font-size:.88rem; }
+.req-approved { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:.75rem 1.2rem; margin-bottom:.8rem; color:#15803d; font-size:.88rem; }
+.req-rejected { background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:.75rem 1.2rem; margin-bottom:.8rem; color:#b91c1c; font-size:.88rem; }
 
-/* ══ SECTION CARD ═════════════════════════════════════════════════════ */
-.section-card { background:linear-gradient(135deg,#0e0025,#16003a); border:1px solid #4a1080; border-radius:16px; padding:1.5rem 1.8rem; margin-bottom:1.2rem; }
+/* ══ PANEL CONTAINERS ═════════════════════════════════════════════════ */
+.section-card { background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:1.5rem 1.8rem; margin-bottom:1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 </style>
 """, unsafe_allow_html=True)
 
+# 👥 Plotly components light template configuration variables
 THEME = dict(
-    template="plotly_dark",
+    template="plotly_white",
     paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(18,0,40,.5)",
-    font_color="#cda8ff",
+    plot_bgcolor="rgba(248,250,252,0.8)",
+    font_color="#334155",
     margin=dict(l=10, r=10, t=55, b=10)
 )
 
@@ -272,7 +271,6 @@ def approve_request(req_id):
             elif r["type"] == "password":   
                 users()[u]["password_hash"] = _hash(r["new_value"])
             elif r["type"] == "visitor_access":
-                # توليد حساب الموظف الجديد عند موافقة الأدمن على الزائر
                 ukey = u.strip().lower().replace(" ", "_")
                 users()[ukey] = {
                     "display_name": u.strip(),
@@ -334,441 +332,3 @@ if not st.session_state.authenticated:
     _, lc, _ = st.columns([1, 1.4, 1])
     with lc:
         if not st.session_state.view_request_form:
-            inp_u = st.text_input("Username / ID", placeholder="Enter ID", key="li_u")
-            inp_p = st.text_input("Password", type="password", placeholder="Enter password", key="li_p")
-            
-            if st.button("🔐 Login", use_container_width=True):
-                uname = inp_u.strip().lower()
-                udata = users().get(uname)
-                if udata and udata["password_hash"] == _hash(inp_p):
-                    # نظام الـ First-time login: اسم المستخدم يطابق الباسورد المبدئي للـ Expert
-                    if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
-                        st.session_state.username = uname
-                        st.session_state.force_onboard = True
-                        st.session_state.authenticated = True
-                        st.rerun()
-                    else:
-                        st.session_state.authenticated = True
-                        st.session_state.username = uname
-                        st.session_state.role = udata["role"]
-                        st.session_state.page = "dashboard"
-                        st.rerun()
-                else:
-                    st.error("❌ Incorrect username or password.")
-            
-            st.write("")
-            if st.button("🚫 Not on the list? Request Access", use_container_width=True):
-                st.session_state.view_request_form = True
-                st.rerun()
-        else:
-            st.markdown("### 📝 Request Admin Authorization")
-            visitor_name = st.text_input("Enter Your Full Name", placeholder="e.g. Ahmed Ali")
-            
-            if st.button("📤 Submit Access Request", use_container_width=True):
-                if visitor_name.strip():
-                    push_request(visitor_name.strip(), "visitor_access", "123456789")
-                    st.success("✅ Request sent! Username will be your name, default password will be 123456789 upon approval.")
-                    time.sleep(2)
-                    st.session_state.view_request_form = False
-                    st.rerun()
-                else:
-                    st.error("Name field cannot be left empty.")
-            
-            if st.button("← Back to Login", use_container_width=True):
-                st.session_state.view_request_form = False
-                st.rerun()
-    st.stop()
-
-# شاشة الـ Onboarding الإجبارية لتحديث الباسورد لأول مرة
-if st.session_state.force_onboard:
-    st.markdown("## ⚙️ Mandatory Password Update Required")
-    st.info("🚨 This is your first login. You must update your password before accessing dashboard metrics.")
-    _, ob_col, _ = st.columns([1, 1.5, 1])
-    with ob_col:
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        with st.form("onboard_pass_form"):
-            new_ob1 = st.text_input("Set New Password", type="password")
-            new_ob2 = st.text_input("Confirm New Password", type="password")
-            submit_ob = st.form_submit_button("💾 Save & Open Dashboard", use_container_width=True)
-        if submit_ob:
-            if new_ob1 != new_ob2:
-                st.error("❌ Passwords do not match.")
-            elif len(new_ob1) < 6:
-                st.error("❌ Password must be at least 6 characters.")
-            else:
-                uname = st.session_state.username
-                users()[uname]["password_hash"] = _hash(new_ob1)
-                _save_store()
-                st.session_state.role = users()[uname]["role"]
-                st.session_state.force_onboard = False
-                st.session_state.page = "dashboard"
-                st.success("✅ Password configured successfully!")
-                time.sleep(1.5)
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR MODULE & DATA CONNECTION
-# ══════════════════════════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.markdown("## 💊 Navigation & Filters")
-
-    badge_cls = "badge-admin" if is_admin() else "badge-expert"
-    badge_txt = "ADMIN" if is_admin() else "EXPERT"
-    st.markdown(
-        f"👤 **{cur_user().get('display_name', '–')}** "
-        f"<span class='badge {badge_cls}'>{badge_txt}</span>",
-        unsafe_allow_html=True
-    )
-
-    sb1, sb2 = st.columns(2)
-    with sb1:
-        if st.button("⚙️ Settings", use_container_width=True):
-            st.session_state.page = "settings"; st.rerun()
-    with sb2:
-        if st.button("🚪 Logout", use_container_width=True):
-            for k in ("authenticated", "username", "role", "page", "force_onboard"):
-                st.session_state.pop(k, None)
-            st.rerun()
-
-    if is_admin() and pending_count() > 0:
-        pc = pending_count()
-        st.warning(f"🔔 {pc} pending system change request{'s' if pc > 1 else ''}")
-
-    st.success("📡 Live Sync Active")
-    if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
-        st.cache_data.clear()
-
-    # ── دالة سحب البيانات وتصفية أعمدة الـ SLA والـ AHT من شيت جوجل ──
-    @st.cache_data(ttl=600, show_spinner="Syncing database tables…")
-    def load_data():
-        try:
-            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-            if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
-                creds = Credentials.from_service_account_info(
-                    json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
-            else:
-                st.error("❌ Secrets file layout unconfigured."); return pd.DataFrame()
-            client = gspread.authorize(creds)
-            sheet = client.open("AlDawaa Tickets Data")
-            all_dfs = []
-            for ws in sheet.worksheets():
-                data = ws.get_all_values()
-                if len(data) < 2: continue
-                dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
-                mp = {}; seen = set()
-                for col in dft.columns:
-                    cl = col.lower(); t = None
-                    if   "id"       in cl and "req"    in cl: t = "Request ID"
-                    elif "date"     in cl:                     t = "Request Date"
-                    elif "type"     in cl:                     t = "Request Type"
-                    elif "status"   in cl:                     t = "Status"
-                    elif "assigned" in cl or "agent"   in cl: t = "Assigned By"
-                    elif "response" in cl and "take"   in cl: t = "Response Take"
-                    elif "action"   in cl and "take"   in cl: t = "First Action Take"
-                    elif "request"  in cl and "take"   in cl: t = "Request Take"
-                    elif "email"    in cl or "special" in cl: t = "Is Special Request(By Email)"
-                    if t and t not in seen: mp[col] = t; seen.add(t)
-                dft.rename(columns=mp, inplace=True)
-                all_dfs.append(dft)
-            if not all_dfs: return pd.DataFrame()
-            df = pd.concat(all_dfs, ignore_index=True, sort=False)
-            df.replace("", np.nan, inplace=True)
-            for c in ["Request ID", "Request Date", "Request Type", "Status",
-                      "Request Take", "Response Take", "First Action Take",
-                      "Assigned By", "Is Special Request(By Email)"]:
-                if c not in df.columns: df[c] = np.nan
-            df["Status"]       = df["Status"].fillna("Unknown")
-            df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
-            df["Request Type"] = df["Request Type"].fillna("Unknown Type")
-            dp = pd.to_datetime(df["Request Date"], errors="coerce")
-            df["Request Date"]             = dp
-            df["Date Only"]                = dp.dt.date
-            df["Hour"]                     = dp.dt.hour.fillna(0).astype(int)
-            df["Day Name"]                 = dp.dt.day_name().fillna("Unknown")
-            df["Request Take (min)"]       = df["Request Take"].apply(time_to_minutes).fillna(0)
-            df["Response Take (min)"]      = df["Response Take"].apply(time_to_minutes).fillna(0)
-            df["First Action Take (min)"]  = df["First Action Take"].apply(time_to_minutes).fillna(0)
-            df["AHT (min)"]                = df["First Action Take (min)"]
-            df["Is Email"] = (
-                df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
-            return df
-        except Exception as e:
-            st.error(f"❌ Connection Error: {e}"); return pd.DataFrame()
-
-    df_raw = load_data()
-    if df_raw.empty:
-        st.warning("Empty source records."); st.stop()
-
-    st.divider()
-    min_d = df_raw["Date Only"].dropna().min()
-    max_d = df_raw["Date Only"].dropna().max()
-    date_range = st.date_input("Date Range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
-    d_from, d_to = (
-        date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
-    )
-    if d_from == d_to:
-        st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
-    st.divider()
-    sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
-    sel_types  = st.multiselect("Request Type Filter", sorted(df_raw["Request Type"].dropna().unique()))
-
-df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
-if sel_types:  df = df[df["Request Type"].isin(sel_types)]
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  SETTINGS PANEL (إدارة لوحة التحكم للأدمن والموظفين)
-# ══════════════════════════════════════════════════════════════════════════════════
-if st.session_state.page == "settings":
-    if st.button("← Back to Dashboard"):
-        st.session_state.page = "dashboard"; st.rerun()
-
-    if is_admin():
-        st.markdown("## ⚙️ Admin Control Panel")
-        atab1, atab2, atab3 = st.tabs(["👤 My Profile", "🔔 Change & Access Requests", "👥 Manage Dashboard Users"])
-
-        with atab1:
-            st.markdown("### Update Profile Fields")
-            urow = users()[me()]
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            st.markdown("**✏️ Display Name**")
-            with st.form("admin_name_form"):
-                new_dn = st.text_input("New Display Name", value=urow["display_name"])
-                if st.form_submit_button("💾 Save Name", use_container_width=True):
-                    if new_dn.strip() and new_dn.strip() != urow["display_name"]:
-                        users()[me()]["display_name"] = new_dn.strip()
-                        _save_store(); st.success("✅ Profile display name updated."); st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-            st.markdown("**🔑 Change Password**")
-            with st.form("admin_pw_form"):
-                old_pw  = st.text_input("Current Account Password", type="password")
-                new_pw1 = st.text_input("New Secure Password",     type="password")
-                new_pw2 = st.text_input("Confirm Secure Password", type="password")
-                if st.form_submit_button("💾 Update Password", use_container_width=True):
-                    if _hash(old_pw) != urow["password_hash"]: st.error("❌ Password input incorrect.")
-                    elif new_pw1 != new_pw2: st.error("❌ Confirmation inputs mismatch.")
-                    elif len(new_pw1) < 6:   st.error("❌ Minimum limit 6 characters.")
-                    else:
-                        users()[me()]["password_hash"] = _hash(new_pw1)
-                        _save_store(); st.success("✅ Administrative password saved.")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with atab2:
-            st.markdown("### 🔔 Change & Visitor Access Requests")
-            pending = [r for r in requests() if r["status"] == "pending"]
-            if not pending:
-                st.info("✅ No requests pending approval.")
-            else:
-                for req in pending:
-                    if req["type"] == "visitor_access":
-                        st.markdown(f"""
-                        <div class='req-pending'>
-                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🔑 <b>VISITOR REQUEST</b> &nbsp;|&nbsp;
-                            Full Name: <b>{req['requester']}</b> wants an active account.
-                        </div>""", unsafe_allow_html=True)
-                        rc1, rc2, rc3 = st.columns([3, 1, 1])
-                        with rc2:
-                            if st.button("✅ Approve Access", key=f"apr_vis_{req['id']}", use_container_width=True):
-                                approve_request(req["id"])
-                                st.success(f"Approved account for visitor: {req['requester']}."); st.rerun()
-                        with rc3:
-                            if st.button("❌ Deny Access", key=f"rej_vis_{req['id']}", use_container_width=True):
-                                reject_request(req["id"]); st.warning("Access request rejected."); st.rerun()
-                    else:
-                        udata_r   = users().get(req["requester"], {})
-                        udisp     = udata_r.get("display_name", req["requester"])
-                        req_label = "Display Name" if req["type"] == "display_name" else "Password"
-                        st.markdown(f"""
-                        <div class='req-pending'>
-                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 👤 <b>{udisp}</b> &nbsp;|&nbsp; Wants to adjust <b>{req_label}</b>
-                        </div>""", unsafe_allow_html=True)
-                        rc1, rc2, rc3 = st.columns([3, 1, 1])
-                        with rc2:
-                            if st.button("✅ Approve", key=f"apr_{req['id']}", use_container_width=True):
-                                approve_request(req["id"]); st.success("Approved successfully."); st.rerun()
-                        with rc3:
-                            if st.button("❌ Reject", key=f"rej_{req['id']}", use_container_width=True):
-                                reject_request(req["id"]); st.warning("Rejected successfully."); st.rerun()
-
-        with atab3:
-            st.markdown("### 👥 Manage Dashboard Users")
-            for uname, urow in list(users().items()):
-                role_icon = "🔑" if urow["role"] == "admin" else "👤"
-                with st.expander(f"{role_icon} {urow['display_name']} (@{uname})"):
-                    with st.form(f"admin_edit_{uname}"):
-                        eu_dn   = st.text_input("Display Username", value=urow["display_name"], key=f"dn_{uname}")
-                        eu_an   = st.text_input("Agent Key Mapping (Sheets)", value=urow.get("agent_name") or "", key=f"an_{uname}")
-                        eu_p1   = st.text_input("Override Password", type="password", key=f"p1_{uname}")
-                        eu_p2   = st.text_input("Confirm Password", type="password", key=f"p2_{uname}")
-                        eu_role = st.selectbox("Role", ["expert","admin"], index=0 if urow["role"] != "admin" else 1, key=f"rl_{uname}")
-                        saved   = st.form_submit_button("💾 Update User Settings", use_container_width=True)
-                    if saved:
-                        if eu_dn.strip(): users()[uname]["display_name"] = eu_dn.strip()
-                        users()[uname]["agent_name"] = eu_an.strip() if eu_an.strip() else None
-                        users()[uname]["role"] = eu_role
-                        if eu_p1 and eu_p1 == eu_p2: users()[uname]["password_hash"] = _hash(eu_p1)
-                        _save_store(); st.success("✅ User settings updated."); st.rerun()
-    else:
-        st.markdown("## ⚙️ My Profile Settings")
-        urow = users()[me()]
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.markdown("### ✏️ Propose Profile Display Name Change")
-        with st.form("expert_name_form"):
-            req_name = st.text_input("Proposed Display Name", placeholder=urow["display_name"])
-            if st.form_submit_button("📤 Submit Request", use_container_width=True):
-                if req_name.strip(): push_request(me(), "display_name", req_name.strip()); st.success("✅ Request delivered."); st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.markdown("### 🔑 Direct Password Adjuster Form")
-        with st.form("expert_pw_direct"):
-            cur_pw  = st.text_input("Verify Current Password", type="password")
-            new_p1  = st.text_input("Set New Secret Password", type="password")
-            new_p2  = st.text_input("Confirm New Secret Password", type="password")
-            if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                if _hash(cur_pw) == urow["password_hash"] and new_p1 == new_p2 and len(new_p1) >= 6:
-                    users()[me()]["password_hash"] = _hash(new_p1); _save_store(); st.success("✅ Password updated."); st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    st.stop()
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  DASHBOARD MAIN MODULE
-# ══════════════════════════════════════════════════════════════════════════════════
-caption_text = (
-    f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
-    if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
-)
-st.markdown("## 💊 In-Store Requests Matrix")
-st.caption(caption_text)
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  TABS NAVIGATION ARCHITECTURE
-# ══════════════════════════════════════════════════════════════════════════════════
-tab1, tab2 = st.tabs(["📈 Tab 1: Operational Insights", "👥 Tab 2: Team Performance and KPIs"])
-
-# ── TAB 1 — Operational Insights (عام ومتاح بالكامل للجميع للرصد التشغيلي) ────────
-with tab1:
-    c1, c2 = st.columns(2)
-    with c1: esc  = st.checkbox("🔥 Filter: Escalated Cases Only",    value=False, key="t1_esc")
-    with c2: nesc = st.checkbox("🟢 Filter: Non-Escalated Cases Only", value=False, key="t1_nesc")
-
-    dfm = df.copy()
-    if esc  and not nesc: dfm = dfm[dfm["Is Email"] == True]
-    elif nesc and not esc: dfm = dfm[dfm["Is Email"] == False]
-
-    total = len(dfm)
-    ss    = dfm["Status"].astype(str).str.strip()
-    ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
-    issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    h_frt = fmt_m(dfm["Response Take (min)"].mean() if not dfm.empty else 0)
-    h_aht = fmt_m(dfm["AHT (min)"].mean()           if not dfm.empty else 0)
-    h_tat = fmt_m(dfm["Request Take (min)"].mean()   if not dfm.empty else 0)
-
-    a, b, c_, d, e, f_ = st.columns(6)
-    a.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total"),     unsafe_allow_html=True)
-    b.markdown(kpi_colored("Closed Completed",   f"{ok:,}",    "card-completed"), unsafe_allow_html=True)
-    c_.markdown(kpi_colored("Closed with Issue", f"{issue:,}", "card-issue"),     unsafe_allow_html=True)
-    d.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
-    e.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
-    f_.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
-    st.write("")
-
-    if not dfm.empty:
-        dfm["Response Tier"] = dfm["Response Take (min)"].apply(assign_time_tier)
-        dfm["Service Tier"]  = dfm["Request Take (min)"].apply(assign_time_tier)
-        rd = dfm.groupby("Response Tier").size().reset_index(name="Tickets")
-        rd["SLA Category"] = "Response Time"
-        rd.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
-        sd = dfm.groupby("Service Tier").size().reset_index(name="Tickets")
-        sd["SLA Category"] = "Service Resolution"
-        sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
-        sb_df = pd.concat([rd, sd], ignore_index=True)
-        fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
-            color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
-        st.plotly_chart(fig_sb, use_container_width=True)
-
-    st.divider()
-
-    if not dfm.empty:
-        hrs = dfm.groupby("Hour").agg(Volume=("Request ID", "count"), AR=("Response Take (min)" , "mean")).reset_index()
-        hrs = hrs.set_index("Hour").reindex(range(24)).fillna(0).reset_index()
-        hl = ["12 AM" if h == 0 else ("12 PM" if h == 12 else (f"{h} AM" if h < 12 else f"{h - 12} PM")) for h in hrs["Hour"]]
-        hrs["Hour Label"] = hl
-        fig_r = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#58a6ff", width=2)), secondary_y=False)
-        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-        st.plotly_chart(fig_r, use_container_width=True)
-
-# ── TAB 2 — Team Performance and KPIs (منظومة عزل العرض الحساسة بالـ ID للموظف) ──
-with tab2:
-    st.markdown("### 👥 Team Performance and KPIs")
-    t2c1, t2c2 = st.columns(2)
-    with t2c1: t2e  = st.checkbox("🔥 Toggle: Escalated Cases Scope",   value=False, key="t2_esc")
-    with t2c2: t2ne = st.checkbox("🟢 Toggle: Non-Escalated Cases Scope", value=False, key="t2_nesc")
-
-    df_t2 = df.copy()
-    if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
-    elif t2ne and not t2e: df_t2 = df_t2[df_t2["Is Email"] == False]
-
-    # عزل حسابات الكروت بالملي بناءً على هوية الـ ID المسجل
-    aname = my_agent_name()
-    df_kpi = df_t2[df_t2["Assigned By"] == aname].copy() if (not is_admin() and aname) else df_t2.copy()
-
-    kpi_ss  = df_kpi["Status"].astype(str).str.strip()
-    kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{len(df_kpi):,}", "card-total"),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,}",      "card-completed"), unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,}",     "card-issue"),     unsafe_allow_html=True)
-    k4.markdown(kpi_colored("Avg Response (FRT)", fmt_m(df_kpi["Response Take (min)"].mean() if not df_kpi.empty else 0), "card-frt"), unsafe_allow_html=True)
-    k5.markdown(kpi_colored("Avg Handling (AHT)", fmt_m(df_kpi["AHT (min)"].mean()           if not df_kpi.empty else 0), "card-aht"), unsafe_allow_html=True)
-    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(df_kpi["Request Take (min)"].mean()   if not df_kpi.empty else 0), "card-tat"), unsafe_allow_html=True)
-
-    st.write(""); st.divider()
-    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
-
-    EXCL = ["mohammed shehta", "muhammad shehta", "muhammed shehta", "unassigned"]
-    df_sc = df_t2[~df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(EXCL)].copy()
-
-    if not df_sc.empty:
-        rtl = df_sc["Request Type"].astype(str).str.lower()
-        df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
-        df_sc["_rfb"]   = rtl.str.contains("report|feedback", na=False)
-        df_sc["_c_ok"]  = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
-        df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
-
-        grp = df_sc.groupby("Assigned By")
-        sc  = pd.DataFrame(index=grp.groups.keys())
-        sc.index.name = "Assigned By"
-        sc["Working Days"]         = grp["Date Only"].nunique().astype(int)
-        sc["Tickets Count"]        = grp["Request ID"].count()
-        sc["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
-        sc["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
-        sc["Email Counts"]         = grp["Is Email"].sum().astype(int)
-
-        tavg = sc["Tickets Count"].mean()
-        sc["% Achievement from Target"] = ((sc["Tickets Count"] / tavg * 100).round(1).astype(str) + "%" if tavg > 0 else "0.0%")
-        sc["Service Time"] = grp["Request Take (min)"].mean().apply(fmt_m)
-        sc["Service Quality"] = (grp["_c_ok"].sum() / grp["_c_all"].sum().replace(0,1) * 100).round(1).astype(str) + "%"
-        sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
-
-        # تطبيق الـ Overrides اليدوية للأدمن
-        for i, row in sc.iterrows():
-            ov = overrides().get(row["Expert"], {})
-            for col, val in ov.items(): sc.at[i, col] = val
-
-        team_row = {
-            "Expert": "🏆 Team AVG", "Working Days": round(sc["Working Days"].mean(), 1), "Tickets Count": round(sc["Tickets Count"].mean(), 1),
-            "JHAH Requests": round(sc["JHAH Requests"].mean(), 1), "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1),
-            "Email Counts": round(sc["Email Counts"].mean(), 1), "% Achievement from Target": "100.0%", "Service Time": "00:00:00", "Service Quality": "100.0%"
-        }
-
-        # فلترة الأسطر بناءً على الصلاحيات: الأدمن يرى الكل، الموظف يرى نفسه فقط مع الـ Team AVG
-        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
-        st.dataframe(sc_final, use_container_width=True, hide_index=True)
