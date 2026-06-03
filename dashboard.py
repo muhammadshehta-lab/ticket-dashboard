@@ -33,7 +33,7 @@ def _load_store() -> dict:
         except Exception:
             pass
     
-    # Pre-seeded database with strict Employee ID mappings
+    # قاعدة البيانات المحدثة والمغذاة بالأرقام الوظيفية والأسماء القياسية بالملي
     return {
         "users": {
             "admin": {
@@ -93,7 +93,7 @@ def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  CSS  — Standard default Streamlit sans-serif styling
+#  CSS  — تصميم الواجهة المعتمد بخطوط المتصفح القياسية الافتراضية
 # ══════════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -177,7 +177,7 @@ hr { border-color:#3d1060 !important; }
 
 /* ══ LOGIN ════════════════════════════════════════════════════════════ */
 .login-wrap {
-    max-width:440px; margin:3rem auto 0; padding:2rem 2.4rem 1rem;
+    max-width:440px; margin:5rem auto 0; padding:2rem 2.4rem 1rem;
     background:linear-gradient(160deg,#0e0025,#180038);
     border:1px solid #6020b0; border-radius:22px;
     box-shadow:0 24px 70px rgba(160,0,255,.25);
@@ -228,7 +228,7 @@ if "force_onboard" not in st.session_state:
 if "view_request_form" not in st.session_state:
     st.session_state.view_request_form = False
 
-# ── Store Management Helpers ────────────────══════════════════════════════════════
+# ── Helpers لربط الحسابات وإدارة العمليات ──────────────────────────────────────────
 def users()     -> dict: return st.session_state.store["users"]
 def requests()  -> list: return st.session_state.store["requests"]
 def overrides() -> dict: return st.session_state.store["overrides"]
@@ -262,7 +262,7 @@ def approve_request(req_id):
             elif r["type"] == "password":   
                 users()[u]["password_hash"] = _hash(r["new_value"])
             elif r["type"] == "visitor_access":
-                # Create a fresh expert account from the approved visitor request
+                # توليد حساب موظف جديد لايف عند موافقة الأدمن على الزائر
                 ukey = u.strip().lower().replace(" ", "_")
                 users()[ukey] = {
                     "display_name": u.strip(),
@@ -312,7 +312,7 @@ DAYS_AR = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
+#  LOGIN GATE & ONBOARDING SYSTEM (إصلاح منطق حظر الـ stop)
 # ══════════════════════════════════════════════════════════════════════════════════
 if not st.session_state.authenticated:
     st.markdown("""
@@ -331,7 +331,7 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    # Check first-time login scenario (ID matched password string input)
+                    # نظام الـ First-time login: اسم المستخدم يطابق الباسورد المبدئي
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -352,13 +352,12 @@ if not st.session_state.authenticated:
                 st.rerun()
         else:
             st.markdown("### 📝 Request Admin Authorization")
-            visitor_name = st.text_input("Enter Your Full Name (Display Name)", placeholder="e.g. John Doe")
+            visitor_name = st.text_input("Enter Your Full Name", placeholder="e.g. Ahmed Ali")
             
             if st.button("📤 Submit Access Request", use_container_width=True):
                 if visitor_name.strip():
-                    # Format as request
                     push_request(visitor_name.strip(), "visitor_access", "123456789")
-                    st.success("✅ Request sent to admin! Username will be your name, default password will be 123456789 upon approval.")
+                    st.success("✅ Request sent! Username will be your name, default password will be 123456789 upon approval.")
                     time.sleep(2)
                     st.session_state.view_request_form = False
                     st.rerun()
@@ -368,9 +367,9 @@ if not st.session_state.authenticated:
             if st.button("← Back to Login", use_container_width=True):
                 st.session_state.view_request_form = False
                 st.rerun()
-    st.stop()
+    st.stop()  # يتوقف هنا فقط إذا لم يكن مسجلاً للدخول
 
-# Forced onboarding view wrapper if active
+# ── واجهة الـ Onboarding الإجبارية لتحديث الباسورد فوراً ───────────────────────────
 if st.session_state.force_onboard:
     st.markdown("## ⚙️ Mandatory Password Update Required")
     st.info("🚨 This is your first login. You must update your password before accessing dashboard metrics.")
@@ -400,7 +399,7 @@ if st.session_state.force_onboard:
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR MANAGEMENT & LIVE DATA FETCHING
+#  SIDEBAR MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("## 💊 Navigation & Filters")
@@ -428,15 +427,12 @@ with st.sidebar:
         st.warning(f"🔔 {pc} pending system change request{'s' if pc > 1 else ''}")
 
     st.success("📡 Live Sync Active")
-    if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
-        st.cache_data.clear()
 
-    # ── Live Sync Data Pipeline Loader ──
+    # ── دالة سحب البيانات الحية وتصفية الأعمدة والـ AHT ──
     @st.cache_data(ttl=600, show_spinner="Syncing database tables…")
     def load_data():
         try:
-            scopes = ["https://www.googleapis.com/auth/spreadsheets",
-                      "https://www.googleapis.com/auth/drive"]
+            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
             if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
                 creds = Credentials.from_service_account_info(
                     json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
@@ -496,32 +492,27 @@ with st.sidebar:
     st.divider()
     min_d = df_raw["Date Only"].dropna().min()
     max_d = df_raw["Date Only"].dropna().max()
-    date_range = st.date_input("Date Range", value=(min_d, max_d),
-                               min_value=min_d, max_value=max_d)
+    date_range = st.date_input("Date Range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
     d_from, d_to = (
-        date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2
-        else (min_d, max_d)
+        date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     )
     if d_from == d_to:
         st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
     st.divider()
-    sel_agents = st.multiselect("Agent Filter",
-                                sorted(df_raw["Assigned By"].dropna().unique()))
-    sel_types  = st.multiselect("Request Type Filter",
-                                sorted(df_raw["Request Type"].dropna().unique()))
+    sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
+    sel_types  = st.multiselect("Request Type Filter", sorted(df_raw["Request Type"].dropna().unique()))
 
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 if sel_types:  df = df[df["Request Type"].isin(sel_types)]
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SETTINGS PANEL (ADMIN CONTROL / ACCOUNT ADJUSTMENTS)
+#  SETTINGS PANEL (إدارة لوحة التحكم للأدمن والموظفين)
 # ══════════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "settings":
     if st.button("← Back to Dashboard"):
         st.session_state.page = "dashboard"; st.rerun()
 
-    # ── ADMIN VIEW SETTINGS PANEL ──
     if is_admin():
         st.markdown("## ⚙️ Admin Control Panel")
         atab1, atab2, atab3 = st.tabs(["👤 My Profile", "🔔 Change & Access Requests", "👥 Manage Dashboard Users"])
@@ -537,7 +528,6 @@ if st.session_state.page == "settings":
                     if new_dn.strip() and new_dn.strip() != urow["display_name"]:
                         users()[me()]["display_name"] = new_dn.strip()
                         _save_store(); st.success("✅ Profile display name updated."); st.rerun()
-                    else: st.warning("No value variation detected.")
             st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown("<div class='section-card'>", unsafe_allow_html=True)
@@ -547,8 +537,7 @@ if st.session_state.page == "settings":
                 new_pw1 = st.text_input("New Secure Password",     type="password")
                 new_pw2 = st.text_input("Confirm Secure Password", type="password")
                 if st.form_submit_button("💾 Update Password", use_container_width=True):
-                    if _hash(old_pw) != urow["password_hash"]:
-                        st.error("❌ Password input incorrect.")
+                    if _hash(old_pw) != urow["password_hash"]: st.error("❌ Password input incorrect.")
                     elif new_pw1 != new_pw2: st.error("❌ Confirmation inputs mismatch.")
                     elif len(new_pw1) < 6:   st.error("❌ Minimum limit 6 characters.")
                     else:
@@ -566,8 +555,7 @@ if st.session_state.page == "settings":
                     if req["type"] == "visitor_access":
                         st.markdown(f"""
                         <div class='req-pending'>
-                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp;
-                            🔑 <b>VISITOR REQUEST</b> &nbsp;|&nbsp;
+                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🔑 <b>VISITOR REQUEST</b> &nbsp;|&nbsp;
                             Full Name: <b>{req['requester']}</b> wants an active account.
                         </div>""", unsafe_allow_html=True)
                         rc1, rc2, rc3 = st.columns([3, 1, 1])
@@ -585,130 +573,59 @@ if st.session_state.page == "settings":
                         val_show  = req["new_value"] if req["type"] == "display_name" else "••••••••"
                         st.markdown(f"""
                         <div class='req-pending'>
-                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp;
-                            👤 <b>{udisp}</b> (@{req['requester']}) &nbsp;|&nbsp;
-                            Wants to adjust <b>{req_label}</b>
-                            {f"→ <b>{val_show}</b>" if req['type']=='display_name' else ""}
+                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 👤 <b>{udisp}</b> &nbsp;|&nbsp; Wants to adjust <b>{req_label}</b>
                         </div>""", unsafe_allow_html=True)
                         rc1, rc2, rc3 = st.columns([3, 1, 1])
                         with rc2:
                             if st.button("✅ Approve", key=f"apr_{req['id']}", use_container_width=True):
-                                approve_request(req["id"])
-                                st.success(f"Approved {req_label} change for {udisp}."); st.rerun()
+                                approve_request(req["id"]); st.success("Approved successfully."); st.rerun()
                         with rc3:
                             if st.button("❌ Reject", key=f"rej_{req['id']}", use_container_width=True):
-                                reject_request(req["id"]); st.warning("Modification request rejected."); st.rerun()
-
-            history = [r for r in requests() if r["status"] != "pending"]
-            if history:
-                st.divider()
-                with st.expander(f"📋 Configuration History Ledger ({len(history)} entries)"):
-                    for req in reversed(history):
-                        udisp     = users().get(req["requester"], {}).get("display_name", req["requester"])
-                        req_label = "Access/Profile Adjustment" if req["type"] == "visitor_access" else ("Display Name" if req["type"] == "display_name" else "Password")
-                        css       = "req-approved" if req["status"] == "approved" else "req-rejected"
-                        icon      = "✅" if req["status"] == "approved" else "❌"
-                        st.markdown(f"""
-                        <div class='{css}'>
-                            {icon} <b>{req['ts']}</b> &nbsp;|&nbsp;
-                            Identity: {udisp if req['type']!='visitor_access' else req['requester']} — Scope: {req_label} — Outcome: <b>{req['status'].upper()}</b>
-                        </div>""", unsafe_allow_html=True)
+                                reject_request(req["id"]); st.warning("Rejected successfully."); st.rerun()
 
         with atab3:
             st.markdown("### 👥 Manage Dashboard Users")
             for uname, urow in list(users().items()):
                 role_icon = "🔑" if urow["role"] == "admin" else "👤"
-                with st.expander(
-                    f"{role_icon} {urow['display_name']} (@{uname}) — {urow['role'].upper()}"
-                    + (f" | Agent Scope: {urow.get('agent_name','—')}" if urow.get('agent_name') else "")
-                ):
-                    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+                with st.expander(f"{role_icon} {urow['display_name']} (@{uname})"):
                     with st.form(f"admin_edit_{uname}"):
-                        eu_dn   = st.text_input("Display Username", value=urow["display_name"],           key=f"dn_{uname}")
-                        eu_an   = st.text_input("Agent Key Mapping (Matches Sheets Column Exactly)",
-                                                value=urow.get("agent_name") or "",                      key=f"an_{uname}")
-                        eu_p1   = st.text_input("Override Password (leave blank to maintain current)", type="password",          key=f"p1_{uname}")
-                        eu_p2   = st.text_input("Confirm Override Password", type="password",          key=f"p2_{uname}")
-                        eu_role = st.selectbox("Assign System Role", ["expert","admin"],
-                                               index=0 if urow["role"] != "admin" else 1,               key=f"rl_{uname}")
+                        eu_dn   = st.text_input("Display Username", value=urow["display_name"], key=f"dn_{uname}")
+                        eu_an   = st.text_input("Agent Key Mapping (Sheets)", value=urow.get("agent_name") or "", key=f"an_{uname}")
+                        eu_p1   = st.text_input("Override Password", type="password", key=f"p1_{uname}")
+                        eu_p2   = st.text_input("Confirm Password", type="password", key=f"p2_{uname}")
+                        eu_role = st.selectbox("Role", ["expert","admin"], index=0 if urow["role"] != "admin" else 1, key=f"rl_{uname}")
                         saved   = st.form_submit_button("💾 Update User Settings", use_container_width=True)
                     if saved:
-                        msgs = []
-                        if eu_dn.strip() and eu_dn.strip() != urow["display_name"]:
-                            users()[uname]["display_name"] = eu_dn.strip(); msgs.append("Name column altered.")
-                        an_val = eu_an.strip() if eu_an.strip() else None
-                        if an_val != urow.get("agent_name"):
-                            users()[uname]["agent_name"] = an_val; msgs.append("Agent column altered.")
-                        if eu_role != urow["role"]:
-                            users()[uname]["role"] = eu_role; msgs.append("System tier role shifted.")
-                        if eu_p1:
-                            if eu_p1 != eu_p2:      st.error("❌ Inputs do not synchronize.")
-                            elif len(eu_p1) < 6:    st.error("❌ Length must be ≥ 6.")
-                            else:
-                                users()[uname]["password_hash"] = _hash(eu_p1); msgs.append("Password forced switch update completed.")
-                        if msgs: _save_store(); st.success("✅ " + " ".join(msgs)); st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── EXPERT ROLE PROFILE SETTINGS ──
+                        if eu_dn.strip(): users()[uname]["display_name"] = eu_dn.strip()
+                        users()[uname]["agent_name"] = eu_an.strip() if eu_an.strip() else None
+                        users()[uname]["role"] = eu_role
+                        if eu_p1 and eu_p1 == eu_p2: users()[uname]["password_hash"] = _hash(eu_p1)
+                        _save_store(); st.success("✅ User settings updated."); st.rerun()
     else:
         st.markdown("## ⚙️ My Profile Settings")
         urow = users()[me()]
-
-        my_pend = [r for r in requests() if r["requester"] == me() and r["status"] == "pending"]
-        my_done = [r for r in requests() if r["requester"] == me() and r["status"] != "pending"]
-
-        if my_pend:
-            st.markdown("**🕐 Your Pending Validation Inbound Queue:**")
-            for req in my_pend:
-                lbl = "Display Name" if req["type"] == "display_name" else "Password"
-                st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> — <b>{lbl}</b> modification awaiting admin verification review.</div>",
-                            unsafe_allow_html=True)
-        for req in my_done[-3:]:
-            lbl  = "Display Name" if req["type"] == "display_name" else "Password"
-            css  = "req-approved" if req["status"] == "approved" else "req-rejected"
-            icon = "✅" if req["status"] == "approved" else "❌"
-            st.markdown(f"<div class='{css}'>{icon} <b>{req['ts']}</b> — <b>{lbl}</b> submission process marked as <b>{req['status'].upper()}</b>.</div>",
-                        unsafe_allow_html=True)
-        st.divider()
-
         st.markdown("<div class='section-card'>", unsafe_allow_html=True)
         st.markdown("### ✏️ Propose Profile Display Name Change")
-        already_dn = any(r["requester"] == me() and r["type"] == "display_name" and r["status"] == "pending"
-                         for r in requests())
-        if already_dn:
-            st.warning("⏳ Name change request is currently pending in queue.")
-        else:
-            with st.form("expert_name_form"):
-                req_name = st.text_input("Proposed Display Name", placeholder=urow["display_name"])
-                if st.form_submit_button("📤 Submit Request to Admin", use_container_width=True):
-                    if not req_name.strip():              st.error("Text content empty.")
-                    elif req_name.strip() == urow["display_name"]: st.warning("Matches current name state.")
-                    else:
-                        push_request(me(), "display_name", req_name.strip())
-                        st.success("✅ Request delivered for management confirmation review."); st.rerun()
+        with st.form("expert_name_form"):
+            req_name = st.text_input("Proposed Display Name", placeholder=urow["display_name"])
+            if st.form_submit_button("📤 Submit Request", use_container_width=True):
+                if req_name.strip(): push_request(me(), "display_name", req_name.strip()); st.success("✅ Request delivered."); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div class='section-card'>", unsafe_allow_html=True)
         st.markdown("### 🔑 Direct Password Adjuster Form")
-        st.caption("Direct update — bypasses admin verification queue immediately.")
         with st.form("expert_pw_direct"):
             cur_pw  = st.text_input("Verify Current Password", type="password")
             new_p1  = st.text_input("Set New Secret Password", type="password")
             new_p2  = st.text_input("Confirm New Secret Password", type="password")
             if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                if _hash(cur_pw) != urow["password_hash"]:
-                    st.error("❌ Validation failure: old parameter incorrect.")
-                elif new_p1 != new_p2:  st.error("❌ Synchronization input error.")
-                elif len(new_p1) < 6:   st.error("❌ Structural threshold error: ≥ 6 parameters required.")
-                else:
-                    users()[me()]["password_hash"] = _hash(new_p1)
-                    _save_store(); st.success("✅ Secret credentials updated successfully.")
+                if _hash(cur_pw) == urow["password_hash"] and new_p1 == new_p2 and len(new_p1) >= 6:
+                    users()[me()]["password_hash"] = _hash(new_p1); _save_store(); st.success("✅ Password updated."); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DASHBOARD CONTROL MODULE HEADER
+#  DASHBOARD HEADER MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
 caption_text = (
     f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
@@ -717,20 +634,12 @@ caption_text = (
 st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
 
-if not is_admin():
-    aname = my_agent_name()
-    st.info(f"👤 Personalized View Context Active"
-            f"{f' — Tracking Expert ID Match: **{aname}**' if aname else ''}.")
-
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
 # ══════════════════════════════════════════════════════════════════════════════════
-tab1, tab2 = st.tabs(["📈 Tab 1: Operational Insights",
-                       "👥 Tab 2: Team Performance and KPIs"])
+tab1, tab2 = st.tabs(["📈 Tab 1: Operational Insights", "👥 Tab 2: Team Performance and KPIs"])
 
-# ══════════════════════════════════════════════════════════════════════════════════
-#  TAB 1 — Operational Insights (Publicly available context for team reference)
-# ══════════════════════════════════════════════════════════════════════════════════
+# ── TAB 1 — Operational Insights (عام ومتاح بالكامل للجميع للرصد التشغيلي) ────────
 with tab1:
     c1, c2 = st.columns(2)
     with c1: esc  = st.checkbox("🔥 Filter: Escalated Cases Only",    value=False, key="t1_esc")
@@ -742,10 +651,8 @@ with tab1:
 
     total = len(dfm)
     ss    = dfm["Status"].astype(str).str.strip()
-    ok    = dfm[ss.str.contains("Closed", na=False, case=False) &
-                ~ss.str.contains("issue", na=False, case=False)].shape[0]
-    issue = dfm[ss.str.contains("Closed", na=False, case=False) &
-                 ss.str.contains("issue", na=False, case=False)].shape[0]
+    ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
+    issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     h_frt = fmt_m(dfm["Response Take (min)"].mean() if not dfm.empty else 0)
     h_aht = fmt_m(dfm["AHT (min)"].mean()           if not dfm.empty else 0)
     h_tat = fmt_m(dfm["Request Take (min)"].mean()   if not dfm.empty else 0)
@@ -769,14 +676,88 @@ with tab1:
         sd["SLA Category"] = "Service Resolution"
         sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
         sb_df = pd.concat([rd, sd], ignore_index=True)
-        t_ord = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
-        c_ord = ["Response Time", "Service Resolution"]
-        sb_df["SLA Category"] = pd.Categorical(sb_df["SLA Category"], categories=c_ord, ordered=True)
-        sb_df["SLA Tier"]     = pd.Categorical(sb_df["SLA Tier"],     categories=t_ord, ordered=True)
-        sb_df = sb_df.sort_values(["SLA Category", "SLA Tier"]).reset_index(drop=True)
-        sb_df["SLA Category"] = sb_df["SLA Category"].astype(str)
-        sb_df["SLA Tier"]     = sb_df["SLA Tier"].astype(str)
-        fig_sb = px.sunburst(
-            sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
-            color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff",
-                                "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c51
+        fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
+            color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
+        st.plotly_chart(fig_sb, use_container_width=True)
+
+    st.divider()
+
+    if not dfm.empty:
+        hrs = dfm.groupby("Hour").agg(Volume=("Request ID", "count"), AR=("Response Take (min)" , "mean")).reset_index()
+        hrs = hrs.set_index("Hour").reindex(range(24)).fillna(0).reset_index()
+        hl = ["12 AM" if h == 0 else ("12 PM" if h == 12 else (f"{h} AM" if h < 12 else f"{h - 12} PM")) for h in hrs["Hour"]]
+        hrs["Hour Label"] = hl
+        fig_r = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#58a6ff", width=2)), secondary_y=False)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
+        st.plotly_chart(fig_r, use_container_width=True)
+
+# ── TAB 2 — Team Performance and KPIs (منظومة عزل العرض الحساسة بالـ ID للموظف) ──
+with tab2:
+    st.markdown("### 👥 Team Performance and KPIs")
+    t2c1, t2c2 = st.columns(2)
+    with t2c1: t2e  = st.checkbox("🔥 Toggle: Escalated Cases Scope",   value=False, key="t2_esc")
+    with t2c2: t2ne = st.checkbox("🟢 Toggle: Non-Escalated Cases Scope", value=False, key="t2_nesc")
+
+    df_t2 = df.copy()
+    if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
+    elif t2ne and not t2e: df_t2 = df_t2[df_t2["Is Email"] == False]
+
+    # عزل حسابات الكروت بالملي بناءً على هوية الـ ID المسجل
+    aname = my_agent_name()
+    df_kpi = df_t2[df_t2["Assigned By"] == aname].copy() if (not is_admin() and aname) else df_t2.copy()
+
+    kpi_ss  = df_kpi["Status"].astype(str).str.strip()
+    kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
+    kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
+
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.markdown(kpi_colored("Total Tickets",      f"{len(df_kpi):,}", "card-total"),     unsafe_allow_html=True)
+    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,}",      "card-completed"), unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,}",     "card-issue"),     unsafe_allow_html=True)
+    k4.markdown(kpi_colored("Avg Response (FRT)", fmt_m(df_kpi["Response Take (min)"].mean() if not df_kpi.empty else 0), "card-frt"), unsafe_allow_html=True)
+    k5.markdown(kpi_colored("Avg Handling (AHT)", fmt_m(df_kpi["AHT (min)"].mean()           if not df_kpi.empty else 0), "card-aht"), unsafe_allow_html=True)
+    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(df_kpi["Request Take (min)"].mean()   if not df_kpi.empty else 0), "card-tat"), unsafe_allow_html=True)
+
+    st.write(""); st.divider()
+    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
+
+    EXCL = ["mohammed shehta", "muhammad shehta", "muhammed shehta", "unassigned"]
+    df_sc = df_t2[~df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(EXCL)].copy()
+
+    if not df_sc.empty:
+        rtl = df_sc["Request Type"].astype(str).str.lower()
+        df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
+        df_sc["_rfb"]   = rtl.str.contains("report|feedback", na=False)
+        df_sc["_c_ok"]  = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
+        df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
+
+        grp = df_sc.groupby("Assigned By")
+        sc  = pd.DataFrame(index=grp.groups.keys())
+        sc.index.name = "Assigned By"
+        sc["Working Days"]         = grp["Date Only"].nunique().astype(int)
+        sc["Tickets Count"]        = grp["Request ID"].count()
+        sc["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
+        sc["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
+        sc["Email Counts"]         = grp["Is Email"].sum().astype(int)
+
+        tavg = sc["Tickets Count"].mean()
+        sc["% Achievement from Target"] = ((sc["Tickets Count"] / tavg * 100).round(1).astype(str) + "%" if tavg > 0 else "0.0%")
+        sc["Service Time"] = grp["Request Take (min)"].mean().apply(fmt_m)
+        sc["Service Quality"] = (grp["_c_ok"].sum() / grp["_c_all"].sum().replace(0,1) * 100).round(1).astype(str) + "%"
+        sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
+
+        # تطبيق الـ Overrides اليدوية للأدمن
+        for i, row in sc.iterrows():
+            ov = overrides().get(row["Expert"], {})
+            for col, val in ov.items(): sc.at[i, col] = val
+
+        team_row = {
+            "Expert": "🏆 Team AVG", "Working Days": round(sc["Working Days"].mean(), 1), "Tickets Count": round(sc["Tickets Count"].mean(), 1),
+            "JHAH Requests": round(sc["JHAH Requests"].mean(), 1), "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1),
+            "Email Counts": round(sc["Email Counts"].mean(), 1), "% Achievement from Target": "100.0%", "Service Time": "00:00:00", "Service Quality": "100.0%"
+        }
+
+        # فلترة الأسطر بناءً على الصلاحيات: الأدمن يرى الكل، الموظف يرى نفسه فقط مع الـ Team AVG
+        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
+        st.dataframe(sc_final, use_container_width=True, hide_index=True)
