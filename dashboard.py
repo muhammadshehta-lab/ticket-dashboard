@@ -27,14 +27,8 @@ def _hash(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def _load_store() -> dict:
-    if _DATA_FILE.exists():
-        try:
-            return json.loads(_DATA_FILE.read_text())
-        except Exception:
-            pass
-    
-    # قاعدة البيانات المحدثة والمغذاة بالأرقام الوظيفية والأسماء القياسية بالملي
-    return {
+    # نقوم ببناء الحسابات الافتراضية الثابتة أولاً
+    default_store = {
         "users": {
             "admin": {
                 "display_name": "Mohammed Shehta",
@@ -88,6 +82,22 @@ def _load_store() -> dict:
         "requests":  [],
         "overrides": {},
     }
+    
+    if _DATA_FILE.exists():
+        try:
+            loaded = json.loads(_DATA_FILE.read_text())
+            # نضمن دمج أي مستخدمين مسجلين جدد أو تعديلات مع الحسابات الافتراضية
+            if "users" in loaded:
+                for k, v in loaded["users"].items():
+                    default_store["users"][k] = v
+            if "requests" in loaded:
+                default_store["requests"] = loaded["requests"]
+            if "overrides" in loaded:
+                default_store["overrides"] = loaded["overrides"]
+        except Exception:
+            pass
+            
+    return default_store
 
 def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
@@ -228,7 +238,7 @@ if "force_onboard" not in st.session_state:
 if "view_request_form" not in st.session_state:
     st.session_state.view_request_form = False
 
-# ── Helpers لربط الحسابات وإدارة العمليات ──────────────────────────────────────────
+# ── Helpers لإدارة العمليات ──────────────────────────────────────────────────────────
 def users()     -> dict: return st.session_state.store["users"]
 def requests()  -> list: return st.session_state.store["requests"]
 def overrides() -> dict: return st.session_state.store["overrides"]
@@ -262,7 +272,7 @@ def approve_request(req_id):
             elif r["type"] == "password":   
                 users()[u]["password_hash"] = _hash(r["new_value"])
             elif r["type"] == "visitor_access":
-                # توليد حساب موظف جديد لايف عند موافقة الأدمن على الزائر
+                # توليد حساب الموظف الجديد عند موافقة الأدمن على الزائر
                 ukey = u.strip().lower().replace(" ", "_")
                 users()[ukey] = {
                     "display_name": u.strip(),
@@ -312,7 +322,7 @@ DAYS_AR = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  LOGIN GATE & ONBOARDING SYSTEM (إصلاح منطق حظر الـ stop)
+#  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
 # ══════════════════════════════════════════════════════════════════════════════════
 if not st.session_state.authenticated:
     st.markdown("""
@@ -331,7 +341,7 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    # نظام الـ First-time login: اسم المستخدم يطابق الباسورد المبدئي
+                    # نظام الـ First-time login: اسم المستخدم يطابق الباسورد المبدئي للـ Expert
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -367,9 +377,9 @@ if not st.session_state.authenticated:
             if st.button("← Back to Login", use_container_width=True):
                 st.session_state.view_request_form = False
                 st.rerun()
-    st.stop()  # يتوقف هنا فقط إذا لم يكن مسجلاً للدخول
+    st.stop()
 
-# ── واجهة الـ Onboarding الإجبارية لتحديث الباسورد فوراً ───────────────────────────
+# شاشة الـ Onboarding الإجبارية لتحديث الباسورد لأول مرة
 if st.session_state.force_onboard:
     st.markdown("## ⚙️ Mandatory Password Update Required")
     st.info("🚨 This is your first login. You must update your password before accessing dashboard metrics.")
@@ -399,7 +409,7 @@ if st.session_state.force_onboard:
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR MODULE
+#  SIDEBAR MODULE & DATA CONNECTION
 # ══════════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("## 💊 Navigation & Filters")
@@ -427,8 +437,10 @@ with st.sidebar:
         st.warning(f"🔔 {pc} pending system change request{'s' if pc > 1 else ''}")
 
     st.success("📡 Live Sync Active")
+    if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
+        st.cache_data.clear()
 
-    # ── دالة سحب البيانات الحية وتصفية الأعمدة والـ AHT ──
+    # ── دالة سحب البيانات وتصفية أعمدة الـ SLA والـ AHT من شيت جوجل ──
     @st.cache_data(ttl=600, show_spinner="Syncing database tables…")
     def load_data():
         try:
@@ -549,7 +561,7 @@ if st.session_state.page == "settings":
             st.markdown("### 🔔 Change & Visitor Access Requests")
             pending = [r for r in requests() if r["status"] == "pending"]
             if not pending:
-                st.info("✅ No system requests pending approval.")
+                st.info("✅ No requests pending approval.")
             else:
                 for req in pending:
                     if req["type"] == "visitor_access":
@@ -562,15 +574,14 @@ if st.session_state.page == "settings":
                         with rc2:
                             if st.button("✅ Approve Access", key=f"apr_vis_{req['id']}", use_container_width=True):
                                 approve_request(req["id"])
-                                st.success(f"Approved and seeded account for visitor: {req['requester']}."); st.rerun()
+                                st.success(f"Approved account for visitor: {req['requester']}."); st.rerun()
                         with rc3:
                             if st.button("❌ Deny Access", key=f"rej_vis_{req['id']}", use_container_width=True):
-                                reject_request(req["id"]); st.warning("Access configuration dropped."); st.rerun()
+                                reject_request(req["id"]); st.warning("Access request rejected."); st.rerun()
                     else:
                         udata_r   = users().get(req["requester"], {})
                         udisp     = udata_r.get("display_name", req["requester"])
                         req_label = "Display Name" if req["type"] == "display_name" else "Password"
-                        val_show  = req["new_value"] if req["type"] == "display_name" else "••••••••"
                         st.markdown(f"""
                         <div class='req-pending'>
                             🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 👤 <b>{udisp}</b> &nbsp;|&nbsp; Wants to adjust <b>{req_label}</b>
@@ -625,7 +636,7 @@ if st.session_state.page == "settings":
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DASHBOARD HEADER MODULE
+#  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
 caption_text = (
     f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
