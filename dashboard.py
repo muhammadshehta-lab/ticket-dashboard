@@ -537,7 +537,7 @@ with st.sidebar:
                     elif "action"   in cl and "take"   in cl: t = "First Action Take"
                     elif "request"  in cl and "take"   in cl: t = "Request Take"
                     elif "email"    in cl or "special" in cl: t = "Is Special Request(By Email)"
-                    elif "hic"      in cl or "insurance" in cl: t = "HIC" # <--- Insurance Filter Support
+                    elif "hic"      in cl or "insurance" in cl: t = "HIC"
                     if t and t not in seen: mp[col] = t; seen.add(t)
                 dft.rename(columns=mp, inplace=True)
                 all_dfs.append(dft)
@@ -548,15 +548,23 @@ with st.sidebar:
                       "Request Take", "Response Take", "First Action Take",
                       "Assigned By", "Is Special Request(By Email)", "HIC"]:
                 if c not in df.columns: df[c] = np.nan
-            
+                
             df["Status"]       = df["Status"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
             df["HIC"]          = df["HIC"].fillna("Unknown")
-            
-            # 🌀 Smart Aggregation logic to match any TCS company dynamically to "TCS"
-            df["HIC"] = df["HIC"].apply(lambda x: "TCS" if "tcs" in str(x).lower() else str(x).strip())
-            
+
+            # 🌀 Smart Aggregation logic to group all TCS, Nextcare, and Globmed sub-companies under their main parent
+            def group_insurance(x):
+                val = str(x).strip()
+                val_lower = val.lower()
+                if "tcs" in val_lower: return "TCS"
+                if "nextcare" in val_lower: return "Nextcare"
+                if "globmed" in val_lower: return "Globmed"
+                return val
+                
+            df["HIC"] = df["HIC"].apply(group_insurance)
+
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
             df["Date Only"]                = dp.dt.date
@@ -586,6 +594,7 @@ with st.sidebar:
     if d_from == d_to:
         st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
     st.divider()
+    
     sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
     sel_types  = st.multiselect("Request Type Filter", sorted(df_raw["Request Type"].dropna().unique()))
     sel_hic    = st.multiselect("HIC (Insurance) Filter", sorted(df_raw["HIC"].dropna().unique()))
