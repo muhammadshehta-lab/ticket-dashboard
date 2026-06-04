@@ -554,17 +554,8 @@ with st.sidebar:
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
             df["HIC"]          = df["HIC"].fillna("Unknown")
 
-            # 🌀 Smart Aggregation logic to group all TCS, Nextcare, and Globmed sub-companies under their main parent
-            def group_insurance(x):
-                val = str(x).strip()
-                val_lower = val.lower()
-                if "tcs" in val_lower: return "TCS"
-                if "nextcare" in val_lower: return "Nextcare"
-                if "globmed" in val_lower: return "Globmed"
-                return val
-                
-            df["HIC"] = df["HIC"].apply(group_insurance)
-
+            # Note: Smart grouping logic removed. HIC names remain as they are in the dataset.
+            
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
             df["Date Only"]                = dp.dt.date
@@ -1078,3 +1069,4 @@ Team Leader"""
                 )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
+# --- END OF SCRIPT ---
