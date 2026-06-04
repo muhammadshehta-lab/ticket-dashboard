@@ -806,10 +806,18 @@ with tab1:
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
 
+        # ── 📅 DAILY TICKETS VOLUME & WORKLOAD TRACKING ──────────────────────────────────────
         st.divider()
-        st.markdown("### 📅 Daily Tickets Volume")
+        st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
-        daily_vol = dfm.groupby("Date Only").size().reset_index(name="Total Tickets")
+        daily_vol = dfm.groupby("Date Only").agg(
+            Total_Tickets=("Request ID", "count"),
+            Active_Agents=("Assigned By", "nunique")
+        ).reset_index()
+        
+        # Calculate Schedule Workload Metric: Tickets per Agent
+        daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"].replace(0, 1)).round(1)
+
         daily_vol["Date DT"] = pd.to_datetime(daily_vol["Date Only"])
         daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
         
@@ -828,25 +836,45 @@ with tab1:
             axis=1
         )
         
-        daily_vol["Color"] = np.where(daily_vol["Total Tickets"] >= 300, "#f59e0b", "#3b82f6")
+        daily_vol["Color"] = np.where(daily_vol["Total_Tickets"] >= 300, "#f59e0b", "#3b82f6")
         
-        fig_d = go.Figure()
+        fig_d = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        # Bar Chart: Total Daily Tickets
         fig_d.add_trace(go.Bar(
             x=daily_vol["Date Label"], 
-            y=daily_vol["Total Tickets"], 
-            text=daily_vol["Total Tickets"],
+            y=daily_vol["Total_Tickets"], 
+            text=daily_vol["Total_Tickets"],
             textposition='auto',
             marker_color=daily_vol["Color"],
-            name="Daily Volume",
+            name="Total Tickets",
             hovertemplate="<b>%{x}</b><br>Tickets: %{y}<extra></extra>"
-        ))
+        ), secondary_y=False)
+        
+        # Line Chart: Workload (Tickets per Agent)
+        fig_d.add_trace(go.Scatter(
+            x=daily_vol["Date Label"],
+            y=daily_vol["Tickets per Agent"],
+            name="Tickets per Agent (Workload)",
+            mode="lines+markers+text",
+            text=daily_vol["Tickets per Agent"],
+            textposition="top center",
+            line=dict(color="#ef4444", width=3, shape="spline"),
+            marker=dict(size=8, color="#ef4444"),
+            hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Active Agents: %{customdata}<extra></extra>",
+            customdata=daily_vol["Active_Agents"]
+        ), secondary_y=True)
+
         fig_d.update_layout(
             **THEME, 
-            height=450, 
+            height=480, 
             xaxis_title="", 
-            yaxis_title="Total Tickets", 
-            hovermode="x unified"
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
+        fig_d.update_yaxes(title_text="Total Tickets Count", secondary_y=False)
+        fig_d.update_yaxes(title_text="Workload Ratio (Tickets/Agent)", secondary_y=True)
+        
         st.plotly_chart(fig_d, use_container_width=True)
 
 # ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
