@@ -853,8 +853,49 @@ with tab2:
         for col, val in team_ov.items():
             team_row[col] = val
 
+        # Base Matrix
         sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
-        st.dataframe(sc_final, use_container_width=True, hide_index=True)
+
+        # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
+        # Calculate Top 3 performers purely for visual display based on Tickets Count
+        rank_df = sc.copy()
+        rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
+        top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
+        
+        gold_exp   = top_experts[0] if len(top_experts) > 0 else None
+        silver_exp = top_experts[1] if len(top_experts) > 1 else None
+        bronze_exp = top_experts[2] if len(top_experts) > 2 else None
+
+        display_df = sc_final.copy()
+        
+        gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
+        silver_disp = f"🥈 {silver_exp}" if silver_exp else None
+        bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
+
+        def add_medals_row(val):
+            if val == gold_exp: return gold_disp
+            if val == silver_exp: return silver_disp
+            if val == bronze_exp: return bronze_disp
+            return val
+            
+        display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
+
+        def style_performers(row):
+            exp = row["Expert"]
+            if exp == "🏆 Team AVG":
+                return ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+            elif exp == gold_disp:
+                return ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+            elif exp == silver_disp:
+                return ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+            elif exp == bronze_disp:
+                return ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+            elif exp == aname and not is_admin():
+                return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+            return [''] * len(row)
+
+        styled_df = display_df.style.apply(style_performers, axis=1)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         # ── MANUAL KPI OVERRIDE EDITOR (Admin Only) ───────────────────────────────────
         if is_admin():
