@@ -724,6 +724,10 @@ if st.session_state.page == "settings":
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
+caption_text = (
+    f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
+    if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
+)
 st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
 
@@ -909,7 +913,7 @@ with tab2:
                 return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
             return [''] * len(row)
 
-        # High visibility text formatting integration for images verbatim mapping (image_5a8b1f.png)
+        # Applying colors AND forcing the Expert column names to be intensely bold
         styled_df = display_df.style.apply(style_performers, axis=1)
         styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
         
@@ -1051,3 +1055,4 @@ Team Leader"""
                 )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
+# --- END OF SCRIPT ---
