@@ -548,7 +548,7 @@ with st.sidebar:
                       "Request Take", "Response Take", "First Action Take",
                       "Assigned By", "Is Special Request(By Email)", "HIC"]:
                 if c not in df.columns: df[c] = np.nan
-                
+            
             df["Status"]       = df["Status"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
@@ -724,10 +724,6 @@ if st.session_state.page == "settings":
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
-caption_text = (
-    f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
-    if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
-)
 st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
 
@@ -913,7 +909,7 @@ with tab2:
                 return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
             return [''] * len(row)
 
-        # Applying colors AND forcing the Expert column names to be intensely bold
+        # High visibility text formatting integration for images verbatim mapping (image_5a8b1f.png)
         styled_df = display_df.style.apply(style_performers, axis=1)
         styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
         
