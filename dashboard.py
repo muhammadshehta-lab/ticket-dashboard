@@ -537,6 +537,7 @@ with st.sidebar:
                     elif "action"   in cl and "take"   in cl: t = "First Action Take"
                     elif "request"  in cl and "take"   in cl: t = "Request Take"
                     elif "email"    in cl or "special" in cl: t = "Is Special Request(By Email)"
+                    elif "hic"      in cl or "insurance" in cl: t = "HIC" # <--- Insurance Filter Support
                     if t and t not in seen: mp[col] = t; seen.add(t)
                 dft.rename(columns=mp, inplace=True)
                 all_dfs.append(dft)
@@ -545,11 +546,17 @@ with st.sidebar:
             df.replace("", np.nan, inplace=True)
             for c in ["Request ID", "Request Date", "Request Type", "Status",
                       "Request Take", "Response Take", "First Action Take",
-                      "Assigned By", "Is Special Request(By Email)"]:
+                      "Assigned By", "Is Special Request(By Email)", "HIC"]:
                 if c not in df.columns: df[c] = np.nan
+            
             df["Status"]       = df["Status"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
+            df["HIC"]          = df["HIC"].fillna("Unknown")
+            
+            # 🌀 Smart Aggregation logic to match any TCS company dynamically to "TCS"
+            df["HIC"] = df["HIC"].apply(lambda x: "TCS" if "tcs" in str(x).lower() else str(x).strip())
+            
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
             df["Date Only"]                = dp.dt.date
@@ -581,10 +588,12 @@ with st.sidebar:
     st.divider()
     sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
     sel_types  = st.multiselect("Request Type Filter", sorted(df_raw["Request Type"].dropna().unique()))
+    sel_hic    = st.multiselect("HIC (Insurance) Filter", sorted(df_raw["HIC"].dropna().unique()))
 
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 if sel_types:  df = df[df["Request Type"].isin(sel_types)]
+if sel_hic:    df = df[df["HIC"].isin(sel_hic)]
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS PANEL
@@ -859,7 +868,6 @@ with tab2:
         sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
         # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
-        # Calculate Top 3 performers purely for visual display based on Tickets Count
         rank_df = sc.copy()
         rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
         top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
@@ -973,12 +981,10 @@ with tab2:
             st.divider()
             st.markdown("#### ✉️ End of Month Achievement Emails")
             
-            # Allow admin to generate an email for any expert (filtering out the Team AVG row)
             email_agents_list = [x for x in display_df["Expert"] if "🏆 Team AVG" not in x]
             selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
             
             if selected_email_agent:
-                # Extract clean data for the selected agent
                 agent_row = display_df[display_df["Expert"] == selected_email_agent].iloc[0]
                 
                 achiev_str = agent_row["% Achievement from Target"]
@@ -987,7 +993,6 @@ with tab2:
                 qual_str = agent_row["Service Quality"]
                 qual_val = float(str(qual_str).replace('%', '')) if isinstance(qual_str, str) else 0
                 
-                # Dynamic Tone/Wording Generation
                 if achiev_val >= 100:
                     perf_word = "outstanding"
                     target_msg = f"You successfully exceeded the team target with a brilliant **{achiev_str}** achievement rate!"
@@ -1005,10 +1010,8 @@ with tab2:
                 else:
                     qual_msg = f"Your service quality sits at **{qual_str}**. Let's focus on accuracy and quality in the upcoming period."
                 
-                # Remove emojis for the actual email text
                 clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
                 
-                # Build Email Body
                 email_body = f"""Dear {clean_name},
 
 I hope this email finds you well. 
@@ -1030,10 +1033,8 @@ Best regards,
 Mohammed Shehta
 Team Leader"""
                 
-                # Render draft
                 st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=350)
                 
-                # Render one-click Email Button
                 subject_encoded = urllib.parse.quote(f"Your Monthly Performance Review - {clean_name}")
                 body_encoded = urllib.parse.quote(email_body)
                 mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
