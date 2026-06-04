@@ -819,9 +819,12 @@ with tab1:
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
 
-        # ── 📅 DAILY TICKETS VOLUME & WORKLOAD TRACKING ──────────────────────────────────────
+        # ── 📅 DAILY TICKETS VOLUME & WORKLOAD TRACKING (Heatmap Gradient) ────────────────
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
+        st.markdown("""
+        **مؤشر ضغط العمل للموظف (Tickets per Agent):** 🟦 طبيعي (≤55) &nbsp; | &nbsp; 🟨 متوسط (56-60) &nbsp; | &nbsp; 🟧 عالي (61-63) &nbsp; | &nbsp; 🟥 شديد (64-70) &nbsp; | &nbsp; 🟫 رهيب (>70)
+        """)
         
         daily_vol = dfm.groupby("Date Only").agg(
             Total_Tickets=("Request ID", "count")
@@ -855,8 +858,21 @@ with tab1:
             axis=1
         )
         
-        # Rush day criteria changed: Tickets per Agent > 60
-        daily_vol["Color"] = np.where(daily_vol["Tickets per Agent"] > 60, "#f97316", "#3b82f6") 
+        # Color Gradient Logic based on Tickets per Agent
+        conditions = [
+            daily_vol["Tickets per Agent"] > 70,
+            daily_vol["Tickets per Agent"] > 63,
+            daily_vol["Tickets per Agent"] > 60,
+            daily_vol["Tickets per Agent"] > 55
+        ]
+        choices = [
+            "#991b1b", # Dark Red (Extreme/رهيب)
+            "#ef4444", # Red (Very High/شديد)
+            "#f97316", # Orange (High/عالي)
+            "#fbbf24"  # Yellow/Amber (Moderate/متوسط)
+        ]
+        # Default is Blue (#3b82f6) for <= 55 (Normal/طبيعي)
+        daily_vol["Color"] = np.select(conditions, choices, default="#3b82f6") 
         
         fig_d = make_subplots(specs=[[{"secondary_y": True}]])
         
@@ -1049,7 +1065,7 @@ with tab2:
             with st.form(f"ov_form_{sel_agent}"):
                 fc1, fc2, fc3, fc4 = st.columns(4)
                 with fc1:
-                    nwd  = number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
+                    nwd  = st.number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
                     ntc  = st.number_input("Tickets Count", min_value=0, value=gv("Tickets Count", int), step=1)
                 with fc2:
                     njh  = st.number_input("JHAH Requests", min_value=0, value=gv("JHAH Requests", int), step=1)
