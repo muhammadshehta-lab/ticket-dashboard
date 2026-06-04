@@ -813,7 +813,20 @@ with tab1:
         daily_vol["Date DT"] = pd.to_datetime(daily_vol["Date Only"])
         daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
         
-        daily_vol["Date Label"] = daily_vol["Date DT"].dt.strftime('%b %d') + "<br>(" + daily_vol["Day Name"] + ")"
+        DAY_COLORS = {
+            "Saturday": "#dc2626", # Red
+            "Sunday": "#2563eb",   # Blue
+            "Monday": "#16a34a",   # Green
+            "Tuesday": "#d97706",  # Orange
+            "Wednesday": "#9333ea",# Purple
+            "Thursday": "#0891b2", # Teal
+            "Friday": "#475569"    # Slate
+        }
+        
+        daily_vol["Date Label"] = daily_vol.apply(
+            lambda r: f"{r['Date DT'].strftime('%b %d')}<br><span style='color:{DAY_COLORS.get(r['Day Name'], '#0f172a')}'><b>({r['Day Name']})</b></span>", 
+            axis=1
+        )
         
         daily_vol["Color"] = np.where(daily_vol["Total Tickets"] >= 300, "#f59e0b", "#3b82f6")
         
