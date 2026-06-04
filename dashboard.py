@@ -691,13 +691,29 @@ if st.session_state.page == "settings":
                         eu_p1   = st.text_input("Override Password", type="password", key=f"p1_{uname}")
                         eu_p2   = st.text_input("Confirm Password", type="password", key=f"p2_{uname}")
                         eu_role = st.selectbox("Role", ["expert","admin"], index=0 if urow["role"] != "admin" else 1, key=f"rl_{uname}")
-                        saved   = st.form_submit_button("💾 Update User Settings", use_container_width=True)
+                        
+                        col1, col2 = st.columns([3, 1])
+                        with col1: saved = st.form_submit_button("💾 Update User Settings", use_container_width=True)
+                        with col2: deleted = st.form_submit_button("🗑️ Delete User", use_container_width=True)
+                        
                     if saved:
                         if eu_dn.strip(): users()[uname]["display_name"] = eu_dn.strip()
                         users()[uname]["agent_name"] = eu_an.strip() if eu_an.strip() else None
                         users()[uname]["role"] = eu_role
                         if eu_p1 and eu_p1 == eu_p2: users()[uname]["password_hash"] = _hash(eu_p1)
                         _save_store(); st.success("✅ User settings updated."); st.rerun()
+                        
+                    if deleted:
+                        if uname == "admin":
+                            st.error("❌ Cannot delete the primary admin account!")
+                        elif uname == me():
+                            st.error("❌ You cannot delete your own account while logged in!")
+                        else:
+                            users().pop(uname)
+                            _save_store()
+                            st.success(f"🗑️ Account for {uname} has been successfully revoked and deleted.")
+                            time.sleep(1)
+                            st.rerun()
     else:
         st.markdown("## ⚙️ My Profile Settings")
         urow = users()[me()]
