@@ -393,6 +393,19 @@ DAYS_AR = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════════
+#  OFFICIAL EXPERTS WHITELIST
+# ══════════════════════════════════════════════════════════════════════════════════
+OFFICIAL_EXPERTS = [
+    "Ahmed El-Kholy", 
+    "Ahmed Kadry", 
+    "Amr El-Sayed", 
+    "Eslam Ramadan", 
+    "Mohamed Abdelmageed", 
+    "Mohamed Khalifa", 
+    "Yahia Ali Shafei"
+]
+
+# ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
 # ══════════════════════════════════════════════════════════════════════════════════
 if not st.session_state.authenticated:
@@ -811,9 +824,15 @@ with tab1:
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
         daily_vol = dfm.groupby("Date Only").agg(
-            Total_Tickets=("Request ID", "count"),
-            Active_Agents=("Assigned By", "nunique")
+            Total_Tickets=("Request ID", "count")
         ).reset_index()
+        
+        # Calculate Active Agents strictly from the official team whitelist to prevent skewed workload ratios
+        agents_df = dfm[dfm["Assigned By"].isin(OFFICIAL_EXPERTS)]
+        active_df = agents_df.groupby("Date Only").agg(Active_Agents=("Assigned By", "nunique")).reset_index()
+        
+        daily_vol = pd.merge(daily_vol, active_df, on="Date Only", how="left")
+        daily_vol["Active_Agents"] = daily_vol["Active_Agents"].fillna(0)
         
         # Calculate Schedule Workload Metric: Tickets per Agent
         daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"].replace(0, 1)).round(1)
@@ -910,8 +929,9 @@ with tab2:
     st.write(""); st.divider()
     st.markdown("### 📊 Expert Performance Scorecard Dashboard")
 
-    EXCL = ["mohammed shehta", "muhammad shehta", "muhammed shehta", "unassigned"]
-    df_sc = df_t2[~df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(EXCL)].copy()
+    # Only include Official Experts in the Team Performance matrix to ensure 100% accuracy
+    OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
+    df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
 
     if not df_sc.empty:
         rtl = df_sc["Request Type"].astype(str).str.lower()
