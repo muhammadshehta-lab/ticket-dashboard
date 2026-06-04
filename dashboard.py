@@ -553,8 +553,6 @@ with st.sidebar:
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
             df["HIC"]          = df["HIC"].fillna("Unknown")
-
-            # Note: Smart grouping logic removed. HIC names remain as they are in the dataset.
             
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
@@ -806,6 +804,23 @@ with tab1:
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
+
+        st.divider()
+        
+        st.markdown("### 📅 Daily Tickets Volume")
+        daily_vol = dfm.groupby("Date Only").size().reset_index(name="Total Tickets")
+        
+        fig_d = go.Figure()
+        fig_d.add_trace(go.Bar(
+            x=daily_vol["Date Only"], 
+            y=daily_vol["Total Tickets"], 
+            text=daily_vol["Total Tickets"],
+            textposition='auto',
+            marker_color="#3b82f6",
+            name="Daily Volume"
+        ))
+        fig_d.update_layout(**THEME, height=400, xaxis_title="Date", yaxis_title="Total Tickets", hovermode="x unified")
+        st.plotly_chart(fig_d, use_container_width=True)
 
 # ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
 with tab2:
