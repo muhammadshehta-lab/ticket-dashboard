@@ -432,7 +432,7 @@ if not st.session_state.authenticated:
                 st.rerun()
         else:
             st.markdown("### 📝 Request Admin Authorization")
-            visitor_name = text_input("Enter Your Full Name", placeholder="e.g. Ahmed Ali")
+            visitor_name = st.text_input("Enter Your Full Name", placeholder="e.g. Ahmed Ali")
             
             if st.button("📤 Submit Access Request", use_container_width=True):
                 if visitor_name.strip():
@@ -553,7 +553,7 @@ with st.sidebar:
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
             df["HIC"]          = df["HIC"].fillna("Unknown")
-
+            
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
             df["Date Only"]                = dp.dt.date
@@ -795,6 +795,7 @@ with tab1:
     st.divider()
 
     if not dfm.empty:
+        st.markdown("### ⏳ Ticket Flow Rate Over Daily Hours")
         hrs = dfm.groupby("Hour").agg(Volume=("Request ID", "count"), AR=("Response Take (min)" , "mean")).reset_index()
         hrs = hrs.set_index("Hour").reindex(range(24)).fillna(0).reset_index()
         hl = ["12 AM" if h == 0 else ("12 PM" if h == 12 else (f"{h} AM" if h < 12 else f"{h - 12} PM")) for h in hrs["Hour"]]
@@ -805,7 +806,6 @@ with tab1:
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
 
-        # ── 📅 DAILY TICKETS VOLUME CHART ────────────────────────────────────────────────
         st.divider()
         st.markdown("### 📅 Daily Tickets Volume")
         
@@ -813,14 +813,11 @@ with tab1:
         daily_vol["Date DT"] = pd.to_datetime(daily_vol["Date Only"])
         daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
         
-        # HTML line break for Plotly labels (Date on top, Day Name below)
         daily_vol["Date Label"] = daily_vol["Date DT"].dt.strftime('%b %d') + "<br>(" + daily_vol["Day Name"] + ")"
         
-        # Identify the highest record within each week to color it differently
         daily_vol["YearWeek"] = daily_vol["Date DT"].dt.strftime('%Y-%V')
         weekly_max = daily_vol.groupby("YearWeek")["Total Tickets"].transform('max')
         
-        # Color: Golden Orange (#f59e0b) for weekly peak, standard Blue (#3b82f6) for regular days
         daily_vol["Color"] = np.where(daily_vol["Total Tickets"] == weekly_max, "#f59e0b", "#3b82f6")
         
         fig_d = go.Figure()
