@@ -855,7 +855,8 @@ with tab1:
             axis=1
         )
         
-        daily_vol["Color"] = np.where(daily_vol["Total_Tickets"] >= 300, "#f59e0b", "#3b82f6")
+        # Rush day criteria changed: Tickets per Agent > 60
+        daily_vol["Color"] = np.where(daily_vol["Tickets per Agent"] > 60, "#f97316", "#3b82f6") 
         
         fig_d = make_subplots(specs=[[{"secondary_y": True}]])
         
@@ -1048,7 +1049,7 @@ with tab2:
             with st.form(f"ov_form_{sel_agent}"):
                 fc1, fc2, fc3, fc4 = st.columns(4)
                 with fc1:
-                    nwd  = st.number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
+                    nwd  = number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
                     ntc  = st.number_input("Tickets Count", min_value=0, value=gv("Tickets Count", int), step=1)
                 with fc2:
                     njh  = st.number_input("JHAH Requests", min_value=0, value=gv("JHAH Requests", int), step=1)
