@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import json, hashlib, time, pathlib
+import json, hashlib, time, pathlib, urllib.parse
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
@@ -271,7 +271,7 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 
 .section-card { background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
 
-/* Dataframe Row Typography Overrides */
+/* Dataframe Row Typography Overrides - Making Headers Exta Bold */
 div[data-testid="stDataFrame"] table {
     font-size: 1.05rem !important;
 }
@@ -279,6 +279,8 @@ div[data-testid="stDataFrame"] th {
     font-weight: 900 !important;
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
+    font-size: 1.05rem !important;
+    border-bottom: 2px solid #cbd5e1 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -894,7 +896,10 @@ with tab2:
                 return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
             return [''] * len(row)
 
+        # Applying colors AND forcing the Expert column names to be intensely bold
         styled_df = display_df.style.apply(style_performers, axis=1)
+        styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+        
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         # ── MANUAL KPI OVERRIDE EDITOR (Admin Only) ───────────────────────────────────
@@ -963,5 +968,80 @@ with tab2:
                 st.write("")
                 with st.expander("🗂️ Active Metric Overrides"):
                     st.json(active_ovs)
+            
+            # ── ✉️ END OF MONTH EMAIL GENERATOR ──────────────────────────────────────────
+            st.divider()
+            st.markdown("#### ✉️ End of Month Achievement Emails")
+            
+            # Allow admin to generate an email for any expert (filtering out the Team AVG row)
+            email_agents_list = [x for x in display_df["Expert"] if "🏆 Team AVG" not in x]
+            selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
+            
+            if selected_email_agent:
+                # Extract clean data for the selected agent
+                agent_row = display_df[display_df["Expert"] == selected_email_agent].iloc[0]
+                
+                achiev_str = agent_row["% Achievement from Target"]
+                achiev_val = float(str(achiev_str).replace('%', '')) if isinstance(achiev_str, str) else 0
+                
+                qual_str = agent_row["Service Quality"]
+                qual_val = float(str(qual_str).replace('%', '')) if isinstance(qual_str, str) else 0
+                
+                # Dynamic Tone/Wording Generation
+                if achiev_val >= 100:
+                    perf_word = "outstanding"
+                    target_msg = f"You successfully exceeded the team target with a brilliant **{achiev_str}** achievement rate!"
+                elif achiev_val >= 80:
+                    perf_word = "solid"
+                    target_msg = f"You reached a solid **{achiev_str}** of the target. Great effort, and let's push for 100% next month!"
+                else:
+                    perf_word = "developing"
+                    target_msg = f"You achieved **{achiev_str}** of the target. We believe in your potential and are here to support you in hitting higher milestones next month."
+                
+                if qual_val >= 95:
+                    qual_msg = f"Your service quality is top-tier at **{qual_str}**. Keep up the flawless work!"
+                elif qual_val >= 85:
+                    qual_msg = f"Your service quality is strong at **{qual_str}**."
+                else:
+                    qual_msg = f"Your service quality sits at **{qual_str}**. Let's focus on accuracy and quality in the upcoming period."
+                
+                # Remove emojis for the actual email text
+                clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
+                
+                # Build Email Body
+                email_body = f"""Dear {clean_name},
+
+I hope this email finds you well. 
+
+As we wrap up the month, I wanted to personally share your performance metrics and highlight your {perf_word} contributions to the team.
+
+📊 Your Monthly Performance Overview:
+- Total Tickets Resolved: {agent_row['Tickets Count']}
+- Working Days: {agent_row['Working Days']}
+- Service Time (Avg): {agent_row['Service Time']}
+
+🎯 Targets & Quality:
+{target_msg}
+{qual_msg}
+
+Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
+
+Best regards,
+Mohammed Shehta
+Team Leader"""
+                
+                # Render draft
+                st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=350)
+                
+                # Render one-click Email Button
+                subject_encoded = urllib.parse.quote(f"Your Monthly Performance Review - {clean_name}")
+                body_encoded = urllib.parse.quote(email_body)
+                mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
+                
+                st.markdown(
+                    f'<a href="{mailto_link}" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#1d4ed8; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem;">'
+                    f'📧 Open in Default Email Client</a>', 
+                    unsafe_allow_html=True
+                )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
