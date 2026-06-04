@@ -795,7 +795,7 @@ with tab1:
     st.divider()
 
     if not dfm.empty:
-        st.markdown("### ⏳ Ticket Flow Rate Over Daily Hours")
+        st.markdown("### ⏳ Ticket flow rate over daily hours")
         hrs = dfm.groupby("Hour").agg(Volume=("Request ID", "count"), AR=("Response Take (min)" , "mean")).reset_index()
         hrs = hrs.set_index("Hour").reindex(range(24)).fillna(0).reset_index()
         hl = ["12 AM" if h == 0 else ("12 PM" if h == 12 else (f"{h} AM" if h < 12 else f"{h - 12} PM")) for h in hrs["Hour"]]
@@ -815,10 +815,7 @@ with tab1:
         
         daily_vol["Date Label"] = daily_vol["Date DT"].dt.strftime('%b %d') + "<br>(" + daily_vol["Day Name"] + ")"
         
-        daily_vol["YearWeek"] = daily_vol["Date DT"].dt.strftime('%Y-%V')
-        weekly_max = daily_vol.groupby("YearWeek")["Total Tickets"].transform('max')
-        
-        daily_vol["Color"] = np.where(daily_vol["Total Tickets"] == weekly_max, "#f59e0b", "#3b82f6")
+        daily_vol["Color"] = np.where(daily_vol["Total Tickets"] >= 300, "#f59e0b", "#3b82f6")
         
         fig_d = go.Figure()
         fig_d.add_trace(go.Bar(
