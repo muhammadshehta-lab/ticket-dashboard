@@ -283,7 +283,7 @@ div[data-testid="stDataFrame"] th {
 </style>
 """, unsafe_allow_html=True)
 
-# 👥 مزامنة ألوان قوالب الرسوم مع الخلفية الكريمية (Puff Theme)
+# 👥 Plotly components template engine synced configuration variables
 THEME = dict(
     template="plotly_white",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -507,7 +507,7 @@ with st.sidebar:
     if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
         st.cache_data.clear()
 
-    # ── دالة جلب البيانات من شيت جوجل ──
+    # ── دالة جلب البيانات من شيت جوجل وتصحيح الخطأ ──
     @st.cache_data(ttl=600, show_spinner="Syncing database tables…")
     def load_data():
         try:
@@ -527,7 +527,8 @@ with st.sidebar:
                 mp = {}; seen = set()
                 for col in dft.columns:
                     cl = col.lower(); t = None
-                    if   "id"       in el and "req"    in cl: t = "Request ID"
+                    # ✅ تم تصحيح الخطأ الإملائي هنا من el إلى cl
+                    if   "id"       in cl and "req"    in cl: t = "Request ID"
                     elif "date"     in cl:                     t = "Request Date"
                     elif "type"     in cl:                     t = "Request Type"
                     elif "status"   in cl:                     t = "Status"
@@ -542,13 +543,10 @@ with st.sidebar:
             if not all_dfs: return pd.DataFrame()
             df = pd.concat(all_dfs, ignore_index=True, sort=False)
             df.replace("", np.nan, inplace=True)
-            
-            # ✅ [تم الإصلاح] الفلترة الصحيحة وتعبئة مصفوفة الحالات دون انقطاع
             for c in ["Request ID", "Request Date", "Request Type", "Status",
                       "Request Take", "Response Take", "First Action Take",
                       "Assigned By", "Is Special Request(By Email)"]:
                 if c not in df.columns: df[c] = np.nan
-                
             df["Status"]       = df["Status"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
@@ -589,7 +587,7 @@ if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 if sel_types:  df = df[df["Request Type"].isin(sel_types)]
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SETTINGS PANEL (إدارة لوحة التحكم للأدمن والموظفين)
+#  SETTINGS PANEL
 # ══════════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "settings":
     if st.button("← Back to Dashboard"):
@@ -708,6 +706,10 @@ if st.session_state.page == "settings":
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
+caption_text = (
+    f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
+    if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
+)
 st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
 
@@ -754,7 +756,7 @@ with tab1:
         sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
         sb_df = pd.concat([rd, sd], ignore_index=True)
         
-        # مصفوفة السنبورست المحدثة لإظهار الاسم والعدد والنسبة بداخل مساحات الرسم مباشرة
+        # 🌀 مصفوفة السنبورست المحدثة لإظهار الاسم والعدد والنسبة بداخل مساحات الرسم مباشرة
         fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
             color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
         
@@ -778,7 +780,7 @@ with tab1:
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
 
-# ── TAB 2 — Team Performance and KPIs (منظومة عزل العرض الحساسة بالـ ID للموظف) ──
+# ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
 with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
     t2c1, t2c2 = st.columns(2)
