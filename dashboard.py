@@ -754,10 +754,13 @@ with tab1:
     h_aht = fmt_m(dfm["AHT (min)"].mean()           if not dfm.empty else 0)
     h_tat = fmt_m(dfm["Request Take (min)"].mean()   if not dfm.empty else 0)
 
+    ok_pct = (ok / total * 100) if total > 0 else 0
+    issue_pct = (issue / total * 100) if total > 0 else 0
+
     a, b, c_, d, e, f_ = st.columns(6)
     a.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total"),     unsafe_allow_html=True)
-    b.markdown(kpi_colored("Closed Completed",   f"{ok:,}",    "card-completed"), unsafe_allow_html=True)
-    c_.markdown(kpi_colored("Closed with Issue", f"{issue:,}", "card-issue"),     unsafe_allow_html=True)
+    b.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed"), unsafe_allow_html=True)
+    c_.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue"),     unsafe_allow_html=True)
     d.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
     e.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
     f_.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
@@ -811,14 +814,18 @@ with tab2:
     aname = my_agent_name()
     df_kpi = df_t2[df_t2["Assigned By"] == aname].copy() if (not is_admin() and aname) else df_t2.copy()
 
+    total_kpi = len(df_kpi)
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
 
+    kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
+    kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
+
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{len(df_kpi):,}", "card-total"),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,}",      "card-completed"), unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,}",     "card-issue"),     unsafe_allow_html=True)
+    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total"),     unsafe_allow_html=True)
+    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1rem; opacity:0.8'>({kpi_ok_pct:.1f}%)</span>",      "card-completed"), unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1rem; opacity:0.8'>({kpi_iss_pct:.1f}%)</span>",     "card-issue"),     unsafe_allow_html=True)
     k4.markdown(kpi_colored("Avg Response (FRT)", fmt_m(df_kpi["Response Take (min)"].mean() if not df_kpi.empty else 0), "card-frt"), unsafe_allow_html=True)
     k5.markdown(kpi_colored("Avg Handling (AHT)", fmt_m(df_kpi["AHT (min)"].mean()           if not df_kpi.empty else 0), "card-aht"), unsafe_allow_html=True)
     k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(df_kpi["Request Take (min)"].mean()   if not df_kpi.empty else 0), "card-tat"), unsafe_allow_html=True)
@@ -1055,4 +1062,3 @@ Team Leader"""
                 )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
-# --- END OF SCRIPT ---
