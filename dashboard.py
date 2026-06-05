@@ -587,7 +587,7 @@ if st.session_state.force_onboard:
 #  SIDEBAR MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## 💊 Navigation & Filters")
+    st.markdown("## Approvals Team Dashboard")
 
     badge_cls = "badge-admin" if is_admin() else "badge-expert"
     badge_txt = "ADMIN" if is_admin() else "EXPERT"
@@ -728,9 +728,10 @@ with st.sidebar:
     # This key ensures overrides are bound to the specific date range selected
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
-    sel_types  = st.multiselect("Request Type Filter", sorted(df_raw["Request Type"].dropna().unique()))
-    sel_hic    = st.multiselect("HIC (Insurance) Filter", sorted(df_raw["HIC"].dropna().unique()))
+    # ── MODIFIED FILTER NAMES ──
+    sel_agents = st.multiselect("Expert Name", sorted(df_raw["Assigned By"].dropna().unique()))
+    sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
+    sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
