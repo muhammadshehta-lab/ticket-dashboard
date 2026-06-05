@@ -889,6 +889,14 @@ with tab1:
         
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
         
+        # ALL words that mean an agent is NOT WORKING A REGULAR SHIFT
+        EXCLUSION_LIST = [
+            'off', 'اوف', 'أوف', 'راحة', 
+            'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 
+            'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي',
+            'nan', 'none'
+        ]
+
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty:
                 return -1 # Force fallback if Date is fundamentally absent from Roster
@@ -900,8 +908,8 @@ with tab1:
                 row_vals_str = " ".join([str(x).strip().lower() for x in row.values])
                 if any(tid in row_vals_str for tid in tracked_ids):
                     cell_val = str(row.get(col_name, "")).strip().lower()
-                    # Any value that is not an explicit off/leave marker is considered WORKING
-                    if cell_val and cell_val not in ['off', 'اوف', 'أوف', 'راحة', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'nan', 'none']:
+                    # Any value that is not an explicit off/leave/resign marker is considered WORKING
+                    if cell_val and cell_val not in EXCLUSION_LIST:
                         working_count += 1
             return working_count
         
