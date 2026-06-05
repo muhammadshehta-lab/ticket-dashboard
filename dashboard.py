@@ -1003,6 +1003,39 @@ with tab2:
         sc["Service Quality"] = (grp["_c_ok"].sum() / grp["_c_all"].sum().replace(0,1) * 100).round(1).astype(str) + "%"
         sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
 
+        # ── EXTRACT ROSTER DATA (Leaves & Off Days) ──────────────────────────────────
+        roster_counts = {}
+        if not df_roster.empty:
+            # Convert all cells to lowercase string to ensure safe matching
+            df_r_str = df_roster.astype(str).apply(lambda col: col.str.lower().str.strip())
+            
+            for exp in OFFICIAL_EXPERTS:
+                exp_lower = exp.lower()
+                off_c, ann_c, cas_c = 0, 0, 0
+                
+                # Check if the expert's name appears anywhere in the row
+                mask = df_r_str.apply(lambda row: exp_lower in row.values, axis=1)
+                exp_rows = df_r_str[mask]
+                
+                if not exp_rows.empty:
+                    # Flatten all cells in matched rows into a single list
+                    vals = exp_rows.values.flatten()
+                    
+                    off_c = sum(1 for v in vals if v == 'off')
+                    ann_c = sum(1 for v in vals if v == 'annual')
+                    cas_c = sum(1 for v in vals if v in ['casual', 'عارضة'])
+                
+                roster_counts[exp] = {
+                    "Off Days": off_c,
+                    "Annual Leaves": ann_c,
+                    "Casual Leaves": cas_c
+                }
+
+        # Merge extracted Roster details into the Scorecard DataFrame
+        sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
+        sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
+        sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
+
         # Apply system administrative manual data overrides
         for i, row in sc.iterrows():
             ov = overrides().get(row["Expert"], {})
@@ -1014,7 +1047,10 @@ with tab2:
             "Tickets Count": round(sc["Tickets Count"].mean(), 1),
             "JHAH Requests": round(sc["JHAH Requests"].mean(), 1), 
             "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1),
-            "Email Counts": round(sc["Email Counts"].mean(), 1), 
+            "Email Counts": round(sc["Email Counts"].mean(), 1),
+            "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
+            "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
+            "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
             "% Achievement from Target": "100.0%", 
             "Service Time": "00:00:00", 
             "Service Quality": "100.0%"
@@ -1107,6 +1143,15 @@ with tab2:
                 with fc4:
                     nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time", str))
                     nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality", str))
+
+                st.markdown("**🌴 Leaves & Off Days**")
+                lc1, lc2, lc3 = st.columns(3)
+                with lc1:
+                    noff = st.number_input("Off Days", min_value=0, value=gv("Off Days", int), step=1)
+                with lc2:
+                    nann = st.number_input("Annual Leaves", min_value=0, value=gv("Annual Leaves", int), step=1)
+                with lc3:
+                    ncas = st.number_input("Casual Leaves", min_value=0, value=gv("Casual Leaves", int), step=1)
                 
                 sc_col, rc_col = st.columns(2)
                 with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
@@ -1116,6 +1161,7 @@ with tab2:
                 overrides()[sel_agent] = {
                     "Working Days": nwd, "Tickets Count": ntc, "JHAH Requests": njh,
                     "Reporting & Feedback": nrfb, "Email Counts": nem,
+                    "Off Days": noff, "Annual Leaves": nann, "Casual Leaves": ncas,
                     "% Achievement from Target": nach,
                     "Service Time": nst, "Service Quality": nsq,
                 }
@@ -1183,6 +1229,9 @@ As we wrap up the month, I wanted to personally share your performance metrics a
 - Total Tickets Resolved: {agent_row['Tickets Count']}
 - Working Days: {agent_row['Working Days']}
 - Service Time (Avg): {agent_row['Service Time']}
+- Off Days Taken: {agent_row.get('Off Days', 0)}
+- Casual Leaves: {agent_row.get('Casual Leaves', 0)}
+- Annual Leaves: {agent_row.get('Annual Leaves', 0)}
 
 🎯 Targets & Quality:
 {target_msg}
