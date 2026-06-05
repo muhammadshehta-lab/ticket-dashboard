@@ -871,14 +871,20 @@ with tab1:
             Total_Tickets=("Request ID", "count")
         ).reset_index()
         
-        # 1. Map dates to columns in df_roster to get SCHEDULED agents
+        # 1. Map dates to columns in df_roster using a highly robust aggressive regex parser
         roster_date_map = {}
         if not df_roster.empty:
             for col in df_roster.columns:
-                match = re.search(r'\d{1,2}-[a-zA-Z]+-\d{4}', str(col))
+                col_str = str(col).strip()
+                # Remove day names to help parser focus strictly on the numeric date
+                clean_col = re.sub(r'(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)', '', col_str).strip()
+                
+                # Regex matches patterns like 22-May-2026, 22-05-2026, 22/5/2026, 22.05.2026, etc.
+                match = re.search(r'(\d{1,2}[-/ .]+[a-zA-Z0-9]+[-/ .]+\d{2,4})', clean_col)
                 if match:
                     try:
-                        dt = pd.to_datetime(match.group()).date()
+                        # dayfirst=True is crucial because dates like 22-05 are clearly Day-Month
+                        dt = pd.to_datetime(match.group(1), dayfirst=True).date()
                         roster_date_map[dt] = col
                     except: pass
         
@@ -886,33 +892,45 @@ with tab1:
         
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty:
-                return 0
+                return -1 # Indicator that roster data for this exact date is missing from the sheet
+            
             col_name = roster_date_map[target_date]
             working_count = 0
             
             for index, row in df_roster.iterrows():
-                row_str = [str(x).strip().lower() for x in row.values]
-                if any(tid in row_str for tid in tracked_ids):
+                # Join entire row into a string to safely catch the ID without formatting issues
+                row_vals_str = " ".join([str(x).strip().lower() for x in row.values])
+                
+                # Check if any of our known IDs exist anywhere in this row
+                if any(tid in row_vals_str for tid in tracked_ids):
                     cell_val = str(row[col_name]).strip().lower()
-                    # Any value that is not explicitly off/leave is considered working
-                    if cell_val and cell_val not in ['off', 'annual', 'casual', 'عارضة', 'عارضه']:
+                    
+                    # If cell has ANY value and it's not a known "off" string, count as working
+                    if cell_val and cell_val not in ['off', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation']:
                         working_count += 1
             return working_count
         
         daily_vol["Scheduled_Agents"] = daily_vol["Shift Date"].apply(get_scheduled_agents)
         
-        # 2. Fallback to actual agents logging tickets if roster is missing for that day
+        # 2. Fallback to actual agents logging tickets ONLY IF roster date is completely missing (-1)
         agents_df = dfm_shift[dfm_shift["Assigned By"].isin(OFFICIAL_EXPERTS)]
         active_df = agents_df.groupby("Shift Date").agg(Actual_Agents=("Assigned By", "nunique")).reset_index()
         
         daily_vol = pd.merge(daily_vol, active_df, on="Shift Date", how="left")
         daily_vol["Actual_Agents"] = daily_vol["Actual_Agents"].fillna(0)
         
-        # 3. Final Active Agents assignment: Use Scheduled roster if available, otherwise actual tickets logged
-        daily_vol["Active_Agents"] = np.where(daily_vol["Scheduled_Agents"] > 0, daily_vol["Scheduled_Agents"], daily_vol["Actual_Agents"])
+        # 3. Final Active Agents assignment (Strictly forces Roster value if it exists, even if 0 or 1)
+        daily_vol["Active_Agents"] = np.where(
+            daily_vol["Scheduled_Agents"] != -1, 
+            daily_vol["Scheduled_Agents"], 
+            daily_vol["Actual_Agents"]
+        )
+        
+        # Prevent division by zero if roster literally said 0 agents
+        daily_vol["Active_Agents"] = daily_vol["Active_Agents"].replace(0, 1)
         
         # Calculate Schedule Workload Metric: Tickets per Agent
-        daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"].replace(0, 1)).round(1)
+        daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"]).round(1)
 
         daily_vol["Date DT"] = pd.to_datetime(daily_vol["Shift Date"])
         daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
@@ -1052,37 +1070,33 @@ with tab2:
             # 1. Identify columns that fall strictly within the selected date range
             valid_roster_cols = []
             for col in df_roster.columns:
-                # Regex looks for patterns like: 11-December-2025, 12-Jan-2026, etc.
-                match = re.search(r'\d{1,2}-[a-zA-Z]+-\d{4}', str(col))
+                col_str = str(col).strip()
+                clean_col = re.sub(r'(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)', '', col_str).strip()
+                # Robust regex match for dates
+                match = re.search(r'(\d{1,2}[-/ .]+[a-zA-Z0-9]+[-/ .]+\d{2,4})', clean_col)
                 if match:
                     try:
-                        col_date = pd.to_datetime(match.group()).date()
+                        col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
                         if d_from <= col_date <= d_to:
                             valid_roster_cols.append(col)
-                    except:
-                        pass
-            
-            # 2. Convert all cells to lowercase string to ensure safe matching
-            df_r_str = df_roster.astype(str).apply(lambda col: col.str.lower().str.strip())
+                    except: pass
             
             for exp in OFFICIAL_EXPERTS:
                 exp_id = EXPERT_ID_MAP.get(exp, "")
                 off_c, ann_c, cas_c = 0, 0, 0
                 
                 if exp_id:
-                    # Find any row that contains this ID exactly
-                    # Strip spaces from the comparison ID to ensure perfect match
-                    mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip() for x in row.values], axis=1)
-                    exp_rows = df_r_str[mask]
+                    working_count = 0
+                    for index, row in df_roster.iterrows():
+                        row_vals_str = " ".join([str(x).strip().lower() for x in row.values])
+                        if str(exp_id).strip() in row_vals_str:
+                            if valid_roster_cols:
+                                vals = row[valid_roster_cols].values.flatten()
+                                vals_lower = [str(v).strip().lower() for v in vals]
+                                off_c = sum(1 for v in vals_lower if v == 'off')
+                                ann_c = sum(1 for v in vals_lower if v == 'annual')
+                                cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
                     
-                    if not exp_rows.empty and valid_roster_cols:
-                        # Extract data ONLY from the columns that matched our date range
-                        vals = exp_rows[valid_roster_cols].values.flatten()
-                        
-                        off_c = sum(1 for v in vals if v == 'off')
-                        ann_c = sum(1 for v in vals if v == 'annual')
-                        cas_c = sum(1 for v in vals if v in ['casual', 'عارضة', 'عارضه'])
-                
                 roster_counts[exp] = {
                     "Off Days": off_c,
                     "Annual Leaves": ann_c,
