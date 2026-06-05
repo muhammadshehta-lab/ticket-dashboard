@@ -275,6 +275,7 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 div[data-testid="stDataFrame"] table {
     font-size: 1.05rem !important;
 }
+/* Forcing the Header Row Style */
 div[data-testid="stDataFrame"] th {
     font-weight: 900 !important;
     background-color: #1e40af !important; /* Deep Professional Blue */
@@ -286,7 +287,6 @@ div[data-testid="stDataFrame"] th {
 div[data-testid="stDataFrame"] td {
     text-align: center !important;        /* Center Align Data Cells */
 }
-
 /* Fallback for newer Streamlit Canvas Grids */
 [data-testid="stDataFrame"] div[data-testid="StyledDataFrameColHeaderCell"] {
     font-weight: 900 !important;
@@ -428,9 +428,8 @@ EXPERT_ID_MAP = {
     "Yahia Ali Shafei": "50114"
 }
 
-# 🧠 Name Normalizer: Maps all Arabic and English variations strictly to Official Names
+# 🧠 Name Normalizer
 AGENT_ALIASES = {
-    # Variations for Mohamed Abdelmageed
     "mohamed abdelmajid": "Mohamed Abdelmageed",
     "mohamed el-sayed": "Mohamed Abdelmageed",
     "محمد عبد المجيد": "Mohamed Abdelmageed",
@@ -438,46 +437,38 @@ AGENT_ALIASES = {
     "محمد السيد": "Mohamed Abdelmageed",
     "50274": "Mohamed Abdelmageed",
     
-    # Variations for Ahmed El-Kholy
     "احمد الخولى": "Ahmed El-Kholy",
     "أحمد الخولي": "Ahmed El-Kholy",
     "احمد الخولي": "Ahmed El-Kholy",
     "50107": "Ahmed El-Kholy",
     
-    # Variations for Yahia Ali Shafei
     "يحي علي شافعي": "Yahia Ali Shafei",
     "يحيي علي شافعي": "Yahia Ali Shafei",
     "50114": "Yahia Ali Shafei",
     
-    # Variations for Amr El-Sayed
     "عمرو محمد السيد": "Amr El-Sayed",
     "50187": "Amr El-Sayed",
     
-    # Variations for Ahmed Kadry
     "أحمد محمد قدري": "Ahmed Kadry",
     "احمد محمد قدري": "Ahmed Kadry",
     "احمد قدري": "Ahmed Kadry",
     "50399": "Ahmed Kadry",
     
-    # Variations for Eslam Ramadan
     "إسلام رمضان خليل": "Eslam Ramadan",
     "اسلام رمضان خليل": "Eslam Ramadan",
     "اسلام رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
-    # Variations for Mohamed Khalifa
     "محمد خليفة جاب الله": "Mohamed Khalifa",
     "محمد خليفه جاب الله": "Mohamed Khalifa",
     "محمد خليفة": "Mohamed Khalifa",
     "محمد خليفه": "Mohamed Khalifa",
     "50476": "Mohamed Khalifa",
     
-    # Admin
     "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta",
     "50228": "Muhammad Shehta",
 }
 
-# 🌐 Global list of words that mean an agent is explicitly NOT working a regular shift
 EXCLUSION_LIST = [
     'off', 'اوف', 'أوف', 'راحة', 
     'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 
@@ -661,7 +652,7 @@ with st.sidebar:
             df["HIC"]          = df["HIC"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned").astype(str).str.strip()
             
-            # --- 🧠 APPLY NAME NORMALIZER (ALIAS MAPPING ENGINE) ---
+            # --- 🧠 APPLY NAME NORMALIZER ---
             id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
             def normalize_name(name):
                 n_lower = name.lower()
@@ -929,7 +920,6 @@ with tab1:
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
 
-        # ── 📅 DAILY TICKETS VOLUME & SCHEDULE WORKLOAD TRACKING ──────────────────
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
@@ -1097,7 +1087,6 @@ with tab2:
     OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
     df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
 
-    # الإجبار على عرض كل الفريق حتى لو لم يغلق أحدهم أي تذكرة
     sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
     
     if not df_sc.empty:
@@ -1134,8 +1123,9 @@ with tab2:
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
     sc["Reporting & Feedback"] = sc["Reporting & Feedback"].fillna(0).astype(int)
     sc["Email Counts"] = sc["Email Counts"].fillna(0).astype(int)
+    sc["Out Requests"] = 0  # Column for Requests outside the platform
     
-    # ── EXTRACT ROSTER DATA USING ID MATCHING & STRICT DATE FILTER ──────────────
+    # ── EXTRACT ROSTER DATA ──────────────
     roster_counts = {}
     if not df_roster.empty:
         valid_roster_cols = []
@@ -1188,10 +1178,14 @@ with tab2:
         ov = overrides().get(row["Expert"], {})
         for col, val in ov.items(): sc.at[i, col] = val
 
-    # --- ADD RANK COLUMN DYNAMICALLY ---
+    # Calculate Cases per Day logic
+    total_cases = sc["Tickets Count"].astype(float) + sc["JHAH Requests"].astype(float) + sc["Out Requests"].astype(float)
+    wdays = sc["Working Days"].astype(float).replace(0, 1) # Prevent div by 0
+    sc["Cases/Day"] = (total_cases / wdays).round(1)
+
+    # --- ADD RANK COLUMN DYNAMICALLY BASED ON CASES PER DAY ---
     if not sc.empty:
-        tc_num = pd.to_numeric(sc["Tickets Count"], errors="coerce").fillna(0)
-        sc.insert(1, "Rank", tc_num.rank(method="min", ascending=False).astype(int).astype(str))
+        sc.insert(1, "Rank", sc["Cases/Day"].rank(method="min", ascending=False).astype(int).astype(str))
     else:
         sc["Rank"] = []
 
@@ -1203,12 +1197,21 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
+    # Team AVG row
+    team_wd = round(sc["Working Days"].mean(), 1) if not sc.empty else 0
+    team_tc = round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0
+    team_jhah = round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0
+    team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
+    team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
+
     team_row = {
         "Expert": "🏆 Team AVG", 
         "Rank": "-",
-        "Working Days": round(sc["Working Days"].mean(), 1) if not sc.empty else 0, 
-        "Tickets Count": round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0,
-        "JHAH Requests": round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0, 
+        "Working Days": team_wd, 
+        "Tickets Count": team_tc,
+        "JHAH Requests": team_jhah, 
+        "Out Requests": team_out,
+        "Cases/Day": team_cpd,
         "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1) if not sc.empty else 0,
         "Email Counts": round(sc["Email Counts"].mean(), 1) if not sc.empty else 0,
         "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
@@ -1238,14 +1241,14 @@ with tab2:
         except:
             return str(x)
 
-    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves"]
+    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves"]
     for c in cols_clean:
         if c in sc_final.columns:
             sc_final[c] = sc_final[c].apply(format_clean_num)
 
     # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
     rank_df = sc.copy()
-    rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
+    rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
     top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
     
     gold_exp   = top_experts[0] if len(top_experts) > 0 else None
@@ -1302,7 +1305,10 @@ with tab2:
     ]
     styled_df = styled_df.set_table_styles(header_styles)
     
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    # Rearranging columns for logical reading flow
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "% Achievement from Target", "Service Time", "Service Quality"]
+    
+    st.dataframe(styled_df, use_container_width=True, hide_index=True, column_order=column_order)
 
     if is_admin():
         st.divider()
@@ -1330,6 +1336,7 @@ with tab2:
             with fc1:
                 nwd  = st.number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
                 ntc  = st.number_input("Tickets Count", min_value=0, value=gv("Tickets Count", int), step=1)
+                nout = st.number_input("Out Requests", min_value=0, value=gv("Out Requests", int), step=1)
             with fc2:
                 njh  = st.number_input("JHAH Requests", min_value=0, value=gv("JHAH Requests", int), step=1)
                 nrfb = st.number_input("Reporting & Feedback", min_value=0, value=gv("Reporting & Feedback", int), step=1)
@@ -1355,7 +1362,7 @@ with tab2:
 
         if do_save:
             overrides()[sel_agent] = {
-                "Working Days": nwd, "Tickets Count": ntc, "JHAH Requests": njh,
+                "Working Days": nwd, "Tickets Count": ntc, "JHAH Requests": njh, "Out Requests": nout,
                 "Reporting & Feedback": nrfb, "Email Counts": nem,
                 "Off Days": noff, "Annual Leaves": nann, "Casual Leaves": ncas,
                 "% Achievement from Target": nach,
@@ -1421,7 +1428,8 @@ I hope this email finds you well.
 As we wrap up the month, I wanted to personally share your performance metrics and highlight your {perf_word} contributions to the team.
 
 📊 Your Monthly Performance Overview:
-- Total Tickets Resolved: {agent_row['Tickets Count']}
+- Total Cases Resolved (Platform + Out + JHAH): {float(agent_row['Tickets Count']) + float(agent_row['JHAH Requests']) + float(agent_row['Out Requests'])}
+- Average Cases per Day: {agent_row['Cases/Day']}
 - Working Days: {agent_row['Working Days']}
 - Service Time (Avg): {agent_row['Service Time']}
 - Off Days Taken: {agent_row.get('Off Days', 0)}
@@ -1438,7 +1446,7 @@ Best regards,
 Mohammed Shehta
 Team Leader"""
             
-            st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=350)
+            st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=380)
             
             subject_encoded = urllib.parse.quote(f"Your Monthly Performance Review - {clean_name}")
             body_encoded = urllib.parse.quote(email_body)
