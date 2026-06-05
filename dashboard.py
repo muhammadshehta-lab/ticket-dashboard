@@ -415,6 +415,14 @@ EXPERT_ID_MAP = {
     "Mohamed Khalifa": "50476"
 }
 
+# 🌐 Global list of words that mean an agent is explicitly NOT working a regular shift
+EXCLUSION_LIST = [
+    'off', 'اوف', 'أوف', 'راحة', 
+    'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 
+    'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي',
+    'nan', 'none', ''
+]
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -889,14 +897,6 @@ with tab1:
         
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
         
-        # ALL words that mean an agent is NOT WORKING A REGULAR SHIFT
-        EXCLUSION_LIST = [
-            'off', 'اوف', 'أوف', 'راحة', 
-            'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 
-            'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي',
-            'nan', 'none'
-        ]
-
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty:
                 return -1 # Force fallback if Date is fundamentally absent from Roster
@@ -1055,7 +1055,8 @@ with tab2:
         grp = df_sc.groupby("Assigned By")
         sc  = pd.DataFrame(index=grp.groups.keys())
         sc.index.name = "Assigned By"
-        sc["Working Days"]         = grp["Date Only"].nunique().astype(int)
+        
+        # Tickets stats
         sc["Tickets Count"]        = grp["Request ID"].count()
         sc["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
         sc["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
@@ -1086,7 +1087,7 @@ with tab2:
             
             for exp in OFFICIAL_EXPERTS:
                 exp_id = EXPERT_ID_MAP.get(exp, "")
-                off_c, ann_c, cas_c = 0, 0, 0
+                off_c, ann_c, cas_c, wd_c = 0, 0, 0, 0
                 
                 if exp_id:
                     mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
@@ -1101,28 +1102,37 @@ with tab2:
                             off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
                             ann_c = sum(1 for v in vals_lower if v == 'annual')
                             cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                            wd_c  = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
                     
                 roster_counts[exp] = {
+                    "Working Days": wd_c,
                     "Off Days": off_c,
                     "Annual Leaves": ann_c,
                     "Casual Leaves": cas_c
                 }
 
+        # Override Working Days strictly from roster if available, else fallback to ticket-dates logic
+        if not df_roster.empty:
+            sc["Working Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Working Days", 0))
+        else:
+            sc["Working Days"] = sc["Expert"].map(grp["Date Only"].nunique()).fillna(0).astype(int)
+
         sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
         sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
         sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
 
+        # Apply system administrative manual data overrides
         for i, row in sc.iterrows():
             ov = overrides().get(row["Expert"], {})
             for col, val in ov.items(): sc.at[i, col] = val
 
         team_row = {
             "Expert": "🏆 Team AVG", 
-            "Working Days": round(sc["Working Days"].mean(), 1), 
-            "Tickets Count": round(sc["Tickets Count"].mean(), 1),
-            "JHAH Requests": round(sc["JHAH Requests"].mean(), 1), 
-            "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1),
-            "Email Counts": round(sc["Email Counts"].mean(), 1),
+            "Working Days": round(sc["Working Days"].mean(), 1) if not sc.empty else 0, 
+            "Tickets Count": round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0,
+            "JHAH Requests": round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0, 
+            "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1) if not sc.empty else 0,
+            "Email Counts": round(sc["Email Counts"].mean(), 1) if not sc.empty else 0,
             "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
             "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
             "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
@@ -1135,8 +1145,25 @@ with tab2:
         for col, val in team_ov.items():
             team_row[col] = val
 
+        # Base Matrix
         sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
+        # Remove trailing decimals for extremely clean visual display (.00000 -> 0)
+        def format_clean_num(x):
+            try:
+                f = float(x)
+                if f.is_integer():
+                    return str(int(f))
+                return str(round(f, 1))
+            except:
+                return str(x)
+
+        cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves"]
+        for c in cols_clean:
+            if c in sc_final.columns:
+                sc_final[c] = sc_final[c].apply(format_clean_num)
+
+        # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
         rank_df = sc.copy()
         rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
         top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
