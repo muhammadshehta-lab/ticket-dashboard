@@ -971,8 +971,9 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
         
+        # Removed Night Shift adjustment per user request. Counting normally by Calendar Date.
         dfm_shift = dfm.copy()
-        dfm_shift["Shift Date"] = (dfm_shift["Request Date"] - pd.Timedelta(hours=4)).dt.date
+        dfm_shift["Shift Date"] = dfm_shift["Date Only"]
         
         daily_vol = dfm_shift.groupby("Shift Date").agg(
             Total_Tickets=("Request ID", "count")
