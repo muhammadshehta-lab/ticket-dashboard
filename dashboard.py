@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import json, hashlib, time, pathlib, urllib.parse
+import json, hashlib, time, pathlib, urllib.parse, re
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
@@ -393,7 +393,7 @@ DAYS_AR = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  OFFICIAL EXPERTS WHITELIST
+#  OFFICIAL EXPERTS WHITELIST & ID MAPPING
 # ══════════════════════════════════════════════════════════════════════════════════
 OFFICIAL_EXPERTS = [
     "Ahmed El-Kholy", 
@@ -404,6 +404,16 @@ OFFICIAL_EXPERTS = [
     "Mohamed Khalifa", 
     "Yahia Ali Shafei"
 ]
+
+EXPERT_ID_MAP = {
+    "Ahmed El-Kholy": "50107",
+    "Yahia Ali Shafei": "50114",
+    "Amr El-Sayed": "50187",
+    "Mohamed Abdelmageed": "50274",
+    "Ahmed Kadry": "50399",
+    "Eslam Ramadan": "50461",
+    "Mohamed Khalifa": "50476"
+}
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
@@ -1003,27 +1013,42 @@ with tab2:
         sc["Service Quality"] = (grp["_c_ok"].sum() / grp["_c_all"].sum().replace(0,1) * 100).round(1).astype(str) + "%"
         sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
 
-        # ── EXTRACT ROSTER DATA (Leaves & Off Days) ──────────────────────────────────
+        # ── EXTRACT ROSTER DATA USING ID MATCHING & DATE FILTER ─────────────────────
         roster_counts = {}
         if not df_roster.empty:
-            # Convert all cells to lowercase string to ensure safe matching
+            # 1. Identify columns that fall strictly within the selected date range
+            valid_roster_cols = []
+            for col in df_roster.columns:
+                # Regex looks for patterns like: 11-December-2025, 12-Jan-2026, etc.
+                match = re.search(r'\d{1,2}-[a-zA-Z]+-\d{4}', str(col))
+                if match:
+                    try:
+                        col_date = pd.to_datetime(match.group()).date()
+                        if d_from <= col_date <= d_to:
+                            valid_roster_cols.append(col)
+                    except:
+                        pass
+            
+            # 2. Convert all cells to lowercase string to ensure safe matching
             df_r_str = df_roster.astype(str).apply(lambda col: col.str.lower().str.strip())
             
             for exp in OFFICIAL_EXPERTS:
-                exp_lower = exp.lower()
+                exp_id = EXPERT_ID_MAP.get(exp, "")
                 off_c, ann_c, cas_c = 0, 0, 0
                 
-                # Check if the expert's name appears anywhere in the row
-                mask = df_r_str.apply(lambda row: exp_lower in row.values, axis=1)
-                exp_rows = df_r_str[mask]
-                
-                if not exp_rows.empty:
-                    # Flatten all cells in matched rows into a single list
-                    vals = exp_rows.values.flatten()
+                if exp_id:
+                    # Find any row that contains this ID exactly
+                    # Strip spaces from the comparison ID to ensure perfect match
+                    mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip() for x in row.values], axis=1)
+                    exp_rows = df_r_str[mask]
                     
-                    off_c = sum(1 for v in vals if v == 'off')
-                    ann_c = sum(1 for v in vals if v == 'annual')
-                    cas_c = sum(1 for v in vals if v in ['casual', 'عارضة'])
+                    if not exp_rows.empty and valid_roster_cols:
+                        # Extract data ONLY from the columns that matched our date range
+                        vals = exp_rows[valid_roster_cols].values.flatten()
+                        
+                        off_c = sum(1 for v in vals if v == 'off')
+                        ann_c = sum(1 for v in vals if v == 'annual')
+                        cas_c = sum(1 for v in vals if v in ['casual', 'عارضة', 'عارضه'])
                 
                 roster_counts[exp] = {
                     "Off Days": off_c,
