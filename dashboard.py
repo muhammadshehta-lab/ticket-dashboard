@@ -226,15 +226,15 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     box-shadow: 0 12px 20px rgba(0,0,0,0.1); 
 }
 .kpi-label {
-    font-size: .8rem !important; 
-    letter-spacing: .12em; 
+    font-size: .85rem !important; 
+    letter-spacing: .08em; 
     text-transform: uppercase;
     margin-bottom: .5rem; 
     font-weight: 800 !important; 
     color: #334155 !important;
 }
 .kpi-value { 
-    font-size: 2.05rem !important; 
+    font-size: 1.95rem !important; 
     font-weight: 900 !important; 
     letter-spacing: -.02em; 
 }
@@ -245,6 +245,9 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 .card-frt       { background: #fce7f3; border: 2px solid #f9a8d4; color: #9d174d; }
 .card-aht       { background: #f3e8ff; border: 2px solid #d8b4fe; color: #6b21a8; }
 .card-tat       { background: #ecfeff; border: 2px solid #67e8f9; color: #155e75; }
+.card-store     { background: #fffbeb; border: 2px solid #fde047; color: #b45309; }
+.card-open      { background: #fdf4ff; border: 2px solid #f0abfc; color: #86198f; }
+.card-actions   { background: #eff6ff; border: 2px solid #93c5fd; color: #1e3a8a; }
 
 /* ══ AUTHENTICATION MODULE SCREEN RESKIN ═════════════════════════════ */
 .login-wrap {
@@ -628,13 +631,12 @@ with st.sidebar:
             sheet = client.open("AlDawaa Tickets Data")
             
             all_dfs = []
-            roster_df = pd.DataFrame() # DataFrame to hold the Working Days data
+            roster_df = pd.DataFrame() 
             
             for ws in sheet.worksheets():
                 data = ws.get_all_values()
                 if len(data) < 2: continue
                 
-                # Isolate the new "Working Days" tab so it doesn't break the tickets dataframe
                 if ws.title.strip() == "Working Days":
                     roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                     continue
@@ -646,6 +648,7 @@ with st.sidebar:
                     if   "id"       in cl and "req"    in cl: t = "Request ID"
                     elif "date"     in cl:                     t = "Request Date"
                     elif "type"     in cl:                     t = "Request Type"
+                    elif "status"   in cl and "count"  in cl: t = "Status Count"
                     elif "status"   in cl:                     t = "Status"
                     elif "assigned" in cl or "agent"   in cl: t = "Assigned By"
                     elif "response" in cl and "take"   in cl: t = "Response Take"
@@ -653,6 +656,7 @@ with st.sidebar:
                     elif "request"  in cl and "take"   in cl: t = "Request Take"
                     elif "email"    in cl or "special" in cl: t = "Is Special Request(By Email)"
                     elif "hic"      in cl or "insurance" in cl: t = "HIC"
+                    elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
                     if t and t not in seen: mp[col] = t; seen.add(t)
                 dft.rename(columns=mp, inplace=True)
                 all_dfs.append(dft)
@@ -662,17 +666,20 @@ with st.sidebar:
                 
             df = pd.concat(all_dfs, ignore_index=True, sort=False)
             df.replace("", np.nan, inplace=True)
-            for c in ["Request ID", "Request Date", "Request Type", "Status",
+            for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count",
                       "Request Take", "Response Take", "First Action Take",
                       "Assigned By", "Is Special Request(By Email)", "HIC"]:
                 if c not in df.columns: df[c] = np.nan
             
+            if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
+            
             df["Status"]       = df["Status"].fillna("Unknown")
+            df["Status Count"] = pd.to_numeric(df["Status Count"], errors="coerce").fillna(0).astype(int)
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
             df["HIC"]          = df["HIC"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned").astype(str).str.strip()
+            df["Store ID"]     = df["Store ID"].fillna("Unknown").astype(str).str.strip()
             
-            # --- 🧠 APPLY NAME NORMALIZER ---
             id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
             def normalize_name(name):
                 n_lower = name.lower()
@@ -895,14 +902,24 @@ with tab1:
 
     ok_pct = (ok / total * 100) if total > 0 else 0
     issue_pct = (issue / total * 100) if total > 0 else 0
+    
+    stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
+    open_count = total - (ok + issue)
+    status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
 
-    a, b, c_, d, e, f_ = st.columns(6)
-    a.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total"),     unsafe_allow_html=True)
-    b.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed"), unsafe_allow_html=True)
-    c_.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue"),     unsafe_allow_html=True)
-    d.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
-    e.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
-    f_.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+    
+    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total"),     unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store"),  unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions"),  unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed"), unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue"),     unsafe_allow_html=True)
+    
+    r2c1.markdown(kpi_colored("Open/Pending Status", f"{open_count:,}", "card-open"), unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
     st.write("")
 
     if not dfm.empty:
