@@ -822,10 +822,18 @@ with tab1:
         # ── 📅 DAILY TICKETS VOLUME & WORKLOAD TRACKING (Heatmap Gradient) ────────────────
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
+        
+        # HTML div with RTL forced direction to prevent Arabic text and Emojis from shifting visually
         st.markdown("""
-        **مؤشر ضغط العمل للموظف (Tickets per Agent):**  
-        🟦 طبيعي (≤55) &nbsp; | &nbsp; 🟨 متوسط (56-60) &nbsp; | &nbsp; 🟧 عالي (61-63) &nbsp; | &nbsp; 🟥 شديد (64-70) &nbsp; | &nbsp; 🟫 رهيب (>70)
-        """)
+        <div style="direction: rtl; text-align: right; font-size: 1.1rem; margin-bottom: 1rem;">
+            <strong>مؤشر ضغط العمل للموظف (Tickets per Agent):</strong><br>
+            <span dir="rtl">🟦 طبيعي (≤55)</span> &nbsp;|&nbsp; 
+            <span dir="rtl">🟨 متوسط (56-60)</span> &nbsp;|&nbsp; 
+            <span dir="rtl">🟧 عالي (61-63)</span> &nbsp;|&nbsp; 
+            <span dir="rtl">🟥 شديد (64-70)</span> &nbsp;|&nbsp; 
+            <span dir="rtl">🟫 رهيب (>70)</span>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Adjust for Night Shifts: Subtract 4 hours so tickets between 12 AM and 4 AM count towards the previous day
         dfm_shift = dfm.copy()
