@@ -823,24 +823,29 @@ with tab1:
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         st.markdown("""
-        **مؤشر ضغط العمل للموظف (Tickets per Agent):** 🟦 طبيعي (≤55) &nbsp; | &nbsp; 🟨 متوسط (56-60) &nbsp; | &nbsp; 🟧 عالي (61-63) &nbsp; | &nbsp; 🟥 شديد (64-70) &nbsp; | &nbsp; 🟫 رهيب (>70)
+        **مؤشر ضغط العمل للموظف (Tickets per Agent):**  
+        🟦 طبيعي (≤55) &nbsp; | &nbsp; 🟨 متوسط (56-60) &nbsp; | &nbsp; 🟧 عالي (61-63) &nbsp; | &nbsp; 🟥 شديد (64-70) &nbsp; | &nbsp; 🟫 رهيب (>70)
         """)
         
-        daily_vol = dfm.groupby("Date Only").agg(
+        # Adjust for Night Shifts: Subtract 4 hours so tickets between 12 AM and 4 AM count towards the previous day
+        dfm_shift = dfm.copy()
+        dfm_shift["Shift Date"] = (dfm_shift["Request Date"] - pd.Timedelta(hours=4)).dt.date
+        
+        daily_vol = dfm_shift.groupby("Shift Date").agg(
             Total_Tickets=("Request ID", "count")
         ).reset_index()
         
         # Calculate Active Agents strictly from the official team whitelist to prevent skewed workload ratios
-        agents_df = dfm[dfm["Assigned By"].isin(OFFICIAL_EXPERTS)]
-        active_df = agents_df.groupby("Date Only").agg(Active_Agents=("Assigned By", "nunique")).reset_index()
+        agents_df = dfm_shift[dfm_shift["Assigned By"].isin(OFFICIAL_EXPERTS)]
+        active_df = agents_df.groupby("Shift Date").agg(Active_Agents=("Assigned By", "nunique")).reset_index()
         
-        daily_vol = pd.merge(daily_vol, active_df, on="Date Only", how="left")
+        daily_vol = pd.merge(daily_vol, active_df, on="Shift Date", how="left")
         daily_vol["Active_Agents"] = daily_vol["Active_Agents"].fillna(0)
         
         # Calculate Schedule Workload Metric: Tickets per Agent
         daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"].replace(0, 1)).round(1)
 
-        daily_vol["Date DT"] = pd.to_datetime(daily_vol["Date Only"])
+        daily_vol["Date DT"] = pd.to_datetime(daily_vol["Shift Date"])
         daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
         
         DAY_COLORS = {
