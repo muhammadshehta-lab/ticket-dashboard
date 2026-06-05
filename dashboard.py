@@ -271,16 +271,29 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 
 .section-card { background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
 
-/* Dataframe Row Typography Overrides - Making Headers Exta Bold */
+/* Dataframe Row Typography Overrides - Making Headers Extra Bold, Colored & Centered */
 div[data-testid="stDataFrame"] table {
     font-size: 1.05rem !important;
 }
 div[data-testid="stDataFrame"] th {
     font-weight: 900 !important;
-    background-color: #f1f5f9 !important;
-    color: #0f172a !important;
-    font-size: 1.05rem !important;
+    background-color: #1e40af !important; /* Deep Professional Blue */
+    color: #ffffff !important;            /* White Text */
+    font-size: 1.1rem !important;
+    text-align: center !important;        /* Center Align */
     border-bottom: 2px solid #cbd5e1 !important;
+}
+div[data-testid="stDataFrame"] td {
+    text-align: center !important;        /* Center Align Data Cells */
+}
+
+/* Fallback for newer Streamlit Canvas Grids */
+[data-testid="stDataFrame"] div[data-testid="StyledDataFrameColHeaderCell"] {
+    font-weight: 900 !important;
+    background-color: #1e40af !important;
+    color: #ffffff !important;
+    text-align: center !important;
+    justify-content: center !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1186,6 +1199,7 @@ with tab2:
             
         display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
 
+        # Apply logic for rows colors
         def style_performers(row):
             exp = row["Expert"]
             if exp == "🏆 Team AVG":
@@ -1200,8 +1214,26 @@ with tab2:
                 return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
             return [''] * len(row)
 
+        # Apply styles
         styled_df = display_df.style.apply(style_performers, axis=1)
+        
+        # Center all data cells horizontally and vertically
+        styled_df = styled_df.set_properties(**{'text-align': 'center'})
+        
+        # Force Expert column to stay bold
         styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+
+        # Format Headers (Deep Blue Background, White Text, Bold, Centered) using Pandas Styler
+        header_styles = [
+            dict(selector='th', props=[
+                ('background-color', '#1e40af'),
+                ('color', '#ffffff'),
+                ('font-weight', '900'),
+                ('text-align', 'center'),
+                ('font-size', '1.05rem')
+            ])
+        ]
+        styled_df = styled_df.set_table_styles(header_styles)
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
