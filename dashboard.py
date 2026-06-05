@@ -1207,10 +1207,11 @@ with tab2:
     sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
 
-    # Apply system administrative manual data overrides
+    # ── OVERRIDE LOGIC (PARTIAL & SMART) ──
     for i, row in sc.iterrows():
         ov = overrides().get(row["Expert"], {})
-        for col, val in ov.items(): sc.at[i, col] = val
+        for col, val in ov.items(): 
+            sc.at[i, col] = val
 
     # Calculate Cases per Day logic
     total_cases = sc["Tickets Count"].astype(float) + sc["JHAH Requests"].astype(float) + sc["Out Requests"].astype(float)
@@ -1334,63 +1335,74 @@ with tab2:
     if is_admin():
         st.divider()
         st.markdown("#### ✏️ Manual KPI Override Editor")
+        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة مع الفلتر الزمني. اكتب رقماً فقط في الحقل الذي تريد تثبيته وتعديله يدوياً.")
         
         agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
         sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
         
-        if sel_agent == "🏆 Team AVG":
-            dv = team_row
-        else:
-            ar = sc[sc["Expert"] == sel_agent]
-            dv = ar.iloc[0].to_dict() if not ar.empty else {}
-            
         cur = overrides().get(sel_agent, {})
-        def gv(k, t=int):
-            val = cur.get(k, dv.get(k, 0 if t == int else ""))
-            if t == int:
-                try: return int(float(val))
-                except: return 0
-            return str(val)
+        def gv(k):
+            return str(cur.get(k, ""))
 
         with st.form(f"ov_form_{sel_agent}"):
             fc1, fc2, fc3, fc4 = st.columns(4)
             with fc1:
-                nwd  = st.number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
-                ntc  = st.number_input("Tickets Count", min_value=0, value=gv("Tickets Count", int), step=1)
-                nout = st.number_input("Out Requests", min_value=0, value=gv("Out Requests", int), step=1)
+                nwd  = st.text_input("Working Days", value=gv("Working Days"))
+                ntc  = st.text_input("Tickets Count", value=gv("Tickets Count"))
+                nout = st.text_input("Out Requests", value=gv("Out Requests"))
             with fc2:
-                njh  = st.number_input("JHAH Requests", min_value=0, value=gv("JHAH Requests", int), step=1)
-                nrfb = st.number_input("Reporting & Feedback", min_value=0, value=gv("Reporting & Feedback", int), step=1)
+                njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
+                nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
             with fc3:
-                nem  = st.number_input("Email Counts", min_value=0, value=gv("Email Counts", int), step=1)
-                nach = st.text_input("% Achievement from Target", value=gv("% Achievement from Target", str))
+                nem  = st.text_input("Email Counts", value=gv("Email Counts"))
+                nach = st.text_input("% Achievement from Target", value=gv("% Achievement from Target"))
             with fc4:
-                nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time", str))
-                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality", str))
+                nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time"))
+                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
 
             st.markdown("**🌴 Leaves & Off Days**")
             lc1, lc2, lc3 = st.columns(3)
             with lc1:
-                noff = st.number_input("Off Days", min_value=0, value=gv("Off Days", int), step=1)
+                noff = st.text_input("Off Days", value=gv("Off Days"))
             with lc2:
-                nann = st.number_input("Annual Leaves", min_value=0, value=gv("Annual Leaves", int), step=1)
+                nann = st.text_input("Annual Leaves", value=gv("Annual Leaves"))
             with lc3:
-                ncas = st.number_input("Casual Leaves", min_value=0, value=gv("Casual Leaves", int), step=1)
+                ncas = st.text_input("Casual Leaves", value=gv("Casual Leaves"))
             
             sc_col, rc_col = st.columns(2)
             with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
             with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
 
         if do_save:
-            overrides()[sel_agent] = {
-                "Working Days": nwd, "Tickets Count": ntc, "JHAH Requests": njh, "Out Requests": nout,
-                "Reporting & Feedback": nrfb, "Email Counts": nem,
-                "Off Days": noff, "Annual Leaves": nann, "Casual Leaves": ncas,
-                "% Achievement from Target": nach,
-                "Service Time": nst, "Service Quality": nsq,
-            }
+            new_ov = {}
+            def parse_int(v):
+                try: return int(float(v))
+                except: return None
+            def parse_str(v):
+                return str(v).strip() if str(v).strip() else None
+
+            if parse_int(nwd) is not None: new_ov["Working Days"] = parse_int(nwd)
+            if parse_int(ntc) is not None: new_ov["Tickets Count"] = parse_int(ntc)
+            if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
+            if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
+            if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
+            if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
+            if parse_int(noff) is not None: new_ov["Off Days"] = parse_int(noff)
+            if parse_int(nann) is not None: new_ov["Annual Leaves"] = parse_int(nann)
+            if parse_int(ncas) is not None: new_ov["Casual Leaves"] = parse_int(ncas)
+            
+            if parse_str(nach): new_ov["% Achievement from Target"] = parse_str(nach)
+            if parse_str(nst): new_ov["Service Time"] = parse_str(nst)
+            if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
+
+            if new_ov:
+                overrides()[sel_agent] = new_ov
+            else:
+                if sel_agent in overrides():
+                    overrides().pop(sel_agent)
+                    
             _save_store()
-            st.success(f"✅ Override parameters applied for **{sel_agent}**.")
+            st.success(f"✅ Override parameters saved for **{sel_agent}**.")
             st.rerun()
 
         if do_clear:
