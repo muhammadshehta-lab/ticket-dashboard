@@ -406,7 +406,7 @@ DAYS_AR = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  OFFICIAL EXPERTS WHITELIST & ID MAPPING
+#  OFFICIAL EXPERTS WHITELIST, ALIASES & ID MAPPING
 # ══════════════════════════════════════════════════════════════════════════════════
 OFFICIAL_EXPERTS = [
     "Ahmed El-Kholy", 
@@ -426,6 +426,28 @@ EXPERT_ID_MAP = {
     "Ahmed Kadry": "50399",
     "Eslam Ramadan": "50461",
     "Mohamed Khalifa": "50476"
+}
+
+# 🧠 Name Normalizer: Maps all Arabic and English variations strictly to Official Names
+AGENT_ALIASES = {
+    "mohamed abdelmajid": "Mohamed Abdelmageed",
+    "mohamed el-sayed": "Mohamed Abdelmageed",
+    "محمد عبد المجيد": "Mohamed Abdelmageed",
+    "محمد السيد عبد المجيد": "Mohamed Abdelmageed",
+    "محمد السيد": "Mohamed Abdelmageed",
+    "احمد الخولى": "Ahmed El-Kholy",
+    "أحمد الخولي": "Ahmed El-Kholy",
+    "احمد الخولي": "Ahmed El-Kholy",
+    "يحي علي شافعي": "Yahia Ali Shafei",
+    "يحيي علي شافعي": "Yahia Ali Shafei",
+    "عمرو محمد السيد": "Amr El-Sayed",
+    "أحمد محمد قدري": "Ahmed Kadry",
+    "احمد قدري": "Ahmed Kadry",
+    "إسلام رمضان خليل": "Eslam Ramadan",
+    "اسلام رمضان": "Eslam Ramadan",
+    "محمد خليفة جاب الله": "Mohamed Khalifa",
+    "محمد خليفة": "Mohamed Khalifa",
+    "محمد خليفه": "Mohamed Khalifa",
 }
 
 # 🌐 Global list of words that mean an agent is explicitly NOT working a regular shift
@@ -608,9 +630,21 @@ with st.sidebar:
                 if c not in df.columns: df[c] = np.nan
             
             df["Status"]       = df["Status"].fillna("Unknown")
-            df["Assigned By"]  = df["Assigned By"].fillna("Unassigned")
             df["Request Type"] = df["Request Type"].fillna("Unknown Type")
             df["HIC"]          = df["HIC"].fillna("Unknown")
+            df["Assigned By"]  = df["Assigned By"].fillna("Unassigned").astype(str).str.strip()
+            
+            # --- 🧠 APPLY NAME NORMALIZER (ALIAS MAPPING ENGINE) ---
+            id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
+            def normalize_name(name):
+                n_lower = name.lower()
+                if n_lower in AGENT_ALIASES:
+                    return AGENT_ALIASES[n_lower]
+                if name in id_to_name:
+                    return id_to_name[name]
+                return name
+                
+            df["Assigned By"] = df["Assigned By"].apply(normalize_name)
             
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
@@ -872,7 +906,6 @@ with tab1:
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
-        # HTML div forced direction RTL with fixed positions to stop shifting
         st.markdown("""
         <div style="direction: rtl; text-align: right; font-size: 1.1rem; margin-bottom: 1rem;">
             <strong>مؤشر ضغط العمل للموظف (Tickets per Agent):</strong><br>
@@ -884,7 +917,6 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
         
-        # Adjust for Night Shifts: Subtract 4 hours so tickets between 12 AM and 4 AM count towards the previous day
         dfm_shift = dfm.copy()
         dfm_shift["Shift Date"] = (dfm_shift["Request Date"] - pd.Timedelta(hours=4)).dt.date
         
@@ -892,18 +924,14 @@ with tab1:
             Total_Tickets=("Request ID", "count")
         ).reset_index()
         
-        # 1. 100% STRICT DATE PARSING ENGINE (YEAR INCLUSIVE)
         roster_date_map = {}
         if not df_roster.empty:
             for col in df_roster.columns:
                 col_str = str(col).strip()
-                # Remove alphabetic day names to prevent parsing confusion
                 clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-                # Extremely strict Regex: Must have Day, Month, and 4-Digit Year!
                 match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
                 if match:
                     try:
-                        # Convert safely matching exactly the extracted string including Year
                         dt = pd.to_datetime(match.group(1), dayfirst=True).date()
                         roster_date_map[dt] = col
                     except: pass
@@ -912,7 +940,7 @@ with tab1:
         
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty:
-                return -1 # Force fallback if Date is fundamentally absent from Roster
+                return -1 
             
             col_name = roster_date_map[target_date]
             working_count = 0
@@ -921,31 +949,25 @@ with tab1:
                 row_vals_str = " ".join([str(x).strip().lower() for x in row.values])
                 if any(tid in row_vals_str for tid in tracked_ids):
                     cell_val = str(row.get(col_name, "")).strip().lower()
-                    # Any value that is not an explicit off/leave/resign marker is considered WORKING
                     if cell_val and cell_val not in EXCLUSION_LIST:
                         working_count += 1
             return working_count
         
         daily_vol["Scheduled_Agents"] = daily_vol["Shift Date"].apply(get_scheduled_agents)
         
-        # 2. Fallback to actual agents logging tickets ONLY IF roster date is completely missing (-1)
         agents_df = dfm_shift[dfm_shift["Assigned By"].isin(OFFICIAL_EXPERTS)]
         active_df = agents_df.groupby("Shift Date").agg(Actual_Agents=("Assigned By", "nunique")).reset_index()
         
         daily_vol = pd.merge(daily_vol, active_df, on="Shift Date", how="left")
         daily_vol["Actual_Agents"] = daily_vol["Actual_Agents"].fillna(0)
         
-        # 3. Final Active Agents assignment (Strictly forces Roster value if it exists, even if 0 or 1)
         daily_vol["Active_Agents"] = np.where(
             daily_vol["Scheduled_Agents"] != -1, 
             daily_vol["Scheduled_Agents"], 
             daily_vol["Actual_Agents"]
         )
         
-        # Prevent division by zero if roster literally said 0 agents
         daily_vol["Active_Agents"] = daily_vol["Active_Agents"].replace(0, 1)
-        
-        # Calculate Schedule Workload Metric: Tickets per Agent
         daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"]).round(1)
 
         daily_vol["Date DT"] = pd.to_datetime(daily_vol["Shift Date"])
@@ -966,25 +988,17 @@ with tab1:
             axis=1
         )
         
-        # Color Gradient Logic based on Tickets per Agent
         conditions = [
             daily_vol["Tickets per Agent"] > 70,
             daily_vol["Tickets per Agent"] > 63,
             daily_vol["Tickets per Agent"] > 60,
             daily_vol["Tickets per Agent"] > 55
         ]
-        choices = [
-            "#991b1b", # Dark Red (Extreme/رهيب)
-            "#ef4444", # Red (Very High/شديد)
-            "#f97316", # Orange (High/عالي)
-            "#fbbf24"  # Yellow/Amber (Moderate/متوسط)
-        ]
-        # Default is Blue (#3b82f6) for <= 55 (Normal/طبيعي)
+        choices = ["#991b1b", "#ef4444", "#f97316", "#fbbf24"]
         daily_vol["Color"] = np.select(conditions, choices, default="#3b82f6") 
         
         fig_d = make_subplots(specs=[[{"secondary_y": True}]])
         
-        # Bar Chart: Total Daily Tickets
         fig_d.add_trace(go.Bar(
             x=daily_vol["Date Label"], 
             y=daily_vol["Total_Tickets"], 
@@ -995,7 +1009,6 @@ with tab1:
             hovertemplate="<b>%{x}</b><br>Tickets: %{y}<extra></extra>"
         ), secondary_y=False)
         
-        # Line Chart: Workload (Tickets per Agent)
         fig_d.add_trace(go.Scatter(
             x=daily_vol["Date Label"],
             y=daily_vol["Tickets per Agent"],
@@ -1054,11 +1067,16 @@ with tab2:
     st.write(""); st.divider()
     st.markdown("### 📊 Expert Performance Scorecard Dashboard")
 
-    # Only include Official Experts in the Team Performance matrix to ensure 100% accuracy
     OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
     df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
 
+    # الإجبار على عرض كل الفريق حتى لو لم يغلق أحدهم أي تذكرة
+    sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
+    
     if not df_sc.empty:
+        expert_map = {x.lower(): x for x in OFFICIAL_EXPERTS}
+        df_sc["Assigned By"] = df_sc["Assigned By"].astype(str).str.strip().str.lower().map(expert_map)
+        
         rtl = df_sc["Request Type"].astype(str).str.lower()
         df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
         df_sc["_rfb"]   = rtl.str.contains("report|feedback", na=False)
@@ -1066,288 +1084,310 @@ with tab2:
         df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
 
         grp = df_sc.groupby("Assigned By")
-        sc  = pd.DataFrame(index=grp.groups.keys())
-        sc.index.name = "Assigned By"
+        stats = pd.DataFrame(index=grp.groups.keys())
+        stats["Tickets Count"]        = grp["Request ID"].count()
+        stats["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
+        stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
+        stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
+        stats["_Service_Time_val"]    = grp["Request Take (min)"].mean()
+        stats["_c_ok_sum"]            = grp["_c_ok"].sum()
+        stats["_c_all_sum"]           = grp["_c_all"].sum()
         
-        # Tickets stats
-        sc["Tickets Count"]        = grp["Request ID"].count()
-        sc["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
-        sc["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
-        sc["Email Counts"]         = grp["Is Email"].sum().astype(int)
+        sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
+    else:
+        sc["Tickets Count"] = 0
+        sc["JHAH Requests"] = 0
+        sc["Reporting & Feedback"] = 0
+        sc["Email Counts"] = 0
+        sc["_Service_Time_val"] = 0
+        sc["_c_ok_sum"] = 0
+        sc["_c_all_sum"] = 0
 
-        tavg = sc["Tickets Count"].mean()
-        sc["% Achievement from Target"] = ((sc["Tickets Count"] / tavg * 100).round(1).astype(str) + "%" if tavg > 0 else "0.0%")
-        sc["Service Time"] = grp["Request Take (min)"].mean().apply(fmt_m)
-        sc["Service Quality"] = (grp["_c_ok"].sum() / grp["_c_all"].sum().replace(0,1) * 100).round(1).astype(str) + "%"
-        sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
-
-        # ── EXTRACT ROSTER DATA USING ID MATCHING & STRICT DATE FILTER ──────────────
-        roster_counts = {}
-        if not df_roster.empty:
-            valid_roster_cols = []
-            for col in df_roster.columns:
-                col_str = str(col).strip()
-                clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-                match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
-                if match:
-                    try:
-                        col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                        if d_from <= col_date <= d_to:
-                            valid_roster_cols.append(col)
-                    except: pass
+    sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
+    sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
+    sc["Reporting & Feedback"] = sc["Reporting & Feedback"].fillna(0).astype(int)
+    sc["Email Counts"] = sc["Email Counts"].fillna(0).astype(int)
+    
+    # ── EXTRACT ROSTER DATA USING ID MATCHING & STRICT DATE FILTER ──────────────
+    roster_counts = {}
+    if not df_roster.empty:
+        valid_roster_cols = []
+        for col in df_roster.columns:
+            col_str = str(col).strip()
+            clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+            match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
+            if match:
+                try:
+                    col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                    if d_from <= col_date <= d_to:
+                        valid_roster_cols.append(col)
+                except: pass
+        
+        df_r_str = df_roster.astype(str)
+        
+        for exp in OFFICIAL_EXPERTS:
+            exp_id = EXPERT_ID_MAP.get(exp, "")
+            off_c, ann_c, cas_c, wd_c = 0, 0, 0, 0
             
-            df_r_str = df_roster.astype(str)
-            
-            for exp in OFFICIAL_EXPERTS:
-                exp_id = EXPERT_ID_MAP.get(exp, "")
-                off_c, ann_c, cas_c, wd_c = 0, 0, 0, 0
+            if exp_id:
+                mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+                exp_rows = df_r_str[mask]
                 
-                if exp_id:
-                    mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
-                    exp_rows = df_r_str[mask]
-                    
-                    if not exp_rows.empty and valid_roster_cols:
-                        safe_cols = [c for c in valid_roster_cols if c in exp_rows.columns]
-                        if safe_cols:
-                            vals = exp_rows[safe_cols].values.flatten()
-                            vals_lower = [str(v).strip().lower() for v in vals]
-                            
-                            off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                            ann_c = sum(1 for v in vals_lower if v == 'annual')
-                            cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
-                            wd_c  = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
-                    
-                roster_counts[exp] = {
-                    "Working Days": wd_c,
-                    "Off Days": off_c,
-                    "Annual Leaves": ann_c,
-                    "Casual Leaves": cas_c
-                }
+                if not exp_rows.empty and valid_roster_cols:
+                    safe_cols = [c for c in valid_roster_cols if c in exp_rows.columns]
+                    if safe_cols:
+                        vals = exp_rows[safe_cols].values.flatten()
+                        vals_lower = [str(v).strip().lower() for v in vals]
+                        
+                        off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
+                        ann_c = sum(1 for v in vals_lower if v == 'annual')
+                        cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                        wd_c  = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
+                
+            roster_counts[exp] = {
+                "Working Days": wd_c,
+                "Off Days": off_c,
+                "Annual Leaves": ann_c,
+                "Casual Leaves": cas_c
+            }
 
-        # Override Working Days strictly from roster if available, else fallback to ticket-dates logic
-        if not df_roster.empty:
-            sc["Working Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Working Days", 0))
+    sc["Working Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Working Days", 0))
+    sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
+    sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
+    sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
+
+    # Apply system administrative manual data overrides
+    for i, row in sc.iterrows():
+        ov = overrides().get(row["Expert"], {})
+        for col, val in ov.items(): sc.at[i, col] = val
+
+    # --- ADD RANK COLUMN DYNAMICALLY ---
+    if not sc.empty:
+        tc_num = pd.to_numeric(sc["Tickets Count"], errors="coerce").fillna(0)
+        sc.insert(1, "Rank", tc_num.rank(method="min", ascending=False).astype(int).astype(str))
+    else:
+        sc["Rank"] = []
+
+    tavg = sc["Tickets Count"].mean()
+    sc["% Achievement from Target"] = ((sc["Tickets Count"] / tavg * 100).round(1).astype(str) + "%" if tavg > 0 else "0.0%")
+    sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
+    
+    c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
+    c_ok = sc["_c_ok_sum"].fillna(0)
+    sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
+
+    team_row = {
+        "Expert": "🏆 Team AVG", 
+        "Rank": "-",
+        "Working Days": round(sc["Working Days"].mean(), 1) if not sc.empty else 0, 
+        "Tickets Count": round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0,
+        "JHAH Requests": round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0, 
+        "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1) if not sc.empty else 0,
+        "Email Counts": round(sc["Email Counts"].mean(), 1) if not sc.empty else 0,
+        "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
+        "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
+        "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
+        "% Achievement from Target": "100.0%", 
+        "Service Time": "00:00:00", 
+        "Service Quality": "100.0%"
+    }
+    
+    team_ov = overrides().get("🏆 Team AVG", {})
+    for col, val in team_ov.items():
+        team_row[col] = val
+
+    sc.drop(columns=["_Service_Time_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
+
+    # Base Matrix
+    sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
+
+    def format_clean_num(x):
+        if x == "-": return "-"
+        try:
+            f = float(x)
+            if f.is_integer():
+                return str(int(f))
+            return str(round(f, 1))
+        except:
+            return str(x)
+
+    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves"]
+    for c in cols_clean:
+        if c in sc_final.columns:
+            sc_final[c] = sc_final[c].apply(format_clean_num)
+
+    # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
+    rank_df = sc.copy()
+    rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
+    top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
+    
+    gold_exp   = top_experts[0] if len(top_experts) > 0 else None
+    silver_exp = top_experts[1] if len(top_experts) > 1 else None
+    bronze_exp = top_experts[2] if len(top_experts) > 2 else None
+
+    display_df = sc_final.copy()
+    
+    gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
+    silver_disp = f"🥈 {silver_exp}" if silver_exp else None
+    bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
+
+    def add_medals_row(val):
+        if val == gold_exp: return gold_disp
+        if val == silver_exp: return silver_disp
+        if val == bronze_exp: return bronze_disp
+        return val
+        
+    display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
+
+    # Apply logic for rows colors
+    def style_performers(row):
+        exp = row["Expert"]
+        if exp == "🏆 Team AVG":
+            return ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+        elif exp == gold_disp:
+            return ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+        elif exp == silver_disp:
+            return ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+        elif exp == bronze_disp:
+            return ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+        elif exp == aname and not is_admin():
+            return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+        return [''] * len(row)
+
+    # Apply styles
+    styled_df = display_df.style.apply(style_performers, axis=1)
+    
+    # Center all data cells horizontally and vertically
+    styled_df = styled_df.set_properties(**{'text-align': 'center'})
+    
+    # Force Expert column to stay bold
+    styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+
+    # Format Headers (Deep Blue Background, White Text, Bold, Centered) using Pandas Styler
+    header_styles = [
+        dict(selector='th', props=[
+            ('background-color', '#1e40af'),
+            ('color', '#ffffff'),
+            ('font-weight', '900'),
+            ('text-align', 'center'),
+            ('font-size', '1.05rem')
+        ])
+    ]
+    styled_df = styled_df.set_table_styles(header_styles)
+    
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+    if is_admin():
+        st.divider()
+        st.markdown("#### ✏️ Manual KPI Override Editor")
+        
+        agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
+        sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
+        
+        if sel_agent == "🏆 Team AVG":
+            dv = team_row
         else:
-            sc["Working Days"] = sc["Expert"].map(grp["Date Only"].nunique()).fillna(0).astype(int)
-
-        sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
-        sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
-        sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
-
-        # Apply system administrative manual data overrides
-        for i, row in sc.iterrows():
-            ov = overrides().get(row["Expert"], {})
-            for col, val in ov.items(): sc.at[i, col] = val
-
-        team_row = {
-            "Expert": "🏆 Team AVG", 
-            "Working Days": round(sc["Working Days"].mean(), 1) if not sc.empty else 0, 
-            "Tickets Count": round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0,
-            "JHAH Requests": round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0, 
-            "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1) if not sc.empty else 0,
-            "Email Counts": round(sc["Email Counts"].mean(), 1) if not sc.empty else 0,
-            "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
-            "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
-            "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
-            "% Achievement from Target": "100.0%", 
-            "Service Time": "00:00:00", 
-            "Service Quality": "100.0%"
-        }
-        
-        team_ov = overrides().get("🏆 Team AVG", {})
-        for col, val in team_ov.items():
-            team_row[col] = val
-
-        # Base Matrix
-        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
-
-        # Remove trailing decimals for extremely clean visual display (.00000 -> 0)
-        def format_clean_num(x):
-            try:
-                f = float(x)
-                if f.is_integer():
-                    return str(int(f))
-                return str(round(f, 1))
-            except:
-                return str(x)
-
-        cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves"]
-        for c in cols_clean:
-            if c in sc_final.columns:
-                sc_final[c] = sc_final[c].apply(format_clean_num)
-
-        # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
-        rank_df = sc.copy()
-        rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
-        top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
-        
-        gold_exp   = top_experts[0] if len(top_experts) > 0 else None
-        silver_exp = top_experts[1] if len(top_experts) > 1 else None
-        bronze_exp = top_experts[2] if len(top_experts) > 2 else None
-
-        display_df = sc_final.copy()
-        
-        gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
-        silver_disp = f"🥈 {silver_exp}" if silver_exp else None
-        bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
-
-        def add_medals_row(val):
-            if val == gold_exp: return gold_disp
-            if val == silver_exp: return silver_disp
-            if val == bronze_exp: return bronze_disp
-            return val
+            ar = sc[sc["Expert"] == sel_agent]
+            dv = ar.iloc[0].to_dict() if not ar.empty else {}
             
-        display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
+        cur = overrides().get(sel_agent, {})
+        def gv(k, t=int):
+            val = cur.get(k, dv.get(k, 0 if t == int else ""))
+            if t == int:
+                try: return int(float(val))
+                except: return 0
+            return str(val)
 
-        # Apply logic for rows colors
-        def style_performers(row):
-            exp = row["Expert"]
-            if exp == "🏆 Team AVG":
-                return ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
-            elif exp == gold_disp:
-                return ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
-            elif exp == silver_disp:
-                return ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
-            elif exp == bronze_disp:
-                return ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
-            elif exp == aname and not is_admin():
-                return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
-            return [''] * len(row)
+        with st.form(f"ov_form_{sel_agent}"):
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            with fc1:
+                nwd  = st.number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
+                ntc  = st.number_input("Tickets Count", min_value=0, value=gv("Tickets Count", int), step=1)
+            with fc2:
+                njh  = st.number_input("JHAH Requests", min_value=0, value=gv("JHAH Requests", int), step=1)
+                nrfb = st.number_input("Reporting & Feedback", min_value=0, value=gv("Reporting & Feedback", int), step=1)
+            with fc3:
+                nem  = st.number_input("Email Counts", min_value=0, value=gv("Email Counts", int), step=1)
+                nach = st.text_input("% Achievement from Target", value=gv("% Achievement from Target", str))
+            with fc4:
+                nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time", str))
+                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality", str))
 
-        # Apply styles
-        styled_df = display_df.style.apply(style_performers, axis=1)
-        
-        # Center all data cells horizontally and vertically
-        styled_df = styled_df.set_properties(**{'text-align': 'center'})
-        
-        # Force Expert column to stay bold
-        styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
-
-        # Format Headers (Deep Blue Background, White Text, Bold, Centered) using Pandas Styler
-        header_styles = [
-            dict(selector='th', props=[
-                ('background-color', '#1e40af'),
-                ('color', '#ffffff'),
-                ('font-weight', '900'),
-                ('text-align', 'center'),
-                ('font-size', '1.05rem')
-            ])
-        ]
-        styled_df = styled_df.set_table_styles(header_styles)
-        
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
-        if is_admin():
-            st.divider()
-            st.markdown("#### ✏️ Manual KPI Override Editor")
+            st.markdown("**🌴 Leaves & Off Days**")
+            lc1, lc2, lc3 = st.columns(3)
+            with lc1:
+                noff = st.number_input("Off Days", min_value=0, value=gv("Off Days", int), step=1)
+            with lc2:
+                nann = st.number_input("Annual Leaves", min_value=0, value=gv("Annual Leaves", int), step=1)
+            with lc3:
+                ncas = st.number_input("Casual Leaves", min_value=0, value=gv("Casual Leaves", int), step=1)
             
-            agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
-            sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
-            
-            if sel_agent == "🏆 Team AVG":
-                dv = team_row
-            else:
-                ar = sc[sc["Expert"] == sel_agent]
-                dv = ar.iloc[0].to_dict() if not ar.empty else {}
-                
-            cur = overrides().get(sel_agent, {})
-            def gv(k, t=int):
-                val = cur.get(k, dv.get(k, 0 if t == int else ""))
-                if t == int:
-                    try: return int(float(val))
-                    except: return 0
-                return str(val)
+            sc_col, rc_col = st.columns(2)
+            with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
+            with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
 
-            with st.form(f"ov_form_{sel_agent}"):
-                fc1, fc2, fc3, fc4 = st.columns(4)
-                with fc1:
-                    nwd  = st.number_input("Working Days", min_value=0, value=gv("Working Days", int), step=1)
-                    ntc  = st.number_input("Tickets Count", min_value=0, value=gv("Tickets Count", int), step=1)
-                with fc2:
-                    njh  = st.number_input("JHAH Requests", min_value=0, value=gv("JHAH Requests", int), step=1)
-                    nrfb = st.number_input("Reporting & Feedback", min_value=0, value=gv("Reporting & Feedback", int), step=1)
-                with fc3:
-                    nem  = st.number_input("Email Counts", min_value=0, value=gv("Email Counts", int), step=1)
-                    nach = st.text_input("% Achievement from Target", value=gv("% Achievement from Target", str))
-                with fc4:
-                    nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time", str))
-                    nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality", str))
+        if do_save:
+            overrides()[sel_agent] = {
+                "Working Days": nwd, "Tickets Count": ntc, "JHAH Requests": njh,
+                "Reporting & Feedback": nrfb, "Email Counts": nem,
+                "Off Days": noff, "Annual Leaves": nann, "Casual Leaves": ncas,
+                "% Achievement from Target": nach,
+                "Service Time": nst, "Service Quality": nsq,
+            }
+            _save_store()
+            st.success(f"✅ Override parameters applied for **{sel_agent}**.")
+            st.rerun()
 
-                st.markdown("**🌴 Leaves & Off Days**")
-                lc1, lc2, lc3 = st.columns(3)
-                with lc1:
-                    noff = st.number_input("Off Days", min_value=0, value=gv("Off Days", int), step=1)
-                with lc2:
-                    nann = st.number_input("Annual Leaves", min_value=0, value=gv("Annual Leaves", int), step=1)
-                with lc3:
-                    ncas = st.number_input("Casual Leaves", min_value=0, value=gv("Casual Leaves", int), step=1)
-                
-                sc_col, rc_col = st.columns(2)
-                with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
-                with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
-
-            if do_save:
-                overrides()[sel_agent] = {
-                    "Working Days": nwd, "Tickets Count": ntc, "JHAH Requests": njh,
-                    "Reporting & Feedback": nrfb, "Email Counts": nem,
-                    "Off Days": noff, "Annual Leaves": nann, "Casual Leaves": ncas,
-                    "% Achievement from Target": nach,
-                    "Service Time": nst, "Service Quality": nsq,
-                }
+        if do_clear:
+            if sel_agent in overrides():
+                overrides().pop(sel_agent)
                 _save_store()
-                st.success(f"✅ Override parameters applied for **{sel_agent}**.")
+                st.success(f"🔄 Dropped local overrides back to dynamic context for **{sel_agent}**.")
                 st.rerun()
+            else:
+                st.warning("No active overrides found to clear.")
 
-            if do_clear:
-                if sel_agent in overrides():
-                    overrides().pop(sel_agent)
-                    _save_store()
-                    st.success(f"🔄 Dropped local overrides back to dynamic context for **{sel_agent}**.")
-                    st.rerun()
-                else:
-                    st.warning("No active overrides found to clear.")
-
-            active_ovs = overrides()
-            if active_ovs:
-                st.write("")
-                with st.expander("🗂️ Active Metric Overrides"):
-                    st.json(active_ovs)
+        active_ovs = overrides()
+        if active_ovs:
+            st.write("")
+            with st.expander("🗂️ Active Metric Overrides"):
+                st.json(active_ovs)
+        
+        st.divider()
+        st.markdown("#### ✉️ End of Month Achievement Emails")
+        
+        email_agents_list = [x for x in display_df["Expert"] if "🏆 Team AVG" not in x]
+        selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
+        
+        if selected_email_agent:
+            agent_row = display_df[display_df["Expert"] == selected_email_agent].iloc[0]
             
-            st.divider()
-            st.markdown("#### ✉️ End of Month Achievement Emails")
+            achiev_str = agent_row["% Achievement from Target"]
+            achiev_val = float(str(achiev_str).replace('%', '')) if isinstance(achiev_str, str) else 0
             
-            email_agents_list = [x for x in display_df["Expert"] if "🏆 Team AVG" not in x]
-            selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
+            qual_str = agent_row["Service Quality"]
+            qual_val = float(str(qual_str).replace('%', '')) if isinstance(qual_str, str) else 0
             
-            if selected_email_agent:
-                agent_row = display_df[display_df["Expert"] == selected_email_agent].iloc[0]
-                
-                achiev_str = agent_row["% Achievement from Target"]
-                achiev_val = float(str(achiev_str).replace('%', '')) if isinstance(achiev_str, str) else 0
-                
-                qual_str = agent_row["Service Quality"]
-                qual_val = float(str(qual_str).replace('%', '')) if isinstance(qual_str, str) else 0
-                
-                if achiev_val >= 100:
-                    perf_word = "outstanding"
-                    target_msg = f"You successfully exceeded the team target with a brilliant **{achiev_str}** achievement rate!"
-                elif achiev_val >= 80:
-                    perf_word = "solid"
-                    target_msg = f"You reached a solid **{achiev_str}** of the target. Great effort, and let's push for 100% next month!"
-                else:
-                    perf_word = "developing"
-                    target_msg = f"You achieved **{achiev_str}** of the target. We believe in your potential and are here to support you in hitting higher milestones next month."
-                
-                if qual_val >= 95:
-                    qual_msg = f"Your service quality is top-tier at **{qual_str}**. Keep up the flawless work!"
-                elif qual_val >= 85:
-                    qual_msg = f"Your service quality is strong at **{qual_str}**."
-                else:
-                    qual_msg = f"Your service quality sits at **{qual_str}**. Let's focus on accuracy and quality in the upcoming period."
-                
-                clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
-                
-                email_body = f"""Dear {clean_name},
+            if achiev_val >= 100:
+                perf_word = "outstanding"
+                target_msg = f"You successfully exceeded the team target with a brilliant **{achiev_str}** achievement rate!"
+            elif achiev_val >= 80:
+                perf_word = "solid"
+                target_msg = f"You reached a solid **{achiev_str}** of the target. Great effort, and let's push for 100% next month!"
+            else:
+                perf_word = "developing"
+                target_msg = f"You achieved **{achiev_str}** of the target. We believe in your potential and are here to support you in hitting higher milestones next month."
+            
+            if qual_val >= 95:
+                qual_msg = f"Your service quality is top-tier at **{qual_str}**. Keep up the flawless work!"
+            elif qual_val >= 85:
+                qual_msg = f"Your service quality is strong at **{qual_str}**."
+            else:
+                qual_msg = f"Your service quality sits at **{qual_str}**. Let's focus on accuracy and quality in the upcoming period."
+            
+            clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
+            
+            email_body = f"""Dear {clean_name},
 
 I hope this email finds you well. 
 
@@ -1370,18 +1410,18 @@ Thank you for your hard work and dedication to our success. Should you need any 
 Best regards,
 Mohammed Shehta
 Team Leader"""
-                
-                st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=350)
-                
-                subject_encoded = urllib.parse.quote(f"Your Monthly Performance Review - {clean_name}")
-                body_encoded = urllib.parse.quote(email_body)
-                mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
-                
-                st.markdown(
-                    f'<a href="{mailto_link}" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#1d4ed8; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem;">'
-                    f'📧 Open in Default Email Client</a>', 
-                    unsafe_allow_html=True
-                )
+            
+            st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=350)
+            
+            subject_encoded = urllib.parse.quote(f"Your Monthly Performance Review - {clean_name}")
+            body_encoded = urllib.parse.quote(email_body)
+            mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
+            
+            st.markdown(
+                f'<a href="{mailto_link}" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#1d4ed8; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem;">'
+                f'📧 Open in Default Email Client</a>', 
+                unsafe_allow_html=True
+            )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
