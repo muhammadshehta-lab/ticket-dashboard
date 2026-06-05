@@ -530,13 +530,24 @@ with st.sidebar:
                 creds = Credentials.from_service_account_info(
                     json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             else:
-                st.error("❌ Secrets file layout unconfigured."); return pd.DataFrame()
+                st.error("❌ Secrets file layout unconfigured.")
+                return pd.DataFrame(), pd.DataFrame()
+            
             client = gspread.authorize(creds)
             sheet = client.open("AlDawaa Tickets Data")
+            
             all_dfs = []
+            roster_df = pd.DataFrame() # DataFrame to hold the Working Days data
+            
             for ws in sheet.worksheets():
                 data = ws.get_all_values()
                 if len(data) < 2: continue
+                
+                # Isolate the new "Working Days" tab so it doesn't break the tickets dataframe
+                if ws.title.strip() == "Working Days":
+                    roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                    continue
+                
                 dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 mp = {}; seen = set()
                 for col in dft.columns:
@@ -554,7 +565,10 @@ with st.sidebar:
                     if t and t not in seen: mp[col] = t; seen.add(t)
                 dft.rename(columns=mp, inplace=True)
                 all_dfs.append(dft)
-            if not all_dfs: return pd.DataFrame()
+            
+            if not all_dfs: 
+                return pd.DataFrame(), roster_df
+                
             df = pd.concat(all_dfs, ignore_index=True, sort=False)
             df.replace("", np.nan, inplace=True)
             for c in ["Request ID", "Request Date", "Request Type", "Status",
@@ -578,11 +592,15 @@ with st.sidebar:
             df["AHT (min)"]                = df["First Action Take (min)"]
             df["Is Email"] = (
                 df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
-            return df
+                
+            return df, roster_df
+            
         except Exception as e:
-            st.error(f"❌ Connection Error: {e}"); return pd.DataFrame()
+            st.error(f"❌ Connection Error: {e}")
+            return pd.DataFrame(), pd.DataFrame()
 
-    df_raw = load_data()
+    df_raw, df_roster = load_data()
+    
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
 
@@ -823,15 +841,15 @@ with tab1:
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
-        # HTML div with RTL forced direction to prevent Arabic text and Emojis from shifting visually
+        # HTML div forced direction RTL with fixed positions to stop shifting
         st.markdown("""
         <div style="direction: rtl; text-align: right; font-size: 1.1rem; margin-bottom: 1rem;">
             <strong>مؤشر ضغط العمل للموظف (Tickets per Agent):</strong><br>
-            <span dir="rtl">🟦 طبيعي (≤55)</span> &nbsp;|&nbsp; 
-            <span dir="rtl">🟨 متوسط (56-60)</span> &nbsp;|&nbsp; 
-            <span dir="rtl">🟧 عالي (61-63)</span> &nbsp;|&nbsp; 
-            <span dir="rtl">🟥 شديد (64-70)</span> &nbsp;|&nbsp; 
-            <span dir="rtl">🟫 رهيب (>70)</span>
+            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟦 طبيعي (≤55)</span>
+            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟨 متوسط (56-60)</span>
+            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟧 عالي (61-63)</span>
+            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟥 شديد (64-70)</span>
+            <span dir="rtl" style="display: inline-block;">🟫 رهيب (>70)</span>
         </div>
         """, unsafe_allow_html=True)
         
