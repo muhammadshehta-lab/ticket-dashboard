@@ -847,7 +847,7 @@ with tab1:
         fig_r.update_layout(**THEME, height=450, hovermode="x unified")
         st.plotly_chart(fig_r, use_container_width=True)
 
-        # ── 📅 DAILY TICKETS VOLUME & WORKLOAD TRACKING (Heatmap Gradient) ────────────────
+        # ── 📅 DAILY TICKETS VOLUME & SCHEDULE WORKLOAD TRACKING ──────────────────
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
@@ -871,12 +871,45 @@ with tab1:
             Total_Tickets=("Request ID", "count")
         ).reset_index()
         
-        # Calculate Active Agents strictly from the official team whitelist to prevent skewed workload ratios
+        # 1. Map dates to columns in df_roster to get SCHEDULED agents
+        roster_date_map = {}
+        if not df_roster.empty:
+            for col in df_roster.columns:
+                match = re.search(r'\d{1,2}-[a-zA-Z]+-\d{4}', str(col))
+                if match:
+                    try:
+                        dt = pd.to_datetime(match.group()).date()
+                        roster_date_map[dt] = col
+                    except: pass
+        
+        tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
+        
+        def get_scheduled_agents(target_date):
+            if target_date not in roster_date_map or df_roster.empty:
+                return 0
+            col_name = roster_date_map[target_date]
+            working_count = 0
+            
+            for index, row in df_roster.iterrows():
+                row_str = [str(x).strip().lower() for x in row.values]
+                if any(tid in row_str for tid in tracked_ids):
+                    cell_val = str(row[col_name]).strip().lower()
+                    # Any value that is not explicitly off/leave is considered working
+                    if cell_val and cell_val not in ['off', 'annual', 'casual', 'عارضة', 'عارضه']:
+                        working_count += 1
+            return working_count
+        
+        daily_vol["Scheduled_Agents"] = daily_vol["Shift Date"].apply(get_scheduled_agents)
+        
+        # 2. Fallback to actual agents logging tickets if roster is missing for that day
         agents_df = dfm_shift[dfm_shift["Assigned By"].isin(OFFICIAL_EXPERTS)]
-        active_df = agents_df.groupby("Shift Date").agg(Active_Agents=("Assigned By", "nunique")).reset_index()
+        active_df = agents_df.groupby("Shift Date").agg(Actual_Agents=("Assigned By", "nunique")).reset_index()
         
         daily_vol = pd.merge(daily_vol, active_df, on="Shift Date", how="left")
-        daily_vol["Active_Agents"] = daily_vol["Active_Agents"].fillna(0)
+        daily_vol["Actual_Agents"] = daily_vol["Actual_Agents"].fillna(0)
+        
+        # 3. Final Active Agents assignment: Use Scheduled roster if available, otherwise actual tickets logged
+        daily_vol["Active_Agents"] = np.where(daily_vol["Scheduled_Agents"] > 0, daily_vol["Scheduled_Agents"], daily_vol["Actual_Agents"])
         
         # Calculate Schedule Workload Metric: Tickets per Agent
         daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"].replace(0, 1)).round(1)
@@ -938,7 +971,7 @@ with tab1:
             textposition="top center",
             line=dict(color="#ef4444", width=3, shape="spline"),
             marker=dict(size=8, color="#ef4444"),
-            hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Active Agents: %{customdata}<extra></extra>",
+            hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>",
             customdata=daily_vol["Active_Agents"]
         ), secondary_y=True)
 
