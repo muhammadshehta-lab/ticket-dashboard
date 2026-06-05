@@ -285,30 +285,35 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     border-collapse: collapse;
     background-color: #ffffff;
     font-family: inherit;
+    table-layout: auto;
 }
 .scorecard-container th {
     background-color: #1e40af !important; /* Deep Professional Blue */
     color: #ffffff !important;            /* White Text */
     font-weight: 900 !important;          /* Extra Bold */
-    font-size: 1.05rem !important;
+    font-size: 0.95rem !important;        /* Slightly reduced for better fit */
     text-align: center !important;        /* Centered Header */
-    padding: 14px 10px !important;
-    white-space: nowrap;
+    padding: 8px 5px !important;          /* Reduced padding */
+    white-space: normal !important;       /* Allow wrapping to save horizontal space */
     border: 1px solid #cbd5e1;
+    line-height: 1.2;
+    vertical-align: middle;
 }
 .scorecard-container td {
     text-align: center !important;        /* Centered Data */
-    padding: 12px 10px !important;
-    font-size: 1.05rem !important;
+    padding: 8px 5px !important;          /* Reduced padding */
+    font-size: 0.95rem !important;        /* Slightly reduced for better fit */
     border: 1px solid #e2e8f0;
-    white-space: nowrap;
+    white-space: nowrap;                  /* Keep numbers on a single line */
+    vertical-align: middle;
 }
 /* Ensure the Expert column remains visibly strong */
 .scorecard-container td:first-child {
     font-weight: 900 !important;
     color: #0f172a !important;
     text-align: left !important;
-    padding-left: 15px !important;
+    padding-left: 10px !important;
+    white-space: nowrap;                  /* Keep names on a single line */
 }
 </style>
 """, unsafe_allow_html=True)
