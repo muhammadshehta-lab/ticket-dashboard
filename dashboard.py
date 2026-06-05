@@ -871,19 +871,18 @@ with tab1:
             Total_Tickets=("Request ID", "count")
         ).reset_index()
         
-        # 1. Map dates to columns in df_roster using a highly robust aggressive regex parser
+        # 1. 100% STRICT DATE PARSING ENGINE (YEAR INCLUSIVE)
         roster_date_map = {}
         if not df_roster.empty:
             for col in df_roster.columns:
                 col_str = str(col).strip()
-                # Remove day names to help parser focus strictly on the numeric date
-                clean_col = re.sub(r'(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)', '', col_str).strip()
-                
-                # Regex matches patterns like 22-May-2026, 22-05-2026, 22/5/2026, 22.05.2026, etc.
-                match = re.search(r'(\d{1,2}[-/ .]+[a-zA-Z0-9]+[-/ .]+\d{2,4})', clean_col)
+                # Remove alphabetic day names to prevent parsing confusion
+                clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+                # Extremely strict Regex: Must have Day, Month, and 4-Digit Year!
+                match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
                 if match:
                     try:
-                        # dayfirst=True is crucial because dates like 22-05 are clearly Day-Month
+                        # Convert safely matching exactly the extracted string including Year
                         dt = pd.to_datetime(match.group(1), dayfirst=True).date()
                         roster_date_map[dt] = col
                     except: pass
@@ -892,21 +891,17 @@ with tab1:
         
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty:
-                return -1 # Indicator that roster data for this exact date is missing from the sheet
+                return -1 # Force fallback if Date is fundamentally absent from Roster
             
             col_name = roster_date_map[target_date]
             working_count = 0
             
             for index, row in df_roster.iterrows():
-                # Join entire row into a string to safely catch the ID without formatting issues
                 row_vals_str = " ".join([str(x).strip().lower() for x in row.values])
-                
-                # Check if any of our known IDs exist anywhere in this row
                 if any(tid in row_vals_str for tid in tracked_ids):
                     cell_val = str(row.get(col_name, "")).strip().lower()
-                    
-                    # If cell has ANY value and it's not a known "off" string, count as working
-                    if cell_val and cell_val not in ['off', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'nan', 'none']:
+                    # Any value that is not an explicit off/leave marker is considered WORKING
+                    if cell_val and cell_val not in ['off', 'اوف', 'أوف', 'راحة', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'nan', 'none']:
                         working_count += 1
             return working_count
         
@@ -1064,15 +1059,14 @@ with tab2:
         sc["Service Quality"] = (grp["_c_ok"].sum() / grp["_c_all"].sum().replace(0,1) * 100).round(1).astype(str) + "%"
         sc = sc.reset_index().rename(columns={"Assigned By": "Expert"})
 
-        # ── EXTRACT ROSTER DATA USING ID MATCHING & DATE FILTER ─────────────────────
+        # ── EXTRACT ROSTER DATA USING ID MATCHING & STRICT DATE FILTER ──────────────
         roster_counts = {}
         if not df_roster.empty:
-            # 1. Identify columns that fall strictly within the selected date range
             valid_roster_cols = []
             for col in df_roster.columns:
                 col_str = str(col).strip()
-                clean_col = re.sub(r'(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)', '', col_str).strip()
-                match = re.search(r'(\d{1,2}[-/ .]+[a-zA-Z0-9]+[-/ .]+\d{2,4})', clean_col)
+                clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+                match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
                 if match:
                     try:
                         col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
@@ -1080,7 +1074,6 @@ with tab2:
                             valid_roster_cols.append(col)
                     except: pass
             
-            # Convert all cells to lowercase to prevent matching errors
             df_r_str = df_roster.astype(str)
             
             for exp in OFFICIAL_EXPERTS:
@@ -1088,7 +1081,6 @@ with tab2:
                 off_c, ann_c, cas_c = 0, 0, 0
                 
                 if exp_id:
-                    # Isolate row by ID securely without Iterrows
                     mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
                     exp_rows = df_r_str[mask]
                     
@@ -1098,7 +1090,7 @@ with tab2:
                             vals = exp_rows[safe_cols].values.flatten()
                             vals_lower = [str(v).strip().lower() for v in vals]
                             
-                            off_c = sum(1 for v in vals_lower if v == 'off')
+                            off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
                             ann_c = sum(1 for v in vals_lower if v == 'annual')
                             cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
                     
@@ -1108,12 +1100,10 @@ with tab2:
                     "Casual Leaves": cas_c
                 }
 
-        # Merge extracted Roster details into the Scorecard DataFrame
         sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
         sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
         sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
 
-        # Apply system administrative manual data overrides
         for i, row in sc.iterrows():
             ov = overrides().get(row["Expert"], {})
             for col, val in ov.items(): sc.at[i, col] = val
@@ -1133,15 +1123,12 @@ with tab2:
             "Service Quality": "100.0%"
         }
         
-        # Apply override to Team AVG if exists
         team_ov = overrides().get("🏆 Team AVG", {})
         for col, val in team_ov.items():
             team_row[col] = val
 
-        # Base Matrix
         sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
-        # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
         rank_df = sc.copy()
         rank_df["_sort_val"] = pd.to_numeric(rank_df["Tickets Count"], errors="coerce").fillna(0)
         top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
@@ -1178,13 +1165,11 @@ with tab2:
                 return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
             return [''] * len(row)
 
-        # Applying colors AND forcing the Expert column names to be intensely bold
         styled_df = display_df.style.apply(style_performers, axis=1)
         styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-        # ── MANUAL KPI OVERRIDE EDITOR (Admin Only) ───────────────────────────────────
         if is_admin():
             st.divider()
             st.markdown("#### ✏️ Manual KPI Override Editor")
@@ -1261,7 +1246,6 @@ with tab2:
                 with st.expander("🗂️ Active Metric Overrides"):
                     st.json(active_ovs)
             
-            # ── ✉️ END OF MONTH EMAIL GENERATOR ──────────────────────────────────────────
             st.divider()
             st.markdown("#### ✉️ End of Month Achievement Emails")
             
