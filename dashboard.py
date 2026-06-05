@@ -903,10 +903,10 @@ with tab1:
                 
                 # Check if any of our known IDs exist anywhere in this row
                 if any(tid in row_vals_str for tid in tracked_ids):
-                    cell_val = str(row[col_name]).strip().lower()
+                    cell_val = str(row.get(col_name, "")).strip().lower()
                     
                     # If cell has ANY value and it's not a known "off" string, count as working
-                    if cell_val and cell_val not in ['off', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation']:
+                    if cell_val and cell_val not in ['off', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'nan', 'none']:
                         working_count += 1
             return working_count
         
@@ -1072,7 +1072,6 @@ with tab2:
             for col in df_roster.columns:
                 col_str = str(col).strip()
                 clean_col = re.sub(r'(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday)', '', col_str).strip()
-                # Robust regex match for dates
                 match = re.search(r'(\d{1,2}[-/ .]+[a-zA-Z0-9]+[-/ .]+\d{2,4})', clean_col)
                 if match:
                     try:
@@ -1081,21 +1080,27 @@ with tab2:
                             valid_roster_cols.append(col)
                     except: pass
             
+            # Convert all cells to lowercase to prevent matching errors
+            df_r_str = df_roster.astype(str)
+            
             for exp in OFFICIAL_EXPERTS:
                 exp_id = EXPERT_ID_MAP.get(exp, "")
                 off_c, ann_c, cas_c = 0, 0, 0
                 
                 if exp_id:
-                    working_count = 0
-                    for index, row in df_roster.iterrows():
-                        row_vals_str = " ".join([str(x).strip().lower() for x in row.values])
-                        if str(exp_id).strip() in row_vals_str:
-                            if valid_roster_cols:
-                                vals = row[valid_roster_cols].values.flatten()
-                                vals_lower = [str(v).strip().lower() for v in vals]
-                                off_c = sum(1 for v in vals_lower if v == 'off')
-                                ann_c = sum(1 for v in vals_lower if v == 'annual')
-                                cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                    # Isolate row by ID securely without Iterrows
+                    mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+                    exp_rows = df_r_str[mask]
+                    
+                    if not exp_rows.empty and valid_roster_cols:
+                        safe_cols = [c for c in valid_roster_cols if c in exp_rows.columns]
+                        if safe_cols:
+                            vals = exp_rows[safe_cols].values.flatten()
+                            vals_lower = [str(v).strip().lower() for v in vals]
+                            
+                            off_c = sum(1 for v in vals_lower if v == 'off')
+                            ann_c = sum(1 for v in vals_lower if v == 'annual')
+                            cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
                     
                 roster_counts[exp] = {
                     "Off Days": off_c,
