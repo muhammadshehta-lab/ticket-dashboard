@@ -1120,6 +1120,24 @@ with tab2:
     k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(df_kpi["Request Take (min)"].mean()   if not df_kpi.empty else 0), "card-tat"), unsafe_allow_html=True)
 
     st.write(""); st.divider()
+    
+    # ── FETCH PERIOD OVERRIDES FIRST ──
+    period_ovs = overrides().get(PERIOD_KEY, {})
+    global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
+
+    if is_admin():
+        col_t1, col_t2 = st.columns([1, 3])
+        with col_t1:
+            st.markdown(f"#### 🎯 Set Daily Target")
+            with st.form("global_target_form"):
+                new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
+                if st.form_submit_button("💾 Save Global Target", use_container_width=True):
+                    if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+                    overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target
+                    _save_store()
+                    st.success("✅ Target saved successfully!")
+                    st.rerun()
+                    
     st.markdown("### 📊 Expert Performance Scorecard Dashboard")
 
     OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
@@ -1212,12 +1230,11 @@ with tab2:
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
 
     # ── PERIOD-SPECIFIC OVERRIDE LOGIC (SMART PARTIAL OVERRIDES) ──
-    period_ovs = overrides().get(PERIOD_KEY, {})
-    
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
-            sc.at[i, col] = val
+            if col != "GLOBAL_TARGET":
+                sc.at[i, col] = val
 
     # Calculate Cases per Day logic
     total_cases = sc["Tickets Count"].astype(float) + sc["JHAH Requests"].astype(float) + sc["Out Requests"].astype(float)
@@ -1230,8 +1247,13 @@ with tab2:
     else:
         sc["Rank"] = []
 
-    tavg = sc["Tickets Count"].mean()
-    sc["% Achievement from Target"] = ((sc["Tickets Count"] / tavg * 100).round(1).astype(str) + "%" if tavg > 0 else "0.0%")
+    # --- ACHIEVEMENT CALCULATION (DAILY TARGET LOGIC) ---
+    if global_target > 0:
+        sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
+    else:
+        tavg_cpd = sc["Cases/Day"].mean()
+        sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
+
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
     c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
@@ -1244,6 +1266,11 @@ with tab2:
     team_jhah = round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0
     team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
+
+    if global_target > 0:
+        team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
+    else:
+        team_achiev = "100.0%"
 
     team_row = {
         "Expert": "🏆 Team AVG", 
@@ -1258,14 +1285,15 @@ with tab2:
         "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
         "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
         "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
-        "% Achievement from Target": "100.0%", 
+        "% Achievement from Target": team_achiev, 
         "Service Time": "00:00:00", 
         "Service Quality": "100.0%"
     }
     
     team_ov = period_ovs.get("🏆 Team AVG", {})
     for col, val in team_ov.items():
-        team_row[col] = val
+        if col != "GLOBAL_TARGET":
+            team_row[col] = val
 
     sc.drop(columns=["_Service_Time_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
 
@@ -1423,10 +1451,12 @@ with tab2:
                 st.warning("No active overrides found to clear for this period.")
 
         active_ovs = overrides().get(PERIOD_KEY, {})
-        if active_ovs:
+        # Remove GLOBAL_TARGET from display so it doesn't confuse the manual table editor display
+        disp_ovs = {k: v for k, v in active_ovs.items() if k != "GLOBAL_TARGET"}
+        if disp_ovs:
             st.write("")
             with st.expander("🗂️ Active Metric Overrides (This Period)"):
-                st.json(active_ovs)
+                st.json(disp_ovs)
         
         st.divider()
         st.markdown("#### ✉️ End of Month Achievement Emails")
