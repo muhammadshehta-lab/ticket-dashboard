@@ -420,34 +420,61 @@ OFFICIAL_EXPERTS = [
 
 EXPERT_ID_MAP = {
     "Ahmed El-Kholy": "50107",
-    "Yahia Ali Shafei": "50114",
-    "Amr El-Sayed": "50187",
-    "Mohamed Abdelmageed": "50274",
     "Ahmed Kadry": "50399",
+    "Amr El-Sayed": "50187",
     "Eslam Ramadan": "50461",
-    "Mohamed Khalifa": "50476"
+    "Mohamed Abdelmageed": "50274",
+    "Mohamed Khalifa": "50476",
+    "Yahia Ali Shafei": "50114"
 }
 
 # 🧠 Name Normalizer: Maps all Arabic and English variations strictly to Official Names
 AGENT_ALIASES = {
+    # Variations for Mohamed Abdelmageed
     "mohamed abdelmajid": "Mohamed Abdelmageed",
     "mohamed el-sayed": "Mohamed Abdelmageed",
     "محمد عبد المجيد": "Mohamed Abdelmageed",
     "محمد السيد عبد المجيد": "Mohamed Abdelmageed",
     "محمد السيد": "Mohamed Abdelmageed",
+    "50274": "Mohamed Abdelmageed",
+    
+    # Variations for Ahmed El-Kholy
     "احمد الخولى": "Ahmed El-Kholy",
     "أحمد الخولي": "Ahmed El-Kholy",
     "احمد الخولي": "Ahmed El-Kholy",
+    "50107": "Ahmed El-Kholy",
+    
+    # Variations for Yahia Ali Shafei
     "يحي علي شافعي": "Yahia Ali Shafei",
     "يحيي علي شافعي": "Yahia Ali Shafei",
+    "50114": "Yahia Ali Shafei",
+    
+    # Variations for Amr El-Sayed
     "عمرو محمد السيد": "Amr El-Sayed",
+    "50187": "Amr El-Sayed",
+    
+    # Variations for Ahmed Kadry
     "أحمد محمد قدري": "Ahmed Kadry",
+    "احمد محمد قدري": "Ahmed Kadry",
     "احمد قدري": "Ahmed Kadry",
+    "50399": "Ahmed Kadry",
+    
+    # Variations for Eslam Ramadan
     "إسلام رمضان خليل": "Eslam Ramadan",
+    "اسلام رمضان خليل": "Eslam Ramadan",
     "اسلام رمضان": "Eslam Ramadan",
+    "50461": "Eslam Ramadan",
+    
+    # Variations for Mohamed Khalifa
     "محمد خليفة جاب الله": "Mohamed Khalifa",
+    "محمد خليفه جاب الله": "Mohamed Khalifa",
     "محمد خليفة": "Mohamed Khalifa",
     "محمد خليفه": "Mohamed Khalifa",
+    "50476": "Mohamed Khalifa",
+    
+    # Admin
+    "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta",
+    "50228": "Muhammad Shehta",
 }
 
 # 🌐 Global list of words that mean an agent is explicitly NOT working a regular shift
