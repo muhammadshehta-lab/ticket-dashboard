@@ -724,6 +724,10 @@ with st.sidebar:
         st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
     st.divider()
     
+    # ── PERIOD KEY FOR SMART OVERRIDES ──
+    # This key ensures overrides are bound to the specific date range selected
+    PERIOD_KEY = f"{d_from}_{d_to}"
+    
     sel_agents = st.multiselect("Agent Filter", sorted(df_raw["Assigned By"].dropna().unique()))
     sel_types  = st.multiselect("Request Type Filter", sorted(df_raw["Request Type"].dropna().unique()))
     sel_hic    = st.multiselect("HIC (Insurance) Filter", sorted(df_raw["HIC"].dropna().unique()))
@@ -1207,9 +1211,11 @@ with tab2:
     sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
 
-    # ── OVERRIDE LOGIC (PARTIAL & SMART) ──
+    # ── PERIOD-SPECIFIC OVERRIDE LOGIC (SMART PARTIAL OVERRIDES) ──
+    period_ovs = overrides().get(PERIOD_KEY, {})
+    
     for i, row in sc.iterrows():
-        ov = overrides().get(row["Expert"], {})
+        ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
             sc.at[i, col] = val
 
@@ -1257,7 +1263,7 @@ with tab2:
         "Service Quality": "100.0%"
     }
     
-    team_ov = overrides().get("🏆 Team AVG", {})
+    team_ov = period_ovs.get("🏆 Team AVG", {})
     for col, val in team_ov.items():
         team_row[col] = val
 
@@ -1334,13 +1340,13 @@ with tab2:
 
     if is_admin():
         st.divider()
-        st.markdown("#### ✏️ Manual KPI Override Editor")
-        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة مع الفلتر الزمني. اكتب رقماً فقط في الحقل الذي تريد تثبيته وتعديله يدوياً.")
+        st.markdown(f"#### ✏️ Manual KPI Override Editor (Period: {d_from} to {d_to})")
+        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة. اكتب رقماً فقط في الحقل الذي تريد تثبيته لهذه الفترة الزمنية المحددة.")
         
         agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
         sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
         
-        cur = overrides().get(sel_agent, {})
+        cur = period_ovs.get(sel_agent, {})
         def gv(k):
             return str(cur.get(k, ""))
 
@@ -1395,29 +1401,31 @@ with tab2:
             if parse_str(nst): new_ov["Service Time"] = parse_str(nst)
             if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
 
+            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+            
             if new_ov:
-                overrides()[sel_agent] = new_ov
+                overrides()[PERIOD_KEY][sel_agent] = new_ov
             else:
-                if sel_agent in overrides():
-                    overrides().pop(sel_agent)
+                if sel_agent in overrides().get(PERIOD_KEY, {}):
+                    overrides()[PERIOD_KEY].pop(sel_agent)
                     
             _save_store()
-            st.success(f"✅ Override parameters saved for **{sel_agent}**.")
+            st.success(f"✅ Override parameters saved specifically for period **{d_from} to {d_to}**.")
             st.rerun()
 
         if do_clear:
-            if sel_agent in overrides():
-                overrides().pop(sel_agent)
+            if PERIOD_KEY in overrides() and sel_agent in overrides()[PERIOD_KEY]:
+                overrides()[PERIOD_KEY].pop(sel_agent)
                 _save_store()
-                st.success(f"🔄 Dropped local overrides back to dynamic context for **{sel_agent}**.")
+                st.success(f"🔄 Cleared overrides for period **{d_from} to {d_to}**.")
                 st.rerun()
             else:
-                st.warning("No active overrides found to clear.")
+                st.warning("No active overrides found to clear for this period.")
 
-        active_ovs = overrides()
+        active_ovs = overrides().get(PERIOD_KEY, {})
         if active_ovs:
             st.write("")
-            with st.expander("🗂️ Active Metric Overrides"):
+            with st.expander("🗂️ Active Metric Overrides (This Period)"):
                 st.json(active_ovs)
         
         st.divider()
