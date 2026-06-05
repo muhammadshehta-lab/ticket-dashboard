@@ -271,29 +271,44 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 
 .section-card { background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
 
-/* Dataframe Row Typography Overrides - Making Headers Extra Bold, Colored & Centered */
-div[data-testid="stDataFrame"] table {
-    font-size: 1.05rem !important;
+/* ══ FULL-WIDTH CUSTOM HTML TABLE STYLING FOR SCORECARD ═════════════ */
+.scorecard-container {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.08);
 }
-/* Forcing the Header Row Style */
-div[data-testid="stDataFrame"] th {
-    font-weight: 900 !important;
+.scorecard-container table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #ffffff;
+    font-family: inherit;
+}
+.scorecard-container th {
     background-color: #1e40af !important; /* Deep Professional Blue */
     color: #ffffff !important;            /* White Text */
-    font-size: 1.1rem !important;
-    text-align: center !important;        /* Center Align */
-    border-bottom: 2px solid #cbd5e1 !important;
+    font-weight: 900 !important;          /* Extra Bold */
+    font-size: 1.05rem !important;
+    text-align: center !important;        /* Centered Header */
+    padding: 14px 10px !important;
+    white-space: nowrap;
+    border: 1px solid #cbd5e1;
 }
-div[data-testid="stDataFrame"] td {
-    text-align: center !important;        /* Center Align Data Cells */
+.scorecard-container td {
+    text-align: center !important;        /* Centered Data */
+    padding: 12px 10px !important;
+    font-size: 1.05rem !important;
+    border: 1px solid #e2e8f0;
+    white-space: nowrap;
 }
-/* Fallback for newer Streamlit Canvas Grids */
-[data-testid="stDataFrame"] div[data-testid="StyledDataFrameColHeaderCell"] {
+/* Ensure the Expert column remains visibly strong */
+.scorecard-container td:first-child {
     font-weight: 900 !important;
-    background-color: #1e40af !important;
-    color: #ffffff !important;
-    text-align: center !important;
-    justify-content: center !important;
+    color: #0f172a !important;
+    text-align: left !important;
+    padding-left: 15px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1123,7 +1138,7 @@ with tab2:
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
     sc["Reporting & Feedback"] = sc["Reporting & Feedback"].fillna(0).astype(int)
     sc["Email Counts"] = sc["Email Counts"].fillna(0).astype(int)
-    sc["Out Requests"] = 0  # Column for Requests outside the platform
+    sc["Out Requests"] = 0  
     
     # ── EXTRACT ROSTER DATA ──────────────
     roster_counts = {}
@@ -1284,31 +1299,18 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    # Apply styles
+    # ── FULL WIDTH HTML TABLE RENDERING FOR MAXIMUM CONTROL ──────────────────────
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "% Achievement from Target", "Service Time", "Service Quality"]
+    display_df = display_df[column_order]
+
     styled_df = display_df.style.apply(style_performers, axis=1)
-    
-    # Center all data cells horizontally and vertically
     styled_df = styled_df.set_properties(**{'text-align': 'center'})
-    
-    # Force Expert column to stay bold
     styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
 
-    # Format Headers (Deep Blue Background, White Text, Bold, Centered) using Pandas Styler
-    header_styles = [
-        dict(selector='th', props=[
-            ('background-color', '#1e40af'),
-            ('color', '#ffffff'),
-            ('font-weight', '900'),
-            ('text-align', 'center'),
-            ('font-size', '1.05rem')
-        ])
-    ]
-    styled_df = styled_df.set_table_styles(header_styles)
+    # Generate exact HTML to override Streamlit Canvas restrictions
+    html_table = styled_df.hide(axis="index").to_html()
     
-    # Rearranging columns for logical reading flow
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "% Achievement from Target", "Service Time", "Service Quality"]
-    
-    st.dataframe(styled_df, use_container_width=True, hide_index=True, column_order=column_order)
+    st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
 
     if is_admin():
         st.divider()
