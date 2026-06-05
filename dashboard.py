@@ -246,7 +246,6 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 .card-aht       { background: #f3e8ff; border: 2px solid #d8b4fe; color: #6b21a8; }
 .card-tat       { background: #ecfeff; border: 2px solid #67e8f9; color: #155e75; }
 .card-store     { background: #fffbeb; border: 2px solid #fde047; color: #b45309; }
-.card-open      { background: #fdf4ff; border: 2px solid #f0abfc; color: #86198f; }
 .card-actions   { background: #eff6ff; border: 2px solid #93c5fd; color: #1e3a8a; }
 
 /* ══ AUTHENTICATION MODULE SCREEN RESKIN ═════════════════════════════ */
@@ -904,11 +903,10 @@ with tab1:
     issue_pct = (issue / total * 100) if total > 0 else 0
     
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
-    open_count = total - (ok + issue)
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+    r2c1, r2c2, r2c3 = st.columns(3)
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total"),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store"),  unsafe_allow_html=True)
@@ -916,10 +914,9 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed"), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue"),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Open/Pending Status", f"{open_count:,}", "card-open"), unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
-    r2c3.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
     st.write("")
 
     if not dfm.empty:
@@ -971,7 +968,6 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
         
-        # Removed Night Shift adjustment per user request. Counting normally by Calendar Date.
         dfm_shift = dfm.copy()
         dfm_shift["Shift Date"] = dfm_shift["Date Only"]
         
