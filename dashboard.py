@@ -838,7 +838,7 @@ if st.session_state.page == "settings":
                         if uname == "admin":
                             st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me():
-                            st.error("❌ You cannot delete your own account while logged in!")
+                            st.error("❌ You calculate your own account while logged in!")
                         else:
                             users().pop(uname)
                             _save_store()
@@ -1003,7 +1003,11 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
         
-        dfm_shift = dfm.copy()
+        df_workload = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        if esc and not nesc: df_workload = df_workload[df_workload["Is Email"] == True]
+        elif nesc and not esc: df_workload = df_workload[df_workload["Is Email"] == False]
+        
+        dfm_shift = df_workload.copy()
         dfm_shift["Shift Date"] = dfm_shift["Date Only"]
         
         daily_vol = dfm_shift.groupby("Shift Date").agg(
@@ -1526,6 +1530,7 @@ with tab2:
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
+            # --- PURE PERFORMANCE MARKDOWN EMAIL TABLE ---
             markdown_email = f"""
 Dear **{clean_name}**,
 
