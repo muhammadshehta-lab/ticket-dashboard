@@ -933,13 +933,38 @@ with tab1:
         sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
         sb_df = pd.concat([rd, sd], ignore_index=True)
         
-        fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", color="SLA Tier",
-            color_discrete_map={"Under 15 Mins": "#2ea44f", "15-30 Mins": "#2188ff", "30-45 Mins": "#bc8cff", "45-60 Mins": "#f9c513", "Over 1 Hour": "#ea4a5a"}, branchvalues="total")
+        fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", branchvalues="total")
         
+        custom_colors = {
+            "Response Time": "#3b82f6",       # Blue
+            "Service Resolution": "#10b981",  # Green
+            "Under 15 Mins": "#2ea44f", 
+            "15-30 Mins": "#2188ff", 
+            "30-45 Mins": "#bc8cff", 
+            "45-60 Mins": "#f9c513", 
+            "Over 1 Hour": "#ea4a5a"
+        }
+        
+        trace = fig_sb.data[0]
+        new_colors = [custom_colors.get(label, "#cccccc") for label in trace.labels]
+        
+        new_text = []
+        new_hover = []
+        for p, label in zip(trace.parents, trace.labels):
+            if p == "" or p is None:
+                new_text.append(f"<b>{label}</b>")
+                new_hover.append("<b>%{label}</b><br>Total Tickets: %{value:,}<extra></extra>")
+            else:
+                new_text.append("%{label}<br>%{value:,}<br>%{percentParent:.1%}")
+                new_hover.append("<b>%{label}</b><br>Tickets Count: %{value:,}<br>Percentage: %{percentParent:.1%}<extra></extra>")
+                
         fig_sb.update_traces(
-            textinfo="label+value+percent parent",
-            hovertemplate="<b>%{label}</b><br>Tickets Count: %{value:,}<br>Percentage: %{percentParent:.1%}"
+            texttemplate=new_text,
+            textinfo="none",
+            hovertemplate=new_hover,
+            marker=dict(colors=new_colors)
         )
+        
         fig_sb.update_layout(**THEME, height=520)
         st.plotly_chart(fig_sb, use_container_width=True)
 
@@ -1406,32 +1431,15 @@ with tab2:
             return str(cur.get(k, ""))
 
         with st.form(f"ov_form_{sel_agent}"):
-            fc1, fc2, fc3, fc4 = st.columns(4)
+            fc1, fc2, fc3 = st.columns(3)
             with fc1:
-                nwd  = st.text_input("Working Days", value=gv("Working Days"))
-                ntc  = st.text_input("Tickets Count", value=gv("Tickets Count"))
                 nout = st.text_input("Out Requests", value=gv("Out Requests"))
-            with fc2:
                 njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
+            with fc2:
                 nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
-            with fc3:
                 nem  = st.text_input("Email Counts", value=gv("Email Counts"))
-                nach = st.text_input("% Achievement from Target", value=gv("% Achievement from Target"))
-            with fc4:
-                nfrt = st.text_input("FRT (HH:MM:SS)", value=gv("FRT"))
-                nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time"))
+            with fc3:
                 nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
-
-            st.markdown("**🌴 Leaves & Off Days**")
-            lc1, lc2, lc3, lc4 = st.columns(4)
-            with lc1:
-                noff = st.text_input("Off Days", value=gv("Off Days"))
-            with lc2:
-                nann = st.text_input("Annual Leaves", value=gv("Annual Leaves"))
-            with lc3:
-                ncas = st.text_input("Casual Leaves", value=gv("Casual Leaves"))
-            with lc4:
-                nsick = st.text_input("Sick Leaves", value=gv("Sick Leaves"))
             
             sc_col, rc_col = st.columns(2)
             with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
@@ -1445,20 +1453,10 @@ with tab2:
             def parse_str(v):
                 return str(v).strip() if str(v).strip() else None
 
-            if parse_int(nwd) is not None: new_ov["Working Days"] = parse_int(nwd)
-            if parse_int(ntc) is not None: new_ov["Tickets Count"] = parse_int(ntc)
             if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
             if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
             if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
             if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
-            if parse_int(noff) is not None: new_ov["Off Days"] = parse_int(noff)
-            if parse_int(nann) is not None: new_ov["Annual Leaves"] = parse_int(nann)
-            if parse_int(ncas) is not None: new_ov["Casual Leaves"] = parse_int(ncas)
-            if parse_int(nsick) is not None: new_ov["Sick Leaves"] = parse_int(nsick)
-            
-            if parse_str(nach): new_ov["% Achievement from Target"] = parse_str(nach)
-            if parse_str(nfrt): new_ov["FRT"] = parse_str(nfrt)
-            if parse_str(nst): new_ov["Service Time"] = parse_str(nst)
             if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
 
             if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
@@ -1528,7 +1526,6 @@ with tab2:
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
-            # --- PURE PERFORMANCE MARKDOWN EMAIL TABLE ---
             markdown_email = f"""
 Dear **{clean_name}**,
 
@@ -1555,10 +1552,8 @@ Best regards,
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
             st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
             
-            # Renders as actual formatted HTML in the UI for copying
             st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:2px solid #cbd5e1; font-size:1.1rem; color:#1e293b;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
             
-            # --- PLAIN TEXT FALLBACK FOR GMAIL BUTTON ---
             email_body_plain = f"""Dear {clean_name},
 
 I hope this email finds you well. 
