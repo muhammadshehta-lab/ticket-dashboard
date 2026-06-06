@@ -1100,7 +1100,7 @@ with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
     t2c1, t2c2 = st.columns(2)
     with t2c1: t2e  = st.checkbox("🔥 Escalated Cases Only",   value=False, key="t2_esc")
-    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Only", value=False, key="t2_nesc")
+    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Scope", value=False, key="t2_nesc")
 
     df_t2 = df.copy()
     if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
@@ -1165,6 +1165,7 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         stats["_Service_Time_val"]    = grp["Request Take (min)"].mean()
+        stats["_FRT_val"]             = grp["Response Take (min)"].mean()
         stats["_c_ok_sum"]            = grp["_c_ok"].sum()
         stats["_c_all_sum"]           = grp["_c_all"].sum()
         
@@ -1175,6 +1176,7 @@ with tab2:
         sc["Reporting & Feedback"] = 0
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
+        sc["_FRT_val"] = 0
         sc["_c_ok_sum"] = 0
         sc["_c_all_sum"] = 0
 
@@ -1216,7 +1218,7 @@ with tab2:
                         
                         off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
                         ann_c = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
-                        cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                        max_cas = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
                         sick_c = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
                         wd_c  = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
                 
@@ -1224,7 +1226,7 @@ with tab2:
                 "Working Days": wd_c,
                 "Off Days": off_c,
                 "Annual Leaves": ann_c,
-                "Casual Leaves": cas_c,
+                "Casual Leaves": max_cas,
                 "Sick Leaves": sick_c
             }
 
@@ -1280,6 +1282,7 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
+    sc["FRT"] = sc["_FRT_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
     c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
@@ -1291,6 +1294,9 @@ with tab2:
     team_jhah = round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0
     team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
+
+    team_st = fmt_m(df_sc["Request Take (min)"].mean() if not df_sc.empty else 0)
+    team_frt = fmt_m(df_sc["Response Take (min)"].mean() if not df_sc.empty else 0)
 
     if global_target > 0:
         team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
@@ -1312,7 +1318,8 @@ with tab2:
         "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
         "Sick Leaves": round(sc["Sick Leaves"].mean(), 1) if not sc.empty else 0,
         "% Achievement from Target": team_achiev, 
-        "Service Time": "00:00:00", 
+        "FRT": team_frt,
+        "Service Time": team_st, 
         "Service Quality": "100.0%"
     }
     
@@ -1321,7 +1328,7 @@ with tab2:
         if col != "GLOBAL_TARGET":
             team_row[col] = val
 
-    sc.drop(columns=["_Service_Time_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
+    sc.drop(columns=["_Service_Time_val", "_FRT_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
 
     sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
@@ -1376,8 +1383,7 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    # Cleaned table - strictly performance focused (Removed Leaves and Shifts)
-    column_order = ["Expert", "Rank", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "Service Time", "Service Quality"]
+    column_order = ["Expert", "Rank", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "FRT", "Service Time", "Service Quality"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
@@ -1412,6 +1418,7 @@ with tab2:
                 nem  = st.text_input("Email Counts", value=gv("Email Counts"))
                 nach = st.text_input("% Achievement from Target", value=gv("% Achievement from Target"))
             with fc4:
+                nfrt = st.text_input("FRT (HH:MM:SS)", value=gv("FRT"))
                 nst  = st.text_input("Service Time (HH:MM:SS)", value=gv("Service Time"))
                 nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
 
@@ -1450,6 +1457,7 @@ with tab2:
             if parse_int(nsick) is not None: new_ov["Sick Leaves"] = parse_int(nsick)
             
             if parse_str(nach): new_ov["% Achievement from Target"] = parse_str(nach)
+            if parse_str(nfrt): new_ov["FRT"] = parse_str(nfrt)
             if parse_str(nst): new_ov["Service Time"] = parse_str(nst)
             if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
 
@@ -1530,20 +1538,18 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 
 ### 📊 Your Performance Scorecard:
 
-| Metric | Total Cases | Cases/Day | Achievement | Quality | Service Time |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['Service Time']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['Service Time']} |
+| Metric | Total Cases | Cases/Day | Achievement | Quality | FRT | Service Time |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['FRT']}** | **{agent_row['Service Time']}** |
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['FRT']} | {team_row_disp['Service Time']} |
 
-**🎯 Targets & Quality:**  
-{target_msg}  
+**🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta**  
-Team Leader
+**Mohammed Shehta** Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
@@ -1560,12 +1566,12 @@ I hope this email finds you well.
 As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
 
 📊 Your Performance Scorecard:
----------------------------------------------------------------------------------
-Metric         | Total Cases | Cases/Day | Achievement | Quality | Service Time
----------------------------------------------------------------------------------
-Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['Service Time'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['Service Time'])}
----------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------
+Metric         | Total Cases | Cases/Day | Achievement | Quality | FRT      | Service Time
+------------------------------------------------------------------------------------------
+Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['FRT']):<8} | {str(agent_row['Service Time'])}
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['FRT']):<8} | {str(team_row_disp['Service Time'])}
+------------------------------------------------------------------------------------------
 
 🎯 Targets & Quality:
 {target_msg.replace('**', '')}
