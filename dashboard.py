@@ -1464,20 +1464,20 @@ with tab2:
             
             if achiev_val >= 100:
                 perf_word = "outstanding"
-                target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
+                target_msg = f"You successfully exceeded the daily target with a brilliant <b>{agent_row['% Achievement from Target']}</b> achievement rate!"
             elif achiev_val >= 80:
                 perf_word = "solid"
-                target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
+                target_msg = f"You reached a solid <b>{agent_row['% Achievement from Target']}</b> of the daily target. Great effort, let's push for 100%!"
             else:
                 perf_word = "developing"
-                target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
+                target_msg = f"You achieved <b>{agent_row['% Achievement from Target']}</b> of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
             
             if qual_val >= 95:
-                qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
+                qual_msg = f"Your service quality is top-tier at <b>{agent_row['Service Quality']}</b>. Keep up the flawless work!"
             elif qual_val >= 85:
-                qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
+                qual_msg = f"Your service quality is strong at <b>{agent_row['Service Quality']}</b>."
             else:
-                qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
+                qual_msg = f"Your service quality sits at <b>{agent_row['Service Quality']}</b>. Let's focus on accuracy and quality in the upcoming period."
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
@@ -1489,44 +1489,44 @@ with tab2:
                 <p>As we review the performance for the period from <b>{d_from}</b> to <b>{d_to}</b>, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.</p>
                 
                 <p><b>📊 Your Performance Scorecard:</b></p>
-                <table style="border-collapse: collapse; width: 100%; max-width: 650px; margin-bottom: 20px;">
+                <table style="border-collapse: collapse; width: 100%; max-width: 600px; margin-bottom: 20px;">
                     <thead>
-                        <tr style="background-color: #1e40af; color: white; border-bottom: 2px solid #cbd5e1;">
-                            <th style="text-align: left; padding: 10px; border: 1px solid #cbd5e1;">Metric</th>
-                            <th style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;">Your Score</th>
-                            <th style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;">Team Average</th>
+                        <tr style="background-color: #1e40af; color: white;">
+                            <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: left;">Metric</th>
+                            <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">Your Score</th>
+                            <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;">Team Average</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Total Cases Resolved</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{int(agent_total_cases)}</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_total_cases}</td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f8fafc;"><b>Total Cases Resolved</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;"><b>{int(agent_total_cases)}</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">{team_total_cases}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Average Cases per Day</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Cases/Day']}</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Cases/Day']}</td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #ffffff;"><b>Average Cases per Day</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;"><b>{agent_row['Cases/Day']}</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">{team_row_disp['Cases/Day']}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Target Achievement</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['% Achievement from Target']}</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['% Achievement from Target']}</td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f8fafc;"><b>Target Achievement</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;"><b>{agent_row['% Achievement from Target']}</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">{team_row_disp['% Achievement from Target']}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Service Quality</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Service Quality']}</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Service Quality']}</td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #ffffff;"><b>Service Quality</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;"><b>{agent_row['Service Quality']}</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">{team_row_disp['Service Quality']}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Service Time (Avg)</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Service Time']}</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Service Time']}</td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f8fafc;"><b>Service Time (Avg)</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;"><b>{agent_row['Service Time']}</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">{team_row_disp['Service Time']}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Working Days</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Working Days']}</b></td>
-                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Working Days']}</td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #ffffff;"><b>Working Days</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center;"><b>{agent_row['Working Days']}</b></td>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: center; color: #475569;">{team_row_disp['Working Days']}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -1573,8 +1573,8 @@ Working Days            | {str(agent_row['Working Days']):<12} | {team_row_disp[
 Off Days: {agent_row.get('Off Days', 0)} | Casual: {agent_row.get('Casual Leaves', 0)} | Annual: {agent_row.get('Annual Leaves', 0)}
 
 🎯 Targets & Quality:
-{target_msg}
-{qual_msg}
+{target_msg.replace('<b>', '').replace('</b>', '')}
+{qual_msg.replace('<b>', '').replace('</b>', '')}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
