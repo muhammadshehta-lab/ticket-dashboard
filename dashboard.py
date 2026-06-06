@@ -881,7 +881,7 @@ st.caption(caption_text)
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
 # ══════════════════════════════════════════════════════════════════════════════════
-tab1, tab2 = st.tabs(["📈 Tab 1: Operational Insights", "👥 Tab 2: Team Performance and KPIs"])
+tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
 
 # ── TAB 1 — Operational Insights ──────────────────────────────────────────────────
 with tab1:
@@ -1512,10 +1512,11 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta** Team Leader
+**Mohammed Shehta**  
+Team Leader
 """
             
-            st.markdown("##### 📝 Email Preview (Rich Text - Highlight & Copy directly from here!)")
+            st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
             st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail/Outlook) ليحتفظ بتنسيقه الرائع.")
             
             # Renders as actual formatted HTML in the UI for copying
