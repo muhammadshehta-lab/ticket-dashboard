@@ -724,11 +724,8 @@ with st.sidebar:
         st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
     st.divider()
     
-    # ── PERIOD KEY FOR SMART OVERRIDES ──
-    # This key ensures overrides are bound to the specific date range selected
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    # ── MODIFIED FILTER NAMES ──
     sel_agents = st.multiselect("Expert Name", sorted(df_raw["Assigned By"].dropna().unique()))
     sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
     sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
@@ -1122,7 +1119,6 @@ with tab2:
 
     st.write(""); st.divider()
     
-    # ── FETCH PERIOD OVERRIDES FIRST ──
     period_ovs = overrides().get(PERIOD_KEY, {})
     global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
 
@@ -1182,7 +1178,6 @@ with tab2:
     sc["Email Counts"] = sc["Email Counts"].fillna(0).astype(int)
     sc["Out Requests"] = 0  
     
-    # ── EXTRACT ROSTER DATA ──────────────
     roster_counts = {}
     if not df_roster.empty:
         valid_roster_cols = []
@@ -1230,25 +1225,21 @@ with tab2:
     sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
 
-    # ── PERIOD-SPECIFIC OVERRIDE LOGIC (SMART PARTIAL OVERRIDES) ──
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
             if col != "GLOBAL_TARGET":
                 sc.at[i, col] = val
 
-    # Calculate Cases per Day logic
     total_cases = sc["Tickets Count"].astype(float) + sc["JHAH Requests"].astype(float) + sc["Out Requests"].astype(float)
-    wdays = sc["Working Days"].astype(float).replace(0, 1) # Prevent div by 0
+    wdays = sc["Working Days"].astype(float).replace(0, 1)
     sc["Cases/Day"] = (total_cases / wdays).round(1)
 
-    # --- ADD RANK COLUMN DYNAMICALLY BASED ON CASES PER DAY ---
     if not sc.empty:
         sc.insert(1, "Rank", sc["Cases/Day"].rank(method="min", ascending=False).astype(int).astype(str))
     else:
         sc["Rank"] = []
 
-    # --- ACHIEVEMENT CALCULATION (DAILY TARGET LOGIC) ---
     if global_target > 0:
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
     else:
@@ -1261,7 +1252,6 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # Team AVG row
     team_wd = round(sc["Working Days"].mean(), 1) if not sc.empty else 0
     team_tc = round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0
     team_jhah = round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0
@@ -1298,7 +1288,6 @@ with tab2:
 
     sc.drop(columns=["_Service_Time_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
 
-    # Base Matrix
     sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
     def format_clean_num(x):
@@ -1316,7 +1305,6 @@ with tab2:
         if c in sc_final.columns:
             sc_final[c] = sc_final[c].apply(format_clean_num)
 
-    # ── TOP PERFORMERS SMART COLOR HIGHLIGHTING ──────────────────────────────────
     rank_df = sc.copy()
     rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
     top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
@@ -1339,7 +1327,6 @@ with tab2:
         
     display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
 
-    # Apply logic for rows colors
     def style_performers(row):
         exp = row["Expert"]
         if exp == "🏆 Team AVG":
@@ -1354,7 +1341,6 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    # ── FULL WIDTH HTML TABLE RENDERING FOR MAXIMUM CONTROL ──────────────────────
     column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "% Achievement from Target", "Service Time", "Service Quality"]
     display_df = display_df[column_order]
 
@@ -1362,9 +1348,7 @@ with tab2:
     styled_df = styled_df.set_properties(**{'text-align': 'center'})
     styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
 
-    # Generate exact HTML to override Streamlit Canvas restrictions
     html_table = styled_df.hide(axis="index").to_html()
-    
     st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
 
     if is_admin():
@@ -1452,7 +1436,6 @@ with tab2:
                 st.warning("No active overrides found to clear for this period.")
 
         active_ovs = overrides().get(PERIOD_KEY, {})
-        # Remove GLOBAL_TARGET from display so it doesn't confuse the manual table editor display
         disp_ovs = {k: v for k, v in active_ovs.items() if k != "GLOBAL_TARGET"}
         if disp_ovs:
             st.write("")
@@ -1460,53 +1443,134 @@ with tab2:
                 st.json(disp_ovs)
         
         st.divider()
-        st.markdown("#### ✉️ End of Month Achievement Emails")
+        st.markdown("#### ✉️ Performance Review Emails")
         
         email_agents_list = [x for x in display_df["Expert"] if "🏆 Team AVG" not in x]
         selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
         
         if selected_email_agent:
             agent_row = display_df[display_df["Expert"] == selected_email_agent].iloc[0]
+            team_row_disp = display_df[display_df["Expert"] == "🏆 Team AVG"].iloc[0]
             
-            achiev_str = agent_row["% Achievement from Target"]
-            achiev_val = float(str(achiev_str).replace('%', '')) if isinstance(achiev_str, str) else 0
+            def safe_float(v):
+                try: return float(str(v).replace('%','').replace(',',''))
+                except: return 0.0
             
-            qual_str = agent_row["Service Quality"]
-            qual_val = float(str(qual_str).replace('%', '')) if isinstance(qual_str, str) else 0
+            achiev_val = safe_float(agent_row["% Achievement from Target"])
+            qual_val = safe_float(agent_row["Service Quality"])
+            
+            agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Out Requests'])
+            team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Out Requests'])
             
             if achiev_val >= 100:
                 perf_word = "outstanding"
-                target_msg = f"You successfully exceeded the team target with a brilliant **{achiev_str}** achievement rate!"
+                target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
             elif achiev_val >= 80:
                 perf_word = "solid"
-                target_msg = f"You reached a solid **{achiev_str}** of the target. Great effort, and let's push for 100% next month!"
+                target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
             else:
                 perf_word = "developing"
-                target_msg = f"You achieved **{achiev_str}** of the target. We believe in your potential and are here to support you in hitting higher milestones next month."
+                target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
             
             if qual_val >= 95:
-                qual_msg = f"Your service quality is top-tier at **{qual_str}**. Keep up the flawless work!"
+                qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
             elif qual_val >= 85:
-                qual_msg = f"Your service quality is strong at **{qual_str}**."
+                qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
             else:
-                qual_msg = f"Your service quality sits at **{qual_str}**. Let's focus on accuracy and quality in the upcoming period."
+                qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
-            email_body = f"""Dear {clean_name},
+            # --- RICH TEXT HTML PREVIEW ---
+            rich_email_html = f"""
+            <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px; background-color: #fff;">
+                <p>Dear <b>{clean_name}</b>,</p>
+                <p>I hope this email finds you well.</p>
+                <p>As we review the performance for the period from <b>{d_from}</b> to <b>{d_to}</b>, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.</p>
+                
+                <p><b>📊 Your Performance Scorecard:</b></p>
+                <table style="border-collapse: collapse; width: 100%; max-width: 650px; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="background-color: #1e40af; color: white; border-bottom: 2px solid #cbd5e1;">
+                            <th style="text-align: left; padding: 10px; border: 1px solid #cbd5e1;">Metric</th>
+                            <th style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;">Your Score</th>
+                            <th style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;">Team Average</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Total Cases Resolved</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{int(agent_total_cases)}</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_total_cases}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Average Cases per Day</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Cases/Day']}</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Cases/Day']}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Target Achievement</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['% Achievement from Target']}</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['% Achievement from Target']}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Service Quality</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Service Quality']}</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Service Quality']}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Service Time (Avg)</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Service Time']}</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Service Time']}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #cbd5e1; background-color: #f1f5f9;"><b>Working Days</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1;"><b>{agent_row['Working Days']}</b></td>
+                            <td style="text-align: center; padding: 10px; border: 1px solid #cbd5e1; color: #475569;">{team_row_disp['Working Days']}</td>
+                        </tr>
+                    </tbody>
+                </table>
+        
+                <p><b>🌴 Leaves & Off Days:</b><br>
+                Off Days: <b>{agent_row.get('Off Days', 0)}</b> | Casual Leaves: <b>{agent_row.get('Casual Leaves', 0)}</b> | Annual Leaves: <b>{agent_row.get('Annual Leaves', 0)}</b></p>
+        
+                <p><b>🎯 Targets & Quality:</b><br>
+                {target_msg}<br>
+                {qual_msg}</p>
+        
+                <p>Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.</p>
+        
+                <p>Best regards,<br>
+                <b>Mohammed Shehta</b><br>
+                Team Leader</p>
+            </div>
+            """
+            
+            st.markdown("##### 📝 Email Preview (Rich Text - Copy directly from here!)")
+            st.info("💡 **تلميح:** قم بتظليل هذا الجدول والإيميل بالماوس وانسخه (Copy) ثم قم بلصقه مباشرة في (Gmail/Outlook) ليحتفظ بتنسيقه الملون الرائع.")
+            st.markdown(rich_email_html, unsafe_allow_html=True)
+            
+            # --- PLAIN TEXT FALLBACK FOR MAILTO LINKS ---
+            email_body_plain = f"""Dear {clean_name},
 
 I hope this email finds you well. 
 
-As we wrap up the month, I wanted to personally share your performance metrics and highlight your {perf_word} contributions to the team.
+As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
 
-📊 Your Monthly Performance Overview:
-- Total Cases Resolved (Platform + Out + JHAH): {float(agent_row['Tickets Count']) + float(agent_row['JHAH Requests']) + float(agent_row['Out Requests'])}
-- Average Cases per Day: {agent_row['Cases/Day']}
-- Working Days: {agent_row['Working Days']}
-- Service Time (Avg): {agent_row['Service Time']}
-- Off Days Taken: {agent_row.get('Off Days', 0)}
-- Casual Leaves: {agent_row.get('Casual Leaves', 0)}
-- Annual Leaves: {agent_row.get('Annual Leaves', 0)}
+📊 Your Performance Scorecard:
+-------------------------------------------------------
+Metric                  | Your Score   | Team Average
+-------------------------------------------------------
+Total Cases Resolved    | {str(int(agent_total_cases)):<12} | {team_total_cases}
+Average Cases per Day   | {str(agent_row['Cases/Day']):<12} | {team_row_disp['Cases/Day']}
+Target Achievement      | {str(agent_row['% Achievement from Target']):<12} | {team_row_disp['% Achievement from Target']}
+Service Quality         | {str(agent_row['Service Quality']):<12} | {team_row_disp['Service Quality']}
+Service Time (Avg)      | {str(agent_row['Service Time']):<12} | {team_row_disp['Service Time']}
+Working Days            | {str(agent_row['Working Days']):<12} | {team_row_disp['Working Days']}
+-------------------------------------------------------
+
+🌴 Leaves & Off Days:
+Off Days: {agent_row.get('Off Days', 0)} | Casual: {agent_row.get('Casual Leaves', 0)} | Annual: {agent_row.get('Annual Leaves', 0)}
 
 🎯 Targets & Quality:
 {target_msg}
@@ -1517,18 +1581,29 @@ Thank you for your hard work and dedication to our success. Should you need any 
 Best regards,
 Mohammed Shehta
 Team Leader"""
+
+            with st.expander("Show Plain Text Version (For unsupported apps)"):
+                st.text_area("Plain Text Draft", value=email_body_plain, height=350)
             
-            st.text_area("Drafted Email (Ready to Copy)", value=email_body, height=380)
+            subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
+            body_encoded = urllib.parse.quote(email_body_plain)
             
-            subject_encoded = urllib.parse.quote(f"Your Monthly Performance Review - {clean_name}")
-            body_encoded = urllib.parse.quote(email_body)
-            mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
-            
-            st.markdown(
-                f'<a href="{mailto_link}" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#1d4ed8; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem;">'
-                f'📧 Open in Default Email Client</a>', 
-                unsafe_allow_html=True
-            )
+            st.write("")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
+                st.markdown(
+                    f'<a href="{mailto_link}" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#1e40af; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem; width:100%; text-align:center;">'
+                    f'📧 Open in Default App (Outlook/Mac)</a>', 
+                    unsafe_allow_html=True
+                )
+            with col_b2:
+                gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
+                st.markdown(
+                    f'<a href="{gmail_link}" target="_blank" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#ea4335; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem; width:100%; text-align:center;">'
+                    f'🌐 Open in Gmail (Browser)</a>', 
+                    unsafe_allow_html=True
+                )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
