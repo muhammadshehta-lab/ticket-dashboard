@@ -886,8 +886,8 @@ tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs
 # ── TAB 1 — Operational Insights ──────────────────────────────────────────────────
 with tab1:
     c1, c2 = st.columns(2)
-    with c1: esc  = st.checkbox("🔥 Filter: Escalated Cases Only",    value=False, key="t1_esc")
-    with c2: nesc = st.checkbox("🟢 Filter: Non-Escalated Cases Only", value=False, key="t1_nesc")
+    with c1: esc  = st.checkbox("🔥 Escalated Cases Only",    value=False, key="t1_esc")
+    with c2: nesc = st.checkbox("🟢 Non-Escalated Cases Only", value=False, key="t1_nesc")
 
     dfm = df.copy()
     if esc  and not nesc: dfm = dfm[dfm["Is Email"] == True]
@@ -1099,8 +1099,8 @@ with tab1:
 with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
     t2c1, t2c2 = st.columns(2)
-    with t2c1: t2e  = st.checkbox("🔥 Toggle: Escalated Cases Scope",   value=False, key="t2_esc")
-    with t2c2: t2ne = st.checkbox("🟢 Toggle: Non-Escalated Cases Scope", value=False, key="t2_nesc")
+    with t2c1: t2e  = st.checkbox("🔥 Escalated Cases Only",   value=False, key="t2_esc")
+    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Only", value=False, key="t2_nesc")
 
     df_t2 = df.copy()
     if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
@@ -1520,7 +1520,8 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta** Team Leader
+**Mohammed Shehta**  
+Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
