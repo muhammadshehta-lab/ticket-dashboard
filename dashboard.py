@@ -1100,7 +1100,7 @@ with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
     t2c1, t2c2 = st.columns(2)
     with t2c1: t2e  = st.checkbox("🔥 Escalated Cases Only",   value=False, key="t2_esc")
-    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Scope", value=False, key="t2_nesc")
+    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Only", value=False, key="t2_nesc")
 
     df_t2 = df.copy()
     if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
@@ -1142,8 +1142,6 @@ with tab2:
                     _save_store()
                     st.success("✅ Target saved successfully!")
                     st.rerun()
-                    
-    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
 
     OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
     df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
@@ -1204,7 +1202,7 @@ with tab2:
         
         for exp in OFFICIAL_EXPERTS:
             exp_id = EXPERT_ID_MAP.get(exp, "")
-            off_c, ann_c, cas_c, wd_c = 0, 0, 0, 0
+            off_c, ann_c, cas_c, sick_c, wd_c = 0, 0, 0, 0, 0
             
             if exp_id:
                 mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
@@ -1217,27 +1215,55 @@ with tab2:
                         vals_lower = [str(v).strip().lower() for v in vals]
                         
                         off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                        ann_c = sum(1 for v in vals_lower if v == 'annual')
+                        ann_c = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
                         cas_c = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                        sick_c = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
                         wd_c  = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
                 
             roster_counts[exp] = {
                 "Working Days": wd_c,
                 "Off Days": off_c,
                 "Annual Leaves": ann_c,
-                "Casual Leaves": cas_c
+                "Casual Leaves": cas_c,
+                "Sick Leaves": sick_c
             }
 
     sc["Working Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Working Days", 0))
     sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
     sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
+    sc["Sick Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Sick Leaves", 0))
 
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
             if col != "GLOBAL_TARGET":
                 sc.at[i, col] = val
+
+    # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
+    st.markdown("### 📅 Schedule & Leaves Summary")
+    if not is_admin() and aname in sc["Expert"].values:
+        kpi_r_df = sc[sc["Expert"] == aname]
+    else:
+        kpi_r_df = sc
+        if sel_agents:
+            kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents])]
+
+    sum_wd   = int(kpi_r_df["Working Days"].astype(float).sum())
+    sum_off  = int(kpi_r_df["Off Days"].astype(float).sum())
+    sum_ann  = int(kpi_r_df["Annual Leaves"].astype(float).sum())
+    sum_cas  = int(kpi_r_df["Casual Leaves"].astype(float).sum())
+    sum_sick = int(kpi_r_df["Sick Leaves"].astype(float).sum())
+
+    rk1, rk2, rk3, rk4, rk5 = st.columns(5)
+    rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-store"), unsafe_allow_html=True)
+    rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-actions"), unsafe_allow_html=True)
+    rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-completed"), unsafe_allow_html=True)
+    rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-issue"), unsafe_allow_html=True)
+    rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-frt"), unsafe_allow_html=True)
+    st.write("")
+    
+    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
 
     total_cases = sc["Tickets Count"].astype(float) + sc["JHAH Requests"].astype(float) + sc["Out Requests"].astype(float)
     wdays = sc["Working Days"].astype(float).replace(0, 1)
@@ -1284,6 +1310,7 @@ with tab2:
         "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
         "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
         "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
+        "Sick Leaves": round(sc["Sick Leaves"].mean(), 1) if not sc.empty else 0,
         "% Achievement from Target": team_achiev, 
         "Service Time": "00:00:00", 
         "Service Quality": "100.0%"
@@ -1308,7 +1335,7 @@ with tab2:
         except:
             return str(x)
 
-    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves"]
+    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
     for c in cols_clean:
         if c in sc_final.columns:
             sc_final[c] = sc_final[c].apply(format_clean_num)
@@ -1349,7 +1376,8 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "% Achievement from Target", "Service Time", "Service Quality"]
+    # Cleaned table - strictly performance focused (Removed Leaves and Shifts)
+    column_order = ["Expert", "Rank", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "Service Time", "Service Quality"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
@@ -1388,13 +1416,15 @@ with tab2:
                 nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
 
             st.markdown("**🌴 Leaves & Off Days**")
-            lc1, lc2, lc3 = st.columns(3)
+            lc1, lc2, lc3, lc4 = st.columns(4)
             with lc1:
                 noff = st.text_input("Off Days", value=gv("Off Days"))
             with lc2:
                 nann = st.text_input("Annual Leaves", value=gv("Annual Leaves"))
             with lc3:
                 ncas = st.text_input("Casual Leaves", value=gv("Casual Leaves"))
+            with lc4:
+                nsick = st.text_input("Sick Leaves", value=gv("Sick Leaves"))
             
             sc_col, rc_col = st.columns(2)
             with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
@@ -1417,6 +1447,7 @@ with tab2:
             if parse_int(noff) is not None: new_ov["Off Days"] = parse_int(noff)
             if parse_int(nann) is not None: new_ov["Annual Leaves"] = parse_int(nann)
             if parse_int(ncas) is not None: new_ov["Casual Leaves"] = parse_int(ncas)
+            if parse_int(nsick) is not None: new_ov["Sick Leaves"] = parse_int(nsick)
             
             if parse_str(nach): new_ov["% Achievement from Target"] = parse_str(nach)
             if parse_str(nst): new_ov["Service Time"] = parse_str(nst)
@@ -1453,12 +1484,12 @@ with tab2:
         st.divider()
         st.markdown("#### ✉️ Performance Review Emails")
         
-        email_agents_list = [x for x in display_df["Expert"] if "🏆 Team AVG" not in x]
+        email_agents_list = [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x]
         selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
         
         if selected_email_agent:
-            agent_row = display_df[display_df["Expert"] == selected_email_agent].iloc[0]
-            team_row_disp = display_df[display_df["Expert"] == "🏆 Team AVG"].iloc[0]
+            agent_row = sc_final[sc_final["Expert"] == selected_email_agent].iloc[0]
+            team_row_disp = sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
             
             def safe_float(v):
                 try: return float(str(v).replace('%','').replace(',',''))
@@ -1489,7 +1520,7 @@ with tab2:
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
-            # --- NATIVE MARKDOWN TABLE PREVIEW (For easy copying to Gmail/Outlook) ---
+            # --- PURE PERFORMANCE MARKDOWN EMAIL TABLE ---
             markdown_email = f"""
 Dear **{clean_name}**,
 
@@ -1499,28 +1530,29 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 
 ### 📊 Your Performance Scorecard:
 
-| Metric | Working Days | Total Cases | Cases/Day | Achievement | Quality | Service Time |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Your Score** | **{agent_row['Working Days']}** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['Service Time']}** |
-| **Team Average** | {team_row_disp['Working Days']} | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['Service Time']} |
+| Metric | Total Cases | Cases/Day | Achievement | Quality | Service Time |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['Service Time']}** |
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['Service Time']} |
 
-**🎯 Targets & Quality:**
+**🎯 Targets & Quality:**  
 {target_msg}  
 {qual_msg}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta** Team Leader
+**Mohammed Shehta**  
+Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-            st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail/Outlook) ليحتفظ بتنسيقه الرائع.")
+            st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
             
             # Renders as actual formatted HTML in the UI for copying
             st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:2px solid #cbd5e1; font-size:1.1rem; color:#1e293b;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
             
-            # --- PLAIN TEXT FALLBACK FOR MAILTO LINKS ---
+            # --- PLAIN TEXT FALLBACK FOR GMAIL BUTTON ---
             email_body_plain = f"""Dear {clean_name},
 
 I hope this email finds you well. 
@@ -1528,12 +1560,12 @@ I hope this email finds you well.
 As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
 
 📊 Your Performance Scorecard:
------------------------------------------------------------------------------------------
-Metric         | Working Days | Total Cases | Cases/Day | Achievement | Quality | S. Time
------------------------------------------------------------------------------------------
-Your Score     | {str(agent_row['Working Days']):<12} | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['Service Time'])}
-Team Average   | {str(team_row_disp['Working Days']):<12} | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['Service Time'])}
------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------
+Metric         | Total Cases | Cases/Day | Achievement | Quality | Service Time
+---------------------------------------------------------------------------------
+Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['Service Time'])}
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['Service Time'])}
+---------------------------------------------------------------------------------
 
 🎯 Targets & Quality:
 {target_msg.replace('**', '')}
@@ -1545,7 +1577,7 @@ Best regards,
 Mohammed Shehta
 Team Leader"""
 
-            with st.expander("Show Plain Text Version (For unsupported apps)"):
+            with st.expander("Show Plain Text Version (For manual copy/paste)"):
                 st.text_area("Plain Text Draft", value=email_body_plain, height=300)
             
             subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
