@@ -922,6 +922,7 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
+        st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
         dfm["Response Tier"] = dfm["Response Take (min)"].apply(assign_time_tier)
         dfm["Service Tier"]  = dfm["Request Take (min)"].apply(assign_time_tier)
         rd = dfm.groupby("Response Tier").size().reset_index(name="Tickets")
