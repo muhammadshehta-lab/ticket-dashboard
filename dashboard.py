@@ -954,7 +954,14 @@ with tab1:
         fig_r = make_subplots(specs=[[{"secondary_y": True}]])
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#58a6ff", width=2)), secondary_y=False)
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
-        fig_r.update_layout(**THEME, height=450, hovermode="x unified")
+        fig_r.update_layout(
+            **THEME, 
+            height=550, 
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        fig_r.update_yaxes(title_text="Volume (Tickets)", secondary_y=False)
+        fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
         st.plotly_chart(fig_r, use_container_width=True)
 
         st.divider()
@@ -1513,8 +1520,7 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta**  
-Team Leader
+**Mohammed Shehta** Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
