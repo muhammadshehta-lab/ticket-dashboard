@@ -1100,7 +1100,7 @@ with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
     t2c1, t2c2 = st.columns(2)
     with t2c1: t2e  = st.checkbox("🔥 Escalated Cases Only",   value=False, key="t2_esc")
-    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Only", value=False, key="t2_nesc")
+    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Scope", value=False, key="t2_nesc")
 
     df_t2 = df.copy()
     if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
@@ -1499,19 +1499,10 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 
 ### 📊 Your Performance Scorecard:
 
-| Metric | Your Score | Team Average |
-| :--- | :---: | :---: |
-| **Total Cases Resolved** | **{int(agent_total_cases)}** | {team_total_cases} |
-| **Average Cases per Day** | **{agent_row['Cases/Day']}** | {team_row_disp['Cases/Day']} |
-| **Target Achievement** | **{agent_row['% Achievement from Target']}** | {team_row_disp['% Achievement from Target']} |
-| **Service Quality** | **{agent_row['Service Quality']}** | {team_row_disp['Service Quality']} |
-| **Service Time (Avg)** | **{agent_row['Service Time']}** | {team_row_disp['Service Time']} |
-| **Working Days** | **{agent_row['Working Days']}** | {team_row_disp['Working Days']} |
-
-**🌴 Leaves & Off Days:**
-* Off Days: **{agent_row.get('Off Days', 0)}**
-* Casual Leaves: **{agent_row.get('Casual Leaves', 0)}**
-* Annual Leaves: **{agent_row.get('Annual Leaves', 0)}**
+| Metric | Working Days | Total Cases | Cases/Day | Achievement | Quality | Service Time |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Your Score** | **{agent_row['Working Days']}** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['Service Time']}** |
+| **Team Average** | {team_row_disp['Working Days']} | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['Service Time']} |
 
 **🎯 Targets & Quality:**
 {target_msg}  
@@ -1520,8 +1511,7 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta**  
-Team Leader
+**Mohammed Shehta** Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
@@ -1538,19 +1528,12 @@ I hope this email finds you well.
 As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
 
 📊 Your Performance Scorecard:
--------------------------------------------------------
-Metric                  | Your Score   | Team Average
--------------------------------------------------------
-Total Cases Resolved    | {str(int(agent_total_cases)):<12} | {team_total_cases}
-Average Cases per Day   | {str(agent_row['Cases/Day']):<12} | {team_row_disp['Cases/Day']}
-Target Achievement      | {str(agent_row['% Achievement from Target']):<12} | {team_row_disp['% Achievement from Target']}
-Service Quality         | {str(agent_row['Service Quality']):<12} | {team_row_disp['Service Quality']}
-Service Time (Avg)      | {str(agent_row['Service Time']):<12} | {team_row_disp['Service Time']}
-Working Days            | {str(agent_row['Working Days']):<12} | {team_row_disp['Working Days']}
--------------------------------------------------------
-
-🌴 Leaves & Off Days:
-Off Days: {agent_row.get('Off Days', 0)} | Casual: {agent_row.get('Casual Leaves', 0)} | Annual: {agent_row.get('Annual Leaves', 0)}
+-----------------------------------------------------------------------------------------
+Metric         | Working Days | Total Cases | Cases/Day | Achievement | Quality | S. Time
+-----------------------------------------------------------------------------------------
+Your Score     | {str(agent_row['Working Days']):<12} | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['Service Time'])}
+Team Average   | {str(team_row_disp['Working Days']):<12} | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['Service Time'])}
+-----------------------------------------------------------------------------------------
 
 🎯 Targets & Quality:
 {target_msg.replace('**', '')}
@@ -1563,27 +1546,18 @@ Mohammed Shehta
 Team Leader"""
 
             with st.expander("Show Plain Text Version (For unsupported apps)"):
-                st.text_area("Plain Text Draft", value=email_body_plain, height=350)
+                st.text_area("Plain Text Draft", value=email_body_plain, height=300)
             
             subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
             body_encoded = urllib.parse.quote(email_body_plain)
             
             st.write("")
-            col_b1, col_b2 = st.columns(2)
-            with col_b1:
-                mailto_link = f"mailto:?subject={subject_encoded}&body={body_encoded}"
-                st.markdown(
-                    f'<a href="{mailto_link}" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#1e40af; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem; width:100%; text-align:center;">'
-                    f'📧 Open in Default App (Outlook/Mac)</a>', 
-                    unsafe_allow_html=True
-                )
-            with col_b2:
-                gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
-                st.markdown(
-                    f'<a href="{gmail_link}" target="_blank" style="display:inline-block; padding:0.6rem 1.2rem; background-color:#ea4335; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.05rem; width:100%; text-align:center;">'
-                    f'🌐 Open in Gmail (Browser)</a>', 
-                    unsafe_allow_html=True
-                )
+            gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
+            st.markdown(
+                f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#ea4335; color:white; text-decoration:none; border-radius:8px; font-weight:900; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(234, 67, 53, 0.3);">'
+                f'🌐 Open Draft in Gmail</a>', 
+                unsafe_allow_html=True
+            )
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
