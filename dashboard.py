@@ -838,7 +838,7 @@ if st.session_state.page == "settings":
                         if uname == "admin":
                             st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me():
-                            st.error("❌ You calculate your own account while logged in!")
+                            st.error("❌ You cannot delete your own account while logged in!")
                         else:
                             users().pop(uname)
                             _save_store()
@@ -859,11 +859,11 @@ if st.session_state.page == "settings":
         st.markdown("<div class='section-card'>", unsafe_allow_html=True)
         st.markdown("### 🔑 Direct Password Adjuster Form")
         with st.form("expert_pw_direct"):
-            cur_pw  = st.text_input("Verify Current Password", type="password")
-            new_p1  = st.text_input("Set New Secret Password", type="password")
-            new_p2  = st.text_input("Confirm New Secret Password", type="password")
+            get_cur_pw = st.text_input("Verify Current Password", type="password")
+            new_p1     = st.text_input("Set New Secret Password", type="password")
+            new_p2     = st.text_input("Confirm New Secret Password", type="password")
             if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                if _hash(cur_pw) == urow["password_hash"] and new_p1 == new_p2 and len(new_p1) >= 6:
+                if _hash(get_cur_pw) == urow["password_hash"] and new_p1 == new_p2 and len(new_p1) >= 6:
                     users()[me()]["password_hash"] = _hash(new_p1); _save_store(); st.success("✅ Password updated."); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
@@ -922,7 +922,7 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
-        st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
+        st.markdown("### ⏱ ...")
         dfm["Response Tier"] = dfm["Response Take (min)"].apply(assign_time_tier)
         dfm["Service Tier"]  = dfm["Request Take (min)"].apply(assign_time_tier)
         rd = dfm.groupby("Response Tier").size().reset_index(name="Tickets")
@@ -970,12 +970,24 @@ with tab1:
 
     st.divider()
 
-    if not dfm.empty:
+    # ⏳ Ticket flow rate over daily hours — STRICT DATE FILTER APPLIED
+    if not df_raw.empty:
         st.markdown("### ⏳ Ticket flow rate over daily hours")
-        hrs = dfm.groupby("Hour").agg(Volume=("Request ID", "count"), AR=("Response Take (min)" , "mean")).reset_index()
+        
+        # Pull raw records filtering ONLY on the chosen date range to guarantee absolute team view
+        df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        
+        # Maintain inside-tab toggle persistence layout mapping context
+        if esc and not nesc: 
+            df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == True]
+        elif nesc and not esc: 
+            df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == False]
+            
+        hrs = df_flow_strict.groupby("Hour").agg(Volume=("Request ID", "count"), AR=("Response Take (min)" , "mean")).reset_index()
         hrs = hrs.set_index("Hour").reindex(range(24)).fillna(0).reset_index()
         hl = ["12 AM" if h == 0 else ("12 PM" if h == 12 else (f"{h} AM" if h < 12 else f"{h - 12} PM")) for h in hrs["Hour"]]
         hrs["Hour Label"] = hl
+        
         fig_r = make_subplots(specs=[[{"secondary_y": True}]])
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#58a6ff", width=2)), secondary_y=False)
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
@@ -1530,7 +1542,6 @@ with tab2:
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
-            # --- PURE PERFORMANCE MARKDOWN EMAIL TABLE ---
             markdown_email = f"""
 Dear **{clean_name}**,
 
@@ -1551,7 +1562,8 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta** Team Leader
+**Mohammed Shehta**  
+Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
@@ -1597,5 +1609,5 @@ Team Leader"""
                 unsafe_allow_html=True
             )
 
-st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
+st.info(f"⏱ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
