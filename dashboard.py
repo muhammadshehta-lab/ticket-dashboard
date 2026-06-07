@@ -777,8 +777,7 @@ with st.sidebar:
     
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
-    sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
+    sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -786,9 +785,6 @@ with st.sidebar:
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
 
-if sel_types:  
-    df = df[df["Request Type"].isin(sel_types)]
-    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_types)]
 if sel_hic:    
     df = df[df["HIC"].isin(sel_hic)]
     df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
@@ -1058,14 +1054,38 @@ with tab1:
             st.markdown("<br><b>🎛️ Filter by Request Type</b>", unsafe_allow_html=True)
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
-            slicer_options = ["All Types"] + [f"{rt} ({pct}%)" for rt, pct in zip(req_pct.index, req_pct.values)]
-            selected_slicer = st.radio("Select Request Type:", slicer_options, label_visibility="collapsed")
+            
+            # Create a Percentage Bar Chart to act as the visual slicer context
+            fig_req = px.bar(
+                x=req_pct.values, 
+                y=req_pct.index, 
+                orientation='h',
+                text=[f"{v}%" for v in req_pct.values],
+            )
+            fig_req.update_traces(
+                marker_color='#3b82f6', 
+                textposition='inside',
+                insidetextanchor='middle',
+                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
+            )
+            fig_req.update_layout(
+                **THEME,
+                margin=dict(l=0, r=0, t=10, b=10),
+                height=max(250, len(req_pct)*40),
+                xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2]),
+                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=11)),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)"
+            )
+            st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
+            
+            slicer_options = ["All Types"] + list(req_pct.index)
+            selected_slicer = st.selectbox("🔍 Select to Filter:", slicer_options)
             
         if selected_slicer == "All Types":
             dfm_sb = dfm.copy()
         else:
-            selected_rt = selected_slicer.rsplit(" (", 1)[0]
-            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
+            dfm_sb = dfm[dfm["Request Type"] == selected_slicer].copy()
 
         with sb_col1:
             st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
@@ -1112,6 +1132,7 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
+                # Removing the overlapping margin call to prevent TypeError
                 fig_sb.update_layout(**THEME, height=520)
                 st.plotly_chart(fig_sb, use_container_width=True)
             else:
@@ -1429,7 +1450,7 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         stats["_Service_Time_val"]    = grp["Request Take (min)"].mean()
-        stats["_FRT_val"]             = grp["Response Take (min)"].mean()
+        stats["_FRT_val"]             = grp.get("Response Take (min)", pd.Series([0])).mean()
         stats["_AHT_val"]             = grp.get("AHT (min)", pd.Series([0])).mean()
         stats["_c_ok_sum"]            = grp["_c_ok"].sum()
         stats["_c_all_sum"]           = grp["_c_all"].sum()
@@ -1561,8 +1582,8 @@ with tab2:
     team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
-    team_st = fmt_m(df_sc["Request Take (min)"].mean() if not df_sc.empty else 0)
-    team_merged_aht = fmt_m(df_sc["Response Take (min)"].mean() + df_sc.get("AHT (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
+    team_st = fmt_m(df_sc.get("Request Take (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
+    team_merged_aht = fmt_m(df_sc.get("Response Take (min)", pd.Series([0])).mean() + df_sc.get("AHT (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
 
     if global_target > 0:
         team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
