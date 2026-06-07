@@ -980,7 +980,7 @@ with tab1:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes (using percentages for performance, absolute for others)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1088,11 +1088,11 @@ with tab1:
         st.markdown("""
         <div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem;">
             <strong>Agent Workload Indicator (Tickets per Agent):</strong><br>
-            <span style="display: inline-block; margin-right: 15px;">🟦 Optimal (≤55)</span>
-            <span style="display: inline-block; margin-right: 15px;">🟨 Moderate (56-60)</span>
-            <span style="display: inline-block; margin-right: 15px;">🟧 High (61-63)</span>
-            <span style="display: inline-block; margin-right: 15px;">🟥 Severe (64-70)</span>
-            <span style="display: inline-block;">🟫 Excessive (>70)</span>
+            <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span>
+            <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#fbbf24; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span>
+            <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span>
+            <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span>
+            <span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1189,6 +1189,7 @@ with tab1:
             textposition='auto',
             marker_color=daily_vol["Color"],
             name="Total Tickets",
+            showlegend=False,
             hovertemplate="<b>%{x}</b><br>Tickets: %{y}<extra></extra>"
         ), secondary_y=False)
         
@@ -1231,30 +1232,29 @@ with tab1:
             
         if not df_hic_strict.empty:
             hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index()
-            hic_counts = hic_counts.sort_values(by="Volume", ascending=True) 
+            # Sort descending for vertical column chart
+            hic_counts = hic_counts.sort_values(by="Volume", ascending=False) 
             
             fig_hic = px.bar(
                 hic_counts,
-                x="Volume",
-                y="HIC",
-                orientation="h",
+                x="HIC",
+                y="Volume",
                 text="Volume",
-                labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"},
-                color="Volume",
-                color_continuous_scale="Blues"
+                color="HIC", 
+                labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"}
             )
             fig_hic.update_traces(
                 textposition="outside",
-                hovertemplate="<b>%{y}</b><br>Tickets Resolved: %{x:,}<extra></extra>"
+                hovertemplate="<b>%{x}</b><br>Tickets Resolved: %{y:,}<extra></extra>"
             )
             fig_hic.update_layout(
                 **THEME,
-                height=max(400, len(hic_counts) * 35), 
-                showlegend=False,
-                xaxis_title="Total Handled Volume (Tickets)",
-                yaxis_title=""
+                height=500,
+                xaxis_title="",
+                yaxis_title="Total Handled Volume (Tickets)",
+                xaxis_tickangle=-45,
+                legend_title_text="Insurance Provider"
             )
-            fig_hic.update_coloraxes(showscale=False)
             st.plotly_chart(fig_hic, use_container_width=True)
         else:
             st.info("No insurance (HIC) records available for this period.")
