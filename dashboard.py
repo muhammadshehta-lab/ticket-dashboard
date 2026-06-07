@@ -249,31 +249,6 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 .card-store     { background: #fffbeb; border: 2px solid #fde047; color: #b45309; }
 .card-actions   { background: #eff6ff; border: 2px solid #93c5fd; color: #1e3a8a; }
 
-/* ══ AUTHENTICATION MODULE SCREEN RESKIN ═════════════════════════════ */
-.login-wrap {
-    max-width:460px; margin:5rem auto 0; padding:2.8rem 2.5rem 1.5rem;
-    background: #ffffff;
-    border:2px solid #bba370; border-radius:22px;
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
-}
-.login-title {
-    font-size: 2rem !important; font-weight: 900 !important; text-align: center; margin-bottom: .4rem;
-    background: linear-gradient(90deg, #1d4ed8, #2563eb, #047857);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.login-sub { font-size: 1rem !important; text-align: center; color: #475569; margin-bottom: 2rem; font-weight: 700 !important; }
-
-/* ══ SYSTEM BADGES & NOTIFICATIONS ════════════════════════════════════ */
-.badge { display:inline-block; font-size:.72rem !important; border-radius:7px; padding:3px 11px; margin-left:6px; font-weight:900; letter-spacing:.08em; }
-.badge-admin  { background:#dbeafe; border:2px solid #3b82f6; color:#1d4ed8; }
-.badge-expert { background:#dcfce7; border:2px solid #22c55e; color:#166534; }
-
-.req-pending  { background:#fef3c7; border:2px solid #f59e0b; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#78350f; font-size:.95rem; font-weight:700; }
-.req-approved { background:#dcfce7; border:2px solid #22c55e; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#166534; font-size:.95rem; font-weight:700; }
-.req-rejected { background:#fee2e2; border:2px solid #ef4444; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#991b1b; font-size:.95rem; font-weight:700; }
-
-.section-card { background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
-
 /* ══ FULL-WIDTH CUSTOM HTML TABLE STYLING FOR SCORECARD ═════════════ */
 .scorecard-container {
     width: 100%;
@@ -410,20 +385,20 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
     change_html = ""
     if change is not None:
         if neutral:
-            color = "#64748b" # Neutral gray for volume metrics (No intervention)
+            color = "#64748b" 
             arrow = "▲" if change > 0 else ("▼" if change < 0 else "−")
         else:
             if change > 0:
                 arrow = "▲"
-                color = "#ef4444" if inverse else "#10b981" # Red if bad (inverse), Green if good
+                color = "#ef4444" if inverse else "#10b981" 
             elif change < 0:
                 arrow = "▼"
-                color = "#10b981" if inverse else "#ef4444" # Green if good (inverse), Red if bad
+                color = "#10b981" if inverse else "#ef4444" 
             else:
                 arrow = "−"
-                color = "#94a3b8" # Neutral gray for no change
+                color = "#94a3b8" 
         
-        bg_color = color + "20" # Adding opacity for a subtle pill background
+        bg_color = color + "20" 
         change_html = f'<span style="font-size: 0.85rem; margin-left: 8px; padding: 2px 6px; border-radius: 8px; font-weight: 800; color: {color}; background-color: {bg_color}; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; white-space: nowrap;">{arrow} {abs(change):.1f}%</span>'
         
     return (f'<div class="kpi-container {cls}">'
@@ -504,7 +479,7 @@ AGENT_ALIASES = {
     "50399": "Ahmed Kadry",
     
     "إسلام رمضان خليل": "Eslam Ramadan",
-    "اسلام رمضان خليل": "Eslam Ramadan",
+    "أصلان رمضان خليل": "Eslam Ramadan",
     "اسلام رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
@@ -740,9 +715,7 @@ with st.sidebar:
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
 
-    # ══════════════════════════════════════════════════════════════════════════════════
-    #  DYNAMIC DEFAULT DATE CALCULATOR (LAST ENDED MONTH)
-    # ══════════════════════════════════════════════════════════════════════════════════
+    # ── DYNAMIC DEFAULT DATE CALCULATOR (LAST ENDED MONTH) ──
     st.markdown("### 🔍 Global Filters")
     
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
@@ -982,7 +955,7 @@ with tab1:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes (using percentages for performance, absolute for others)
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1059,10 +1032,8 @@ with tab1:
     if not df_raw.empty:
         st.markdown("### ⏳ Ticket flow rate over daily hours")
         
-        # Pull raw records filtering ONLY on the chosen date range to guarantee absolute team view
         df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         
-        # Maintain inside-tab toggle persistence layout mapping context
         if esc and not nesc: 
             df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == True]
         elif nesc and not esc: 
@@ -1119,8 +1090,8 @@ with tab1:
                 match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
                 if match:
                     try:
-                        col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                        roster_date_map[col_date] = col
+                        dt = pd.to_datetime(match.group(1), dayfirst=True).date()
+                        roster_date_map[dt] = col
                     except: pass
         
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
@@ -1220,6 +1191,49 @@ with tab1:
         fig_d.update_yaxes(title_text="Workload Ratio (Tickets/Agent)", secondary_y=True)
         
         st.plotly_chart(fig_d, use_container_width=True)
+
+        # ══════════════════════════════════════════════════════════════════════════════════
+        #  🆕 NEW CURVE: HIC Vs TICKET COUNTS (STRICT DATE FILTER ONLY)
+        # ══════════════════════════════════════════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 🏥 Health Insurance Companies (HIC) Distribution Analysis")
+        
+        # Pull records strictly matching the time frames and toggle context (unfiltered by sidebar HIC)
+        df_hic_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        if esc and not nesc: 
+            df_hic_strict = df_hic_strict[df_hic_strict["Is Email"] == True]
+        elif nesc and not esc: 
+            df_hic_strict = df_hic_strict[df_hic_strict["Is Email"] == False]
+            
+        if not df_hic_strict.empty:
+            hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index()
+            hic_counts = hic_counts.sort_values(by="Volume", ascending=True) # Ascending for correct horizontal rendering order
+            
+            fig_hic = px.bar(
+                hic_counts,
+                x="Volume",
+                y="HIC",
+                orientation="h",
+                text="Volume",
+                labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"},
+                color="Volume",
+                color_continuous_scale="Blues"
+            )
+            fig_hic.update_traces(
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>Tickets Resolved: %{x:,}<extra></extra>"
+            )
+            fig_hic.update_layout(
+                **THEME,
+                height=max(400, len(hic_counts) * 35), # Dynamically scales if there are many insurance entries
+                showlegend=False,
+                xaxis_title="Total Handled Volume (Tickets)",
+                yaxis_title=""
+            )
+            fig_hic.update_coloraxes(showscale=False)
+            st.plotly_chart(fig_hic, use_container_width=True)
+        else:
+            st.info("No insurance (HIC) records available for this period.")
 
 # ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
 with tab2:
@@ -1670,8 +1684,7 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 | **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['FRT']}** | **{agent_row['Service Time']}** |
 | **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['FRT']} | {team_row_disp['Service Time']} |
 
-**🎯 Targets & Quality:**  
-{target_msg}  
+**🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
