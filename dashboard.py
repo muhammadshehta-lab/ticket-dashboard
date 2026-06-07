@@ -775,7 +775,6 @@ with st.sidebar:
     
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    sel_agents = st.multiselect("Expert Name", sorted(df_raw["Assigned By"].dropna().unique()))
     sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
     sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
@@ -785,9 +784,6 @@ with st.sidebar:
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
 
-if sel_agents: 
-    df = df[df["Assigned By"].isin(sel_agents)]
-    df_prev_all = df_prev_all[df_prev_all["Assigned By"].isin(sel_agents)]
 if sel_types:  
     df = df[df["Request Type"].isin(sel_types)]
     df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_types)]
@@ -1228,17 +1224,15 @@ with tab1:
 # ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
 with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
-    t2c1, t2c2 = st.columns(2)
-    with t2c1: t2e  = st.checkbox("🔥 Escalated Cases Only",   value=False, key="t2_esc")
-    with t2c2: t2ne = st.checkbox("🟢 Non-Escalated Cases Scope", value=False, key="t2_nesc")
+    
+    sel_agents_t2 = st.multiselect("Filter by Expert Name", sorted(df_raw["Assigned By"].dropna().unique()), key="t2_agents")
 
     df_t2 = df.copy()
-    if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
-    elif t2ne and not t2e: df_t2 = df_t2[df_t2["Is Email"] == False]
-
     df_t2_prev = df_prev_all.copy()
-    if t2e  and not t2ne: df_t2_prev = df_t2_prev[df_t2_prev["Is Email"] == True]
-    elif t2ne and not t2e: df_t2_prev = df_t2_prev[df_t2_prev["Is Email"] == False]
+
+    if sel_agents_t2:
+        df_t2 = df_t2[df_t2["Assigned By"].isin(sel_agents_t2)]
+        df_t2_prev = df_t2_prev[df_t2_prev["Assigned By"].isin(sel_agents_t2)]
 
     aname = my_agent_name()
     if not is_admin() and aname:
@@ -1409,8 +1403,8 @@ with tab2:
         kpi_r_df = sc[sc["Expert"] == aname]
     else:
         kpi_r_df = sc
-        if sel_agents:
-            kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents])]
+        if sel_agents_t2:
+            kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
 
     sum_wd   = int(kpi_r_df["Working Days"].astype(float).sum())
     sum_off  = int(kpi_r_df["Off Days"].astype(float).sum())
