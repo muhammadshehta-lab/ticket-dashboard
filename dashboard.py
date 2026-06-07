@@ -773,8 +773,7 @@ with st.sidebar:
     
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
-    sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
+    sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -782,9 +781,6 @@ with st.sidebar:
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
 
-if sel_types:  
-    df = df[df["Request Type"].isin(sel_types)]
-    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_types)]
 if sel_hic:    
     df = df[df["HIC"].isin(sel_hic)]
     df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
@@ -1047,17 +1043,14 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
-        st.markdown("### ⏱️ Service Time Breakdown (AHT & TAT)")
-        
-        # Slicer Preparation
-        req_counts = dfm['Request Type'].value_counts()
-        req_pct = (req_counts / len(dfm) * 100).round(1)
-        slicer_options = ["All Types"] + [f"{rt} ({pct}%)" for rt, pct in zip(req_pct.index, req_pct.values)]
-        
+        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
             st.markdown("<br><b>🎛️ Filter by Request Type</b>", unsafe_allow_html=True)
+            req_counts = dfm['Request Type'].value_counts()
+            req_pct = (req_counts / len(dfm) * 100).round(1)
+            slicer_options = ["All Types"] + [f"{rt} ({pct}%)" for rt, pct in zip(req_pct.index, req_pct.values)]
             selected_slicer = st.radio("Select Request Type:", slicer_options, label_visibility="collapsed")
             
         if selected_slicer == "All Types":
@@ -1067,6 +1060,7 @@ with tab1:
             dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
+            st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
             if not dfm_sb.empty:
                 dfm_sb["Response Tier"] = dfm_sb["Response Take (min)"].apply(assign_time_tier)
                 dfm_sb["Service Tier"]  = dfm_sb["Request Take (min)"].apply(assign_time_tier)
@@ -1296,7 +1290,6 @@ with tab1:
             
         if not df_hic_strict.empty:
             hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index()
-            # Sort descending for vertical column chart
             hic_counts = hic_counts.sort_values(by="Volume", ascending=False) 
             
             fig_hic = px.bar(
@@ -1546,7 +1539,7 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
-    sc["AHT"] = (sc["_FRT_val"] + sc["_AHT_val"]).fillna(0).apply(fmt_m)
+    sc["FRT"] = sc["_FRT_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
     c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
@@ -1781,15 +1774,13 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 | **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AHT']}** | **{agent_row['Service Time']}** |
 | **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AHT']} | {team_row_disp['Service Time']} |
 
-**🎯 Targets & Quality:**  
-{target_msg}  
+**🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
 
 Best regards,  
-**Mohammed Shehta**  
-Team Leader
+**Mohammed Shehta** Team Leader
 """
             
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
