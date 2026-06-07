@@ -867,6 +867,45 @@ if st.session_state.page == "settings":
 
         with atab3:
             st.markdown("### 👥 Manage Dashboard Users")
+            
+            with st.expander("➕ Add New User"):
+                with st.form("add_new_user_form"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        add_uname = st.text_input("Username / ID *", key="add_uname")
+                        add_dname = st.text_input("Display Name *", key="add_dname")
+                        add_role = st.selectbox("Role", ["expert", "admin"], key="add_role")
+                    with c2:
+                        add_aname = st.text_input("Agent Key Mapping (Sheets)", key="add_aname")
+                        add_pass1 = st.text_input("Password *", type="password", key="add_pass1")
+                        add_pass2 = st.text_input("Confirm Password *", type="password", key="add_pass2")
+                    
+                    submit_add = st.form_submit_button("➕ Create Account", use_container_width=True)
+                    
+                    if submit_add:
+                        add_uname = add_uname.strip().lower()
+                        if not add_uname or not add_dname.strip() or not add_pass1:
+                            st.error("❌ Please fill in all required fields (*).")
+                        elif add_uname in users():
+                            st.error("❌ Username/ID already exists.")
+                        elif add_pass1 != add_pass2:
+                            st.error("❌ Passwords do not match.")
+                        elif len(add_pass1) < 6:
+                            st.error("❌ Password must be at least 6 characters.")
+                        else:
+                            users()[add_uname] = {
+                                "display_name": add_dname.strip(),
+                                "password_hash": _hash(add_pass1),
+                                "role": add_role,
+                                "agent_name": add_aname.strip() if add_aname.strip() else None
+                            }
+                            _save_store()
+                            st.success(f"✅ Account for {add_dname.strip()} created successfully!")
+                            time.sleep(1)
+                            st.rerun()
+            
+            st.divider()
+
             for uname, urow in list(users().items()):
                 role_icon = "🔑" if urow["role"] == "admin" else "👤"
                 with st.expander(f"{role_icon} {urow['display_name']} (@{uname})"):
