@@ -773,7 +773,8 @@ with st.sidebar:
     
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
+    sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
+    sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -781,6 +782,9 @@ with st.sidebar:
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
 
+if sel_types:  
+    df = df[df["Request Type"].isin(sel_types)]
+    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_types)]
 if sel_hic:    
     df = df[df["HIC"].isin(sel_hic)]
     df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
@@ -1010,7 +1014,7 @@ with tab1:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_frt_val = dfm_prev["Response Take (min)"].mean() if not dfm_prev.empty else 0
-    prev_aht_val = dfm_prev["AHT (min)"].mean() if not dfm_prev.empty else 0
+    prev_aht_val = dfm_prev["AHT (min)"].mean() if not df_prev.empty else 0
     prev_tat_val = dfm_prev["Request Take (min)"].mean() if not dfm_prev.empty else 0
     
     prev_merged_aht_val = prev_frt_val + prev_aht_val
@@ -1290,6 +1294,7 @@ with tab1:
             
         if not df_hic_strict.empty:
             hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index()
+            # Sort descending for vertical column chart
             hic_counts = hic_counts.sort_values(by="Volume", ascending=False) 
             
             fig_hic = px.bar(
