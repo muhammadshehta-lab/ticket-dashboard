@@ -178,7 +178,7 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     font-weight: 700 !important;
     font-size: 1.05rem !important;
 }
-.stTextInput input:focus, .stNumberInput input:focus {
+.stTextInput input:focus, .st刺激NumberInput input:focus {
     border-color: #1d4ed8 !important;
     box-shadow: 0 0 0 3px rgba(29,78,216,0.2) !important;
 }
@@ -713,16 +713,35 @@ with st.sidebar:
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
 
-    st.divider()
+    # ══════════════════════════════════════════════════════════════════════════════════
+    #  DYNAMIC DAPHULT DATE CALCULATOR (LAST ENDED MONTH)
+    # ══════════════════════════════════════════════════════════════════════════════════
+    st.markdown("### 🔍 Global Filters")
+    
+    # 1. Get absolute max date from uploaded source
+    raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
+    if not raw_dates.empty:
+        max_uploaded_date = raw_dates.max()
+        # 2. Go back to find the month preceding the max uploaded timestamp
+        first_of_current_upload_month = max_uploaded_date.replace(day=1)
+        last_day_of_ended_month = first_of_current_upload_month - pd.Timedelta(days=1)
+        first_day_of_ended_month = last_day_of_ended_month.replace(day=1)
+        
+        default_from = first_day_of_ended_month.date()
+        default_to = last_day_of_ended_month.date()
+    else:
+        default_from = df_raw["Date Only"].dropna().min()
+        default_to = df_raw["Date Only"].dropna().max()
+
     min_d = df_raw["Date Only"].dropna().min()
     max_d = df_raw["Date Only"].dropna().max()
-    date_range = st.date_input("Date Range", value=(min_d, max_d), min_value=min_d, max_value=max_d)
+    
+    date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
     d_from, d_to = (
         date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     )
     if d_from == d_to:
         st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
-    st.divider()
     
     PERIOD_KEY = f"{d_from}_{d_to}"
     
@@ -730,6 +749,9 @@ with st.sidebar:
     sel_types  = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
     sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
+# ══════════════════════════════════════════════════════════════════════════════════
+#  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAME
+# ══════════════════════════════════════════════════════════════════════════════════
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
 if sel_types:  df = df[df["Request Type"].isin(sel_types)]
@@ -922,7 +944,7 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
-        st.markdown("### ⏱ ...")
+        st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
         dfm["Response Tier"] = dfm["Response Take (min)"].apply(assign_time_tier)
         dfm["Service Tier"]  = dfm["Request Take (min)"].apply(assign_time_tier)
         rd = dfm.groupby("Response Tier").size().reset_index(name="Tickets")
@@ -1609,5 +1631,5 @@ Team Leader"""
                 unsafe_allow_html=True
             )
 
-st.info(f"⏱ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
+st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
