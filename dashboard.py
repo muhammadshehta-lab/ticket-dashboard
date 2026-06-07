@@ -1024,7 +1024,7 @@ with tab1:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes (using percentages for performance, absolute for others)
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1047,7 +1047,6 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
-        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
@@ -1055,7 +1054,7 @@ with tab1:
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
-            # Create a Percentage Bar Chart to act as the visual slicer context
+            # Create a Percentage Bar Chart to act as the visual context
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
@@ -1068,11 +1067,13 @@ with tab1:
                 insidetextanchor='middle',
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
             )
+            
             fig_req.update_layout(
-                **THEME,
+                template="plotly_white",
+                font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
                 height=max(250, len(req_pct)*40),
-                xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2]),
+                xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2 if len(req_pct) > 0 else 100]),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=11)),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)"
@@ -1132,8 +1133,7 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
-                # Removing the overlapping margin call to prevent TypeError
-                fig_sb.update_layout(**THEME, height=520)
+                fig_sb.update_layout(**THEME, height=520) # Error strictly fixed here.
                 st.plotly_chart(fig_sb, use_container_width=True)
             else:
                 st.info("No data available for this request type.")
