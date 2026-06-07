@@ -7,6 +7,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import json, hashlib, time, pathlib, urllib.parse, re
+from datetime import timedelta
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
@@ -178,7 +179,7 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     font-weight: 700 !important;
     font-size: 1.05rem !important;
 }
-.stTextInput input:focus, .st刺激NumberInput input:focus {
+.stTextInput input:focus, .stNumberInput input:focus {
     border-color: #1d4ed8 !important;
     box-shadow: 0 0 0 3px rgba(29,78,216,0.2) !important;
 }
@@ -396,12 +397,34 @@ def reject_request(req_id):
     return False
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  METRIC HELPERS
+#  METRIC HELPERS WITH TREND INDICATOR
 # ══════════════════════════════════════════════════════════════════════════════════
-def kpi_colored(label, value, cls):
+def calc_change(curr, prev):
+    if pd.isna(curr): curr = 0
+    if pd.isna(prev): prev = 0
+    if prev == 0:
+        return 100.0 if curr > 0 else 0.0
+    return ((curr - prev) / prev) * 100.0
+
+def kpi_colored(label, value, cls, change=None, inverse=False):
+    change_html = ""
+    if change is not None:
+        if change > 0:
+            arrow = "▲"
+            color = "#ef4444" if inverse else "#10b981" # Red if bad, Green if good
+        elif change < 0:
+            arrow = "▼"
+            color = "#10b981" if inverse else "#ef4444" # Green if good, Red if bad
+        else:
+            arrow = "−"
+            color = "#94a3b8" # Neutral gray
+        
+        bg_color = color + "20" # Adding opacity for a subtle pill background
+        change_html = f'<span style="font-size: 0.85rem; margin-left: 8px; padding: 2px 6px; border-radius: 8px; font-weight: 800; color: {color}; background-color: {bg_color}; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; white-space: nowrap;">{arrow} {abs(change):.1f}%</span>'
+        
     return (f'<div class="kpi-container {cls}">'
             f'<div class="kpi-label">{label}</div>'
-            f'<div class="kpi-value">{value}</div></div>')
+            f'<div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px;">{value}{change_html}</div></div>')
 
 def time_to_minutes(s):
     try:
@@ -714,15 +737,13 @@ with st.sidebar:
         st.warning("Empty source records."); st.stop()
 
     # ══════════════════════════════════════════════════════════════════════════════════
-    #  DYNAMIC DAPHULT DATE CALCULATOR (LAST ENDED MONTH)
+    #  DYNAMIC DEFAULT DATE CALCULATOR (LAST ENDED MONTH)
     # ══════════════════════════════════════════════════════════════════════════════════
     st.markdown("### 🔍 Global Filters")
     
-    # 1. Get absolute max date from uploaded source
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
     if not raw_dates.empty:
         max_uploaded_date = raw_dates.max()
-        # 2. Go back to find the month preceding the max uploaded timestamp
         first_of_current_upload_month = max_uploaded_date.replace(day=1)
         last_day_of_ended_month = first_of_current_upload_month - pd.Timedelta(days=1)
         first_day_of_ended_month = last_day_of_ended_month.replace(day=1)
@@ -742,6 +763,11 @@ with st.sidebar:
     )
     if d_from == d_to:
         st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
+        
+    # Calculate Previous Period Range for KPI Trends
+    delta_days = (d_to - d_from).days + 1
+    prev_d_to = d_from - timedelta(days=1)
+    prev_d_from = prev_d_to - timedelta(days=delta_days - 1)
     
     PERIOD_KEY = f"{d_from}_{d_to}"
     
@@ -750,12 +776,20 @@ with st.sidebar:
     sel_hic    = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAME
+#  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
 # ══════════════════════════════════════════════════════════════════════════════════
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-if sel_agents: df = df[df["Assigned By"].isin(sel_agents)]
-if sel_types:  df = df[df["Request Type"].isin(sel_types)]
-if sel_hic:    df = df[df["HIC"].isin(sel_hic)]
+df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
+
+if sel_agents: 
+    df = df[df["Assigned By"].isin(sel_agents)]
+    df_prev_all = df_prev_all[df_prev_all["Assigned By"].isin(sel_agents)]
+if sel_types:  
+    df = df[df["Request Type"].isin(sel_types)]
+    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_types)]
+if sel_hic:    
+    df = df[df["HIC"].isin(sel_hic)]
+    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS PANEL
@@ -914,33 +948,60 @@ with tab1:
     dfm = df.copy()
     if esc  and not nesc: dfm = dfm[dfm["Is Email"] == True]
     elif nesc and not esc: dfm = dfm[dfm["Is Email"] == False]
+    
+    dfm_prev = df_prev_all.copy()
+    if esc  and not nesc: dfm_prev = dfm_prev[dfm_prev["Is Email"] == True]
+    elif nesc and not esc: dfm_prev = dfm_prev[dfm_prev["Is Email"] == False]
 
+    # Current Metrics
     total = len(dfm)
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    h_frt = fmt_m(dfm["Response Take (min)"].mean() if not dfm.empty else 0)
-    h_aht = fmt_m(dfm["AHT (min)"].mean()           if not dfm.empty else 0)
-    h_tat = fmt_m(dfm["Request Take (min)"].mean()   if not dfm.empty else 0)
-
+    curr_frt_val = dfm["Response Take (min)"].mean() if not dfm.empty else 0
+    curr_aht_val = dfm["AHT (min)"].mean() if not dfm.empty else 0
+    curr_tat_val = dfm["Request Take (min)"].mean() if not dfm.empty else 0
+    h_frt = fmt_m(curr_frt_val)
+    h_aht = fmt_m(curr_aht_val)
+    h_tat = fmt_m(curr_tat_val)
     ok_pct = (ok / total * 100) if total > 0 else 0
     issue_pct = (issue / total * 100) if total > 0 else 0
-    
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
+    
+    # Previous Metrics
+    prev_total = len(dfm_prev)
+    ss_prev    = dfm_prev["Status"].astype(str).str.strip()
+    prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+    prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+    prev_frt_val = dfm_prev["Response Take (min)"].mean() if not dfm_prev.empty else 0
+    prev_aht_val = dfm_prev["AHT (min)"].mean() if not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if not dfm_prev.empty else 0
+    prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
+    prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
+
+    # Calculate Trend Changes
+    chg_total = calc_change(total, prev_total)
+    chg_stores = calc_change(stores_count, prev_stores_count)
+    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
+    chg_ok = calc_change(ok, prev_ok)
+    chg_issue = calc_change(issue, prev_issue)
+    chg_frt = calc_change(curr_frt_val, prev_frt_val)
+    chg_aht = calc_change(curr_aht_val, prev_aht_val)
+    chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3 = st.columns(3)
     
-    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total"),     unsafe_allow_html=True)
-    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store"),  unsafe_allow_html=True)
-    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions"),  unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed"), unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue"),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total),     unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores),  unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions),  unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt"),       unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht"),       unsafe_allow_html=True)
-    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat"),       unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Response (FRT)", h_frt,        "card-frt", chg_frt, inverse=True),       unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("Avg Handling (AHT)", h_aht,        "card-aht", chg_aht, inverse=True),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
     st.write("")
 
     if not dfm.empty:
@@ -1056,8 +1117,8 @@ with tab1:
                 match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
                 if match:
                     try:
-                        dt = pd.to_datetime(match.group(1), dayfirst=True).date()
-                        roster_date_map[dt] = col
+                        col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                        roster_date_map[col_date] = col
                     except: pass
         
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
@@ -1169,24 +1230,53 @@ with tab2:
     if t2e  and not t2ne: df_t2 = df_t2[df_t2["Is Email"] == True]
     elif t2ne and not t2e: df_t2 = df_t2[df_t2["Is Email"] == False]
 
-    aname = my_agent_name()
-    df_kpi = df_t2[df_t2["Assigned By"] == aname].copy() if (not is_admin() and aname) else df_t2.copy()
+    df_t2_prev = df_prev_all.copy()
+    if t2e  and not t2ne: df_t2_prev = df_t2_prev[df_t2_prev["Is Email"] == True]
+    elif t2ne and not t2e: df_t2_prev = df_t2_prev[df_t2_prev["Is Email"] == False]
 
+    aname = my_agent_name()
+    if not is_admin() and aname:
+        df_kpi = df_t2[df_t2["Assigned By"] == aname].copy()
+        df_kpi_prev = df_t2_prev[df_t2_prev["Assigned By"] == aname].copy()
+    else:
+        df_kpi = df_t2.copy()
+        df_kpi_prev = df_t2_prev.copy()
+
+    # Current KPI Metrics
     total_kpi = len(df_kpi)
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-
+    kpi_curr_frt_val = df_kpi["Response Take (min)"].mean() if not df_kpi.empty else 0
+    kpi_curr_aht_val = df_kpi["AHT (min)"].mean() if not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if not df_kpi.empty else 0
     kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
     kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
 
+    # Previous KPI Metrics
+    prev_kpi_total = len(df_kpi_prev)
+    kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
+    prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+    prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+    prev_kpi_frt_val = df_kpi_prev["Response Take (min)"].mean() if not df_kpi_prev.empty else 0
+    prev_kpi_aht_val = df_kpi_prev["AHT (min)"].mean() if not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if not df_kpi_prev.empty else 0
+
+    # KPI Changes
+    chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
+    chg_kpi_ok = calc_change(kpi_ok, prev_kpi_ok)
+    chg_kpi_iss = calc_change(kpi_iss, prev_kpi_iss)
+    chg_kpi_frt = calc_change(kpi_curr_frt_val, prev_kpi_frt_val)
+    chg_kpi_aht = calc_change(kpi_curr_aht_val, prev_kpi_aht_val)
+    chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total"),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1rem; opacity:0.8'>({kpi_ok_pct:.1f}%)</span>",      "card-completed"), unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1rem; opacity:0.8'>({kpi_iss_pct:.1f}%)</span>",     "card-issue"),     unsafe_allow_html=True)
-    k4.markdown(kpi_colored("Avg Response (FRT)", fmt_m(df_kpi["Response Take (min)"].mean() if not df_kpi.empty else 0), "card-frt"), unsafe_allow_html=True)
-    k5.markdown(kpi_colored("Avg Handling (AHT)", fmt_m(df_kpi["AHT (min)"].mean()           if not df_kpi.empty else 0), "card-aht"), unsafe_allow_html=True)
-    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(df_kpi["Request Take (min)"].mean()   if not df_kpi.empty else 0), "card-tat"), unsafe_allow_html=True)
+    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total),     unsafe_allow_html=True)
+    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1rem; opacity:0.8'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1rem; opacity:0.8'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+    k4.markdown(kpi_colored("Avg Response (FRT)", fmt_m(kpi_curr_frt_val), "card-frt", chg_kpi_frt, inverse=True), unsafe_allow_html=True)
+    k5.markdown(kpi_colored("Avg Handling (AHT)", fmt_m(kpi_curr_aht_val), "card-aht", chg_kpi_aht, inverse=True), unsafe_allow_html=True)
+    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
 
     st.write(""); st.divider()
     
@@ -1578,7 +1668,8 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 | **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['FRT']}** | **{agent_row['Service Time']}** |
 | **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['FRT']} | {team_row_disp['Service Time']} |
 
-**🎯 Targets & Quality:** {target_msg}  
+**🎯 Targets & Quality:**  
+{target_msg}  
 {qual_msg}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
