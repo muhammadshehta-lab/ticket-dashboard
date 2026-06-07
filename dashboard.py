@@ -249,6 +249,31 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 .card-store     { background: #fffbeb; border: 2px solid #fde047; color: #b45309; }
 .card-actions   { background: #eff6ff; border: 2px solid #93c5fd; color: #1e3a8a; }
 
+/* ══ AUTHENTICATION MODULE SCREEN RESKIN ═════════════════════════════ */
+.login-wrap {
+    max-width:460px; margin:5rem auto 0; padding:2.8rem 2.5rem 1.5rem;
+    background: #ffffff;
+    border:2px solid #bba370; border-radius:22px;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+}
+.login-title {
+    font-size: 2rem !important; font-weight: 900 !important; text-align: center; margin-bottom: .4rem;
+    background: linear-gradient(90deg, #1d4ed8, #2563eb, #047857);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.login-sub { font-size: 1rem !important; text-align: center; color: #475569; margin-bottom: 2rem; font-weight: 700 !important; }
+
+/* ══ SYSTEM BADGES & NOTIFICATIONS ════════════════════════════════════ */
+.badge { display:inline-block; font-size:.72rem !important; border-radius:7px; padding:3px 11px; margin-left:6px; font-weight:900; letter-spacing:.08em; }
+.badge-admin  { background:#dbeafe; border:2px solid #3b82f6; color:#1d4ed8; }
+.badge-expert { background:#dcfce7; border:2px solid #22c55e; color:#166534; }
+
+.req-pending  { background:#fef3c7; border:2px solid #f59e0b; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#78350f; font-size:.95rem; font-weight:700; }
+.req-approved { background:#dcfce7; border:2px solid #22c55e; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#166534; font-size:.95rem; font-weight:700; }
+.req-rejected { background:#fee2e2; border:2px solid #ef4444; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#991b1b; font-size:.95rem; font-weight:700; }
+
+.section-card { background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
+
 /* ══ FULL-WIDTH CUSTOM HTML TABLE STYLING FOR SCORECARD ═════════════ */
 .scorecard-container {
     width: 100%;
@@ -1061,13 +1086,13 @@ with tab1:
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
         st.markdown("""
-        <div style="direction: rtl; text-align: right; font-size: 1.1rem; margin-bottom: 1rem;">
-            <strong>مؤشر ضغط العمل للموظف (Tickets per Agent):</strong><br>
-            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟦 طبيعي (≤55)</span>
-            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟨 متوسط (56-60)</span>
-            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟧 عالي (61-63)</span>
-            <span dir="rtl" style="display: inline-block; margin-left: 15px;">🟥 شديد (64-70)</span>
-            <span dir="rtl" style="display: inline-block;">🟫 رهيب (>70)</span>
+        <div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem;">
+            <strong>Agent Workload Indicator (Tickets per Agent):</strong><br>
+            <span style="display: inline-block; margin-right: 15px;">🟦 Optimal (≤55)</span>
+            <span style="display: inline-block; margin-right: 15px;">🟨 Moderate (56-60)</span>
+            <span style="display: inline-block; margin-right: 15px;">🟧 High (61-63)</span>
+            <span style="display: inline-block; margin-right: 15px;">🟥 Severe (64-70)</span>
+            <span style="display: inline-block;">🟫 Excessive (>70)</span>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1090,8 +1115,8 @@ with tab1:
                 match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
                 if match:
                     try:
-                        dt = pd.to_datetime(match.group(1), dayfirst=True).date()
-                        roster_date_map[dt] = col
+                        col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                        roster_date_map[col_date] = col
                     except: pass
         
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
@@ -1193,12 +1218,11 @@ with tab1:
         st.plotly_chart(fig_d, use_container_width=True)
 
         # ══════════════════════════════════════════════════════════════════════════════════
-        #  🆕 NEW CURVE: HIC Vs TICKET COUNTS (STRICT DATE FILTER ONLY)
+        #  NEW CURVE: HIC Vs TICKET COUNTS (STRICT DATE FILTER ONLY)
         # ══════════════════════════════════════════════════════════════════════════════════
         st.divider()
         st.markdown("### 🏥 Health Insurance Companies (HIC) Distribution Analysis")
         
-        # Pull records strictly matching the time frames and toggle context (unfiltered by sidebar HIC)
         df_hic_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         if esc and not nesc: 
             df_hic_strict = df_hic_strict[df_hic_strict["Is Email"] == True]
@@ -1207,7 +1231,7 @@ with tab1:
             
         if not df_hic_strict.empty:
             hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index()
-            hic_counts = hic_counts.sort_values(by="Volume", ascending=True) # Ascending for correct horizontal rendering order
+            hic_counts = hic_counts.sort_values(by="Volume", ascending=True) 
             
             fig_hic = px.bar(
                 hic_counts,
@@ -1225,7 +1249,7 @@ with tab1:
             )
             fig_hic.update_layout(
                 **THEME,
-                height=max(400, len(hic_counts) * 35), # Dynamically scales if there are many insurance entries
+                height=max(400, len(hic_counts) * 35), 
                 showlegend=False,
                 xaxis_title="Total Handled Volume (Tickets)",
                 yaxis_title=""
@@ -1684,7 +1708,8 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 | **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['FRT']}** | **{agent_row['Service Time']}** |
 | **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['FRT']} | {team_row_disp['Service Time']} |
 
-**🎯 Targets & Quality:** {target_msg}  
+**🎯 Targets & Quality:**  
+{target_msg}  
 {qual_msg}
 
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
