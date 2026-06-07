@@ -406,18 +406,22 @@ def calc_change(curr, prev):
         return 100.0 if curr > 0 else 0.0
     return ((curr - prev) / prev) * 100.0
 
-def kpi_colored(label, value, cls, change=None, inverse=False):
+def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
     change_html = ""
     if change is not None:
-        if change > 0:
-            arrow = "▲"
-            color = "#ef4444" if inverse else "#10b981" # Red if bad, Green if good
-        elif change < 0:
-            arrow = "▼"
-            color = "#10b981" if inverse else "#ef4444" # Green if good, Red if bad
+        if neutral:
+            color = "#64748b" # Neutral gray for volume metrics (No intervention)
+            arrow = "▲" if change > 0 else ("▼" if change < 0 else "−")
         else:
-            arrow = "−"
-            color = "#94a3b8" # Neutral gray
+            if change > 0:
+                arrow = "▲"
+                color = "#ef4444" if inverse else "#10b981" # Red if bad (inverse), Green if good
+            elif change < 0:
+                arrow = "▼"
+                color = "#10b981" if inverse else "#ef4444" # Green if good (inverse), Red if bad
+            else:
+                arrow = "−"
+                color = "#94a3b8" # Neutral gray for no change
         
         bg_color = color + "20" # Adding opacity for a subtle pill background
         change_html = f'<span style="font-size: 0.85rem; margin-left: 8px; padding: 2px 6px; border-radius: 8px; font-weight: 800; color: {color}; background-color: {bg_color}; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; white-space: nowrap;">{arrow} {abs(change):.1f}%</span>'
@@ -977,15 +981,17 @@ with tab1:
     prev_frt_val = dfm_prev["Response Take (min)"].mean() if not dfm_prev.empty else 0
     prev_aht_val = dfm_prev["AHT (min)"].mean() if not dfm_prev.empty else 0
     prev_tat_val = dfm_prev["Request Take (min)"].mean() if not dfm_prev.empty else 0
+    prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
+    prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes
+    # Calculate Trend Changes (using percentages for performance, absolute for others)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
-    chg_ok = calc_change(ok, prev_ok)
-    chg_issue = calc_change(issue, prev_issue)
+    chg_ok = calc_change(ok_pct, prev_ok_pct)
+    chg_issue = calc_change(issue_pct, prev_issue_pct)
     chg_frt = calc_change(curr_frt_val, prev_frt_val)
     chg_aht = calc_change(curr_aht_val, prev_aht_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
@@ -993,9 +999,9 @@ with tab1:
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3 = st.columns(3)
     
-    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total),     unsafe_allow_html=True)
-    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores),  unsafe_allow_html=True)
-    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions),  unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
@@ -1261,17 +1267,19 @@ with tab2:
     prev_kpi_frt_val = df_kpi_prev["Response Take (min)"].mean() if not df_kpi_prev.empty else 0
     prev_kpi_aht_val = df_kpi_prev["AHT (min)"].mean() if not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if not df_kpi_prev.empty else 0
+    prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+    prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
     # KPI Changes
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
-    chg_kpi_ok = calc_change(kpi_ok, prev_kpi_ok)
-    chg_kpi_iss = calc_change(kpi_iss, prev_kpi_iss)
+    chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)
+    chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)
     chg_kpi_frt = calc_change(kpi_curr_frt_val, prev_kpi_frt_val)
     chg_kpi_aht = calc_change(kpi_curr_aht_val, prev_kpi_aht_val)
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total),     unsafe_allow_html=True)
+    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
     k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1rem; opacity:0.8'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
     k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1rem; opacity:0.8'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
     k4.markdown(kpi_colored("Avg Response (FRT)", fmt_m(kpi_curr_frt_val), "card-frt", chg_kpi_frt, inverse=True), unsafe_allow_html=True)
