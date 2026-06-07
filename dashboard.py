@@ -739,6 +739,10 @@ with st.sidebar:
     
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
+        
+    # Safeguard for older cache logic just in case:
+    if "AHT (min)" not in df_raw.columns and "First Action Take (min)" in df_raw.columns:
+        df_raw["AHT (min)"] = df_raw["First Action Take (min)"]
 
     # ── DYNAMIC DEFAULT DATE CALCULATOR (LAST ENDED MONTH) ──
     st.markdown("### 🔍 Global Filters")
@@ -995,9 +999,9 @@ with tab1:
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    curr_frt_val = dfm["Response Take (min)"].mean() if not dfm.empty else 0
-    curr_aht_val = dfm["AHT (min)"].mean() if not dfm.empty else 0
-    curr_tat_val = dfm["Request Take (min)"].mean() if not dfm.empty else 0
+    curr_frt_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_aht_val = dfm.get("AHT (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
     
     curr_merged_aht_val = curr_frt_val + curr_aht_val
     h_merged_aht = fmt_m(curr_merged_aht_val)
@@ -1013,9 +1017,9 @@ with tab1:
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_frt_val = dfm_prev["Response Take (min)"].mean() if not dfm_prev.empty else 0
-    prev_aht_val = dfm_prev["AHT (min)"].mean() if not df_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if not dfm_prev.empty else 0
+    prev_frt_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_aht_val = dfm_prev.get("AHT (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
     
     prev_merged_aht_val = prev_frt_val + prev_aht_val
     
@@ -1024,7 +1028,7 @@ with tab1:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes (using percentages for performance, absolute for others)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1108,7 +1112,7 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
-                fig_sb.update_layout(**THEME, height=520, margin=dict(t=20, b=20, l=10, r=10))
+                fig_sb.update_layout(**THEME, height=520)
                 st.plotly_chart(fig_sb, use_container_width=True)
             else:
                 st.info("No data available for this request type.")
@@ -1347,9 +1351,9 @@ with tab2:
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    kpi_curr_frt_val = df_kpi["Response Take (min)"].mean() if not df_kpi.empty else 0
-    kpi_curr_aht_val = df_kpi["AHT (min)"].mean() if not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if not df_kpi.empty else 0
+    kpi_curr_frt_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_aht_val = df_kpi.get("AHT (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     
     kpi_curr_merged_aht_val = kpi_curr_frt_val + kpi_curr_aht_val
     h_kpi_merged_aht = fmt_m(kpi_curr_merged_aht_val)
@@ -1362,9 +1366,9 @@ with tab2:
     kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_kpi_frt_val = df_kpi_prev["Response Take (min)"].mean() if not df_kpi_prev.empty else 0
-    prev_kpi_aht_val = df_kpi_prev["AHT (min)"].mean() if not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if not df_kpi_prev.empty else 0
+    prev_kpi_frt_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_aht_val = df_kpi_prev.get("AHT (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     
     prev_kpi_merged_aht_val = prev_kpi_frt_val + prev_kpi_aht_val
     
@@ -1426,7 +1430,7 @@ with tab2:
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         stats["_Service_Time_val"]    = grp["Request Take (min)"].mean()
         stats["_FRT_val"]             = grp["Response Take (min)"].mean()
-        stats["_AHT_val"]             = grp["AHT (min)"].mean()
+        stats["_AHT_val"]             = grp.get("AHT (min)", pd.Series([0])).mean()
         stats["_c_ok_sum"]            = grp["_c_ok"].sum()
         stats["_c_all_sum"]           = grp["_c_all"].sum()
         
@@ -1544,7 +1548,7 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
-    sc["FRT"] = sc["_FRT_val"].fillna(0).apply(fmt_m)
+    sc["AHT"] = (sc["_FRT_val"] + sc["_AHT_val"]).fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
     c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
@@ -1558,7 +1562,7 @@ with tab2:
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
     team_st = fmt_m(df_sc["Request Take (min)"].mean() if not df_sc.empty else 0)
-    team_merged_aht = fmt_m(df_sc["Response Take (min)"].mean() + df_sc["AHT (min)"].mean() if not df_sc.empty else 0)
+    team_merged_aht = fmt_m(df_sc["Response Take (min)"].mean() + df_sc.get("AHT (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
 
     if global_target > 0:
         team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
