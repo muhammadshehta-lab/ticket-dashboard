@@ -725,7 +725,6 @@ with st.sidebar:
             df["Request Take (min)"]       = df["Request Take"].apply(time_to_minutes).fillna(0)
             df["Response Take (min)"]      = df["Response Take"].apply(time_to_minutes).fillna(0)
             df["First Action Take (min)"]  = df["First Action Take"].apply(time_to_minutes).fillna(0)
-            df["AHT (min)"]                = df["First Action Take (min)"]
             df["Is Email"] = (
                 df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
                 
@@ -739,10 +738,6 @@ with st.sidebar:
     
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
-        
-    # Safeguard for older cache logic just in case:
-    if "AHT (min)" not in df_raw.columns and "First Action Take (min)" in df_raw.columns:
-        df_raw["AHT (min)"] = df_raw["First Action Take (min)"]
 
     # ── DYNAMIC DEFAULT DATE CALCULATOR (LAST ENDED MONTH) ──
     st.markdown("### 🔍 Global Filters")
@@ -995,12 +990,11 @@ with tab1:
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    curr_frt_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
-    curr_aht_val = dfm.get("AHT (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    
+    curr_afr_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
     curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
     
-    curr_merged_aht_val = curr_frt_val + curr_aht_val
-    h_merged_aht = fmt_m(curr_merged_aht_val)
+    h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
     
     ok_pct = (ok / total * 100) if total > 0 else 0
@@ -1013,24 +1007,22 @@ with tab1:
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_frt_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
-    prev_aht_val = dfm_prev.get("AHT (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
     
-    prev_merged_aht_val = prev_frt_val + prev_aht_val
+    prev_afr_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes (using percentages for performance, absolute for others)
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_ok = calc_change(ok_pct, prev_ok_pct)
     chg_issue = calc_change(issue_pct, prev_issue_pct)
-    chg_merged_aht = calc_change(curr_merged_aht_val, prev_merged_aht_val)
+    chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
@@ -1042,7 +1034,7 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("AHT (Average Handling Time)", h_merged_aht, "card-aht", chg_merged_aht, inverse=True),       unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
     st.write("")
 
@@ -1055,7 +1047,7 @@ with tab1:
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
-            # Distinct Palette for Bar Chart (Totally separated from Sunburst colors)
+            # Distinct Palette for Bar Chart
             bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
             marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
             
@@ -1073,7 +1065,6 @@ with tab1:
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
             )
             
-            # Explicit Layout parameters safely mapping
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
@@ -1083,7 +1074,7 @@ with tab1:
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                clickmode="event+select" # Crucial to allow interactive clicks
+                clickmode="event+select" 
             )
             
             # Safe Native Streamlit Interactive Selection (v1.35+)
@@ -1098,7 +1089,7 @@ with tab1:
                     st.info(f"✅ Filtered by: **{selected_rt}**\n\n*(Click the bar again or click empty space to clear)*")
                     
             except TypeError:
-                # Safe Fallback for older Streamlit versions < 1.35 (won't crash the app)
+                # Safe Fallback for older Streamlit versions < 1.35
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
                 st.caption("Clicking bars is not supported in your Streamlit version. Use the menu below:")
                 slicer_options = ["All Types"] + list(req_pct.index)
@@ -1111,7 +1102,7 @@ with tab1:
             dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
-            st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
+            st.markdown("### ⏱️ Service Time Breakdown (AFR & TAT)")
             if not dfm_sb.empty:
                 dfm_sb["Response Tier"] = dfm_sb["Response Take (min)"].apply(assign_time_tier)
                 dfm_sb["Service Tier"]  = dfm_sb["Request Take (min)"].apply(assign_time_tier)
@@ -1155,7 +1146,6 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
-                # Applying custom layout explicitly WITHOUT dict unpacking **THEME to avoid TypeError
                 fig_sb.update_layout(
                     template="plotly_white",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -1414,10 +1404,11 @@ with tab2:
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    kpi_curr_frt_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    
+    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     
-    h_kpi_afr = fmt_m(kpi_curr_frt_val)
+    h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
     kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
     kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
@@ -1428,7 +1419,6 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe Fallback for Column Reads
     prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     
@@ -1489,7 +1479,6 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
-        # Safely using direct column reference instead of .get() chained with groupby
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
