@@ -995,12 +995,12 @@ with tab1:
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    
-    # Safe Fallback for Column Reads
-    curr_afr_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_frt_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_aht_val = dfm.get("AHT (min)", pd.Series([0])).mean() if not dfm.empty else 0
     curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
     
-    h_afr = fmt_m(curr_afr_val)
+    curr_merged_aht_val = curr_frt_val + curr_aht_val
+    h_merged_aht = fmt_m(curr_merged_aht_val)
     h_tat = fmt_m(curr_tat_val)
     
     ok_pct = (ok / total * 100) if total > 0 else 0
@@ -1013,10 +1013,11 @@ with tab1:
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    
-    # Safe Fallback for Column Reads
-    prev_afr_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_frt_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_aht_val = dfm_prev.get("AHT (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
     prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    
+    prev_merged_aht_val = prev_frt_val + prev_aht_val
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1029,7 +1030,7 @@ with tab1:
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_ok = calc_change(ok_pct, prev_ok_pct)
     chg_issue = calc_change(issue_pct, prev_issue_pct)
-    chg_afr = calc_change(curr_afr_val, prev_afr_val)
+    chg_merged_aht = calc_change(curr_merged_aht_val, prev_merged_aht_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
@@ -1041,7 +1042,7 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("AHT (Average Handling Time)", h_merged_aht, "card-aht", chg_merged_aht, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
     st.write("")
 
@@ -1050,26 +1051,15 @@ with tab1:
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
-            st.markdown("<br><b>🎛️ Filter by Request Type</b>", unsafe_allow_html=True)
+            st.markdown("<br><b>🎛️ Interactive Request Types</b><br><span style='font-size:0.85rem; color:#64748b;'>Click any bar to filter • Click again to reset</span>", unsafe_allow_html=True)
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
-            slicer_options = ["All Types"] + [f"{rt} ({pct}%)" for rt, pct in zip(req_pct.index, req_pct.values)]
-            selected_slicer = st.radio("Select Request Type:", slicer_options, label_visibility="collapsed")
+            # Distinct Palette for Bar Chart (Totally separated from Sunburst colors)
+            bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
+            marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
             
-            # Interactive Colorful Palette for the Percentage Bar Chart
-            custom_palette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316", "#06b6d4", "#84cc16", "#d946ef"]
-            color_map = {rt: custom_palette[i % len(custom_palette)] for i, rt in enumerate(req_pct.index)}
-            
-            marker_colors = []
-            for rt in req_pct.index:
-                base_color = color_map[rt]
-                # If a specific type is selected via Radio button, dim the others! (Interactive Visuals)
-                if selected_slicer != "All Types" and not selected_slicer.startswith(rt):
-                    marker_colors.append("rgba(200, 200, 200, 0.3)")
-                else:
-                    marker_colors.append(base_color)
-            
+            # Build the custom colored Bar Chart Slicer
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
@@ -1083,23 +1073,41 @@ with tab1:
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
             )
             
-            # Update Layout using explicit dictionaries instead of unpacking **THEME to avoid TypeError
+            # Explicit Layout parameters safely mapping
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
-                height=max(250, len(req_pct)*40),
+                height=max(300, len(req_pct)*45),
                 xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2 if len(req_pct) > 0 else 100]),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)"
+                paper_bgcolor="rgba(0,0,0,0)",
+                clickmode="event+select" # Crucial to allow interactive clicks
             )
-            st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
             
-        if selected_slicer == "All Types":
+            # Safe Native Streamlit Interactive Selection (v1.35+)
+            selected_rt = "All Types"
+            try:
+                chart_event = st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False}, on_select="rerun", selection_mode="points")
+                points = chart_event.get("selection", {}).get("points", [])
+                if points and len(points) > 0:
+                    selected_rt = points[0]["y"]
+                
+                if selected_rt != "All Types":
+                    st.info(f"✅ Filtered by: **{selected_rt}**\n\n*(Click the bar again or click empty space to clear)*")
+                    
+            except TypeError:
+                # Safe Fallback for older Streamlit versions < 1.35 (won't crash the app)
+                st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
+                st.caption("Clicking bars is not supported in your Streamlit version. Use the menu below:")
+                slicer_options = ["All Types"] + list(req_pct.index)
+                selected_rt = st.radio("Filter", slicer_options, label_visibility="collapsed")
+            
+        # Apply filter logic
+        if selected_rt == "All Types":
             dfm_sb = dfm.copy()
         else:
-            selected_rt = selected_slicer.rsplit(" (", 1)[0]
             dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
@@ -1147,7 +1155,7 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
-                # Update Layout using explicit properties without **THEME to avoid TypeError
+                # Applying custom layout explicitly WITHOUT dict unpacking **THEME to avoid TypeError
                 fig_sb.update_layout(
                     template="plotly_white",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -1182,7 +1190,11 @@ with tab1:
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#58a6ff", width=2)), secondary_y=False)
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
         fig_r.update_layout(
-            **THEME, 
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(247,241,225,0.6)",
+            font_color="#0f172a",
+            margin=dict(l=10, r=10, t=55, b=10),
             height=550, 
             hovermode="x unified",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -1316,7 +1328,11 @@ with tab1:
         ), secondary_y=True)
 
         fig_d.update_layout(
-            **THEME, 
+            template="plotly_white",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(247,241,225,0.6)",
+            font_color="#0f172a",
+            margin=dict(l=10, r=10, t=55, b=10),
             height=480, 
             xaxis_title="", 
             hovermode="x unified",
@@ -1357,7 +1373,11 @@ with tab1:
                 hovertemplate="<b>%{x}</b><br>Tickets Resolved: %{y:,}<extra></extra>"
             )
             fig_hic.update_layout(
-                **THEME,
+                template="plotly_white",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(247,241,225,0.6)",
+                font_color="#0f172a",
+                margin=dict(l=10, r=10, t=55, b=10),
                 height=500,
                 xaxis_title="",
                 yaxis_title="Total Handled Volume (Tickets)",
@@ -1394,12 +1414,10 @@ with tab2:
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    
-    # Safe Fallback for Column Reads
-    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_frt_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     
-    h_kpi_afr = fmt_m(kpi_curr_afr_val)
+    h_kpi_afr = fmt_m(kpi_curr_frt_val)
     
     kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
     kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
@@ -1611,8 +1629,8 @@ with tab2:
     team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
-    team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
-    team_afr = fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0)
+    team_st = fmt_m(df_sc.get("Request Take (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
+    team_afr = fmt_m(df_sc.get("Response Take (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
 
     if global_target > 0:
         team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
