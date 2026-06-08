@@ -211,6 +211,7 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 
 /* ══ HIGH-CONTRAST BOLD KPI CARDS ═══════════════════════════════════ */
 .kpi-container {
+    position: relative; /* Fixed: Allows absolute positioning of trend inside the card */
     border-radius: 18px; 
     padding: 1.4rem 1.1rem; 
     text-align: center;
@@ -424,11 +425,12 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
                 color = "#94a3b8" 
         
         bg_color = color + "20" 
-        change_html = f'<span style="font-size: 0.85rem; margin-left: 8px; padding: 2px 6px; border-radius: 8px; font-weight: 800; color: {color}; background-color: {bg_color}; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; white-space: nowrap;">{arrow} {abs(change):.1f}%</span>'
+        # Fixed: Move the trend indicator to absolute bottom right corner
+        change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 800; color: {color}; background-color: {bg_color}; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">{arrow} {abs(change):.1f}%</div>'
         
     return (f'<div class="kpi-container {cls}">'
             f'<div class="kpi-label">{label}</div>'
-            f'<div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px;">{value}{change_html}</div></div>')
+            f'<div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;">{value}</div>{change_html}</div>')
 
 def time_to_minutes(s):
     try:
@@ -995,12 +997,15 @@ with tab1:
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     
+    # Safe check for columns existence
     curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
     curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
     
     h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
     
+    ok_pct = (ok / total * 100) if total > 0 else 0
+    issue_pct = (issue / total * 100) if total > 0 else 0
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
     
@@ -1012,9 +1017,12 @@ with tab1:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
+    # Safe check for columns existence
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
+    prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
+    prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
     
@@ -1036,8 +1044,8 @@ with tab1:
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions, neutral=True),  unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,}",    "card-completed", chg_ok), unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,}", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.7;'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
@@ -1417,6 +1425,9 @@ with tab2:
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
     kpi_curr_avg_per_day = total_kpi / delta_days if delta_days > 0 else 0
+    
+    kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
+    kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
 
     # Previous KPI Metrics
     prev_kpi_total = len(df_kpi_prev)
@@ -1424,6 +1435,7 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
+    # Safe check for columns existence
     prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
@@ -1440,9 +1452,9 @@ with tab2:
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
     k2.markdown(kpi_colored("Avg Tickets / Day",  f"{kpi_curr_avg_per_day:.1f}", "card-actions", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,}",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
-    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,}",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-    k5.markdown(kpi_colored("AFR (Average First Response)", h_kpi_afr, "card-aht", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
+    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.7;'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+    k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-aht", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
     k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
 
     st.write(""); st.divider()
