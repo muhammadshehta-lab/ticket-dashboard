@@ -995,12 +995,12 @@ with tab1:
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    curr_frt_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
-    curr_aht_val = dfm["AHT (min)"].mean() if "AHT (min)" in dfm.columns and not dfm.empty else 0
-    curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
     
-    curr_merged_aht_val = curr_frt_val + curr_aht_val
-    h_merged_aht = fmt_m(curr_merged_aht_val)
+    # Safe Fallback for Column Reads
+    curr_afr_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    
+    h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
     
     ok_pct = (ok / total * 100) if total > 0 else 0
@@ -1013,11 +1013,10 @@ with tab1:
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_frt_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_aht_val = dfm_prev["AHT (min)"].mean() if "AHT (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
-    prev_merged_aht_val = prev_frt_val + prev_aht_val
+    # Safe Fallback for Column Reads
+    prev_afr_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1030,7 +1029,7 @@ with tab1:
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_ok = calc_change(ok_pct, prev_ok_pct)
     chg_issue = calc_change(issue_pct, prev_issue_pct)
-    chg_merged_aht = calc_change(curr_merged_aht_val, prev_merged_aht_val)
+    chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
@@ -1042,7 +1041,7 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("AHT (Average Handling Time)", h_merged_aht, "card-aht", chg_merged_aht, inverse=True),       unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
     st.write("")
 
@@ -1055,7 +1054,22 @@ with tab1:
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
-            # Create a Percentage Bar Chart to act as the visual context
+            slicer_options = ["All Types"] + [f"{rt} ({pct}%)" for rt, pct in zip(req_pct.index, req_pct.values)]
+            selected_slicer = st.radio("Select Request Type:", slicer_options, label_visibility="collapsed")
+            
+            # Interactive Colorful Palette for the Percentage Bar Chart
+            custom_palette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#14b8a6", "#f97316", "#06b6d4", "#84cc16", "#d946ef"]
+            color_map = {rt: custom_palette[i % len(custom_palette)] for i, rt in enumerate(req_pct.index)}
+            
+            marker_colors = []
+            for rt in req_pct.index:
+                base_color = color_map[rt]
+                # If a specific type is selected via Radio button, dim the others! (Interactive Visuals)
+                if selected_slicer != "All Types" and not selected_slicer.startswith(rt):
+                    marker_colors.append("rgba(200, 200, 200, 0.3)")
+                else:
+                    marker_colors.append(base_color)
+            
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
@@ -1063,31 +1077,30 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             fig_req.update_traces(
-                marker_color='#3b82f6', 
+                marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
             )
             
+            # Update Layout using explicit dictionaries instead of unpacking **THEME to avoid TypeError
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
                 height=max(250, len(req_pct)*40),
                 xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2 if len(req_pct) > 0 else 100]),
-                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=11)),
+                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)"
             )
             st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
             
-            slicer_options = ["All Types"] + list(req_pct.index)
-            selected_slicer = st.selectbox("🔍 Select to Filter:", slicer_options)
-            
         if selected_slicer == "All Types":
             dfm_sb = dfm.copy()
         else:
-            dfm_sb = dfm[dfm["Request Type"] == selected_slicer].copy()
+            selected_rt = selected_slicer.rsplit(" (", 1)[0]
+            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
             st.markdown("### ⏱️ Service Time Breakdown (FRT & TAT)")
@@ -1134,7 +1147,7 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
-                # Applying custom layout explicitly WITHOUT dict unpacking **THEME to avoid TypeError
+                # Update Layout using explicit properties without **THEME to avoid TypeError
                 fig_sb.update_layout(
                     template="plotly_white",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -1381,12 +1394,12 @@ with tab2:
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    kpi_curr_frt_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
-    kpi_curr_aht_val = df_kpi["AHT (min)"].mean() if "AHT (min)" in df_kpi.columns and not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     
-    kpi_curr_merged_aht_val = kpi_curr_frt_val + kpi_curr_aht_val
-    h_kpi_merged_aht = fmt_m(kpi_curr_merged_aht_val)
+    # Safe Fallback for Column Reads
+    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    
+    h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
     kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
     kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
@@ -1396,11 +1409,10 @@ with tab2:
     kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_kpi_frt_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    prev_kpi_aht_val = df_kpi_prev["AHT (min)"].mean() if "AHT (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
-    prev_kpi_merged_aht_val = prev_kpi_frt_val + prev_kpi_aht_val
+    # Safe Fallback for Column Reads
+    prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
@@ -1409,14 +1421,14 @@ with tab2:
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)
-    chg_kpi_merged_aht = calc_change(kpi_curr_merged_aht_val, prev_kpi_merged_aht_val)
+    chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
     k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1rem; opacity:0.8'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
     k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1rem; opacity:0.8'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-    k4.markdown(kpi_colored("AHT (Average Handling Time)", h_kpi_merged_aht, "card-aht", chg_kpi_merged_aht, inverse=True), unsafe_allow_html=True)
+    k4.markdown(kpi_colored("AFR (Average First Response)", h_kpi_afr, "card-aht", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
     k5.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
 
     st.write(""); st.divider()
@@ -1458,9 +1470,18 @@ with tab2:
         stats["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
-        stats["_Service_Time_val"]    = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
-        stats["_FRT_val"]             = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
-        stats["_AHT_val"]             = grp["AHT (min)"].mean() if "AHT (min)" in df_sc.columns else 0
+        
+        # Safely using direct column reference instead of .get() chained with groupby
+        if "Request Take (min)" in df_sc.columns:
+            stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
+        else:
+            stats["_Service_Time_val"] = 0
+            
+        if "Response Take (min)" in df_sc.columns:
+            stats["_AFR_val"] = grp["Response Take (min)"].mean()
+        else:
+            stats["_AFR_val"] = 0
+
         stats["_c_ok_sum"]            = grp["_c_ok"].sum()
         stats["_c_all_sum"]           = grp["_c_all"].sum()
         
@@ -1471,8 +1492,7 @@ with tab2:
         sc["Reporting & Feedback"] = 0
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
-        sc["_FRT_val"] = 0
-        sc["_AHT_val"] = 0
+        sc["_AFR_val"] = 0
         sc["_c_ok_sum"] = 0
         sc["_c_all_sum"] = 0
 
@@ -1578,7 +1598,7 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
-    sc["AHT"] = (sc["_FRT_val"] + sc["_AHT_val"]).fillna(0).apply(fmt_m)
+    sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
     c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
@@ -1592,10 +1612,7 @@ with tab2:
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
     team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
-    
-    team_frt = df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0
-    team_aht_pure = df_sc["AHT (min)"].mean() if "AHT (min)" in df_sc.columns and not df_sc.empty else 0
-    team_merged_aht = fmt_m(team_frt + team_aht_pure)
+    team_afr = fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0)
 
     if global_target > 0:
         team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
@@ -1617,7 +1634,7 @@ with tab2:
         "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
         "Sick Leaves": round(sc["Sick Leaves"].mean(), 1) if not sc.empty else 0,
         "% Achievement from Target": team_achiev, 
-        "AHT": team_merged_aht,
+        "AFR": team_afr,
         "Service Time": team_st, 
         "Service Quality": "100.0%"
     }
@@ -1627,7 +1644,7 @@ with tab2:
         if col != "GLOBAL_TARGET":
             team_row[col] = val
 
-    sc.drop(columns=["_Service_Time_val", "_FRT_val", "_AHT_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
+    sc.drop(columns=["_Service_Time_val", "_AFR_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
 
     sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
@@ -1682,7 +1699,7 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    column_order = ["Expert", "Rank", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AHT", "Service Time", "Service Quality"]
+    column_order = ["Expert", "Rank", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
@@ -1713,7 +1730,7 @@ with tab2:
                 nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
                 nem  = st.text_input("Email Counts", value=gv("Email Counts"))
             with fc3:
-                naht = st.text_input("AHT (HH:MM:SS)", value=gv("AHT"))
+                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
                 nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
             
             sc_col, rc_col = st.columns(2)
@@ -1732,7 +1749,7 @@ with tab2:
             if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
             if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
             if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
-            if parse_str(naht): new_ov["AHT"] = parse_str(naht)
+            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
             if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
 
             if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
@@ -1811,10 +1828,10 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 
 ### 📊 Your Performance Scorecard:
 
-| Metric | Total Cases | Cases/Day | Achievement | Quality | AHT | Service Time |
+| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AHT']}** | **{agent_row['Service Time']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AHT']} | {team_row_disp['Service Time']} |
+| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** |
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} |
 
 **🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
@@ -1838,10 +1855,10 @@ As we review the performance for the period from {d_from} to {d_to}, I wanted to
 
 📊 Your Performance Scorecard:
 ------------------------------------------------------------------------------------------
-Metric         | Total Cases | Cases/Day | Achievement | Quality | AHT      | Service Time
+Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time
 ------------------------------------------------------------------------------------------
-Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AHT']):<8} | {str(agent_row['Service Time'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AHT']):<8} | {str(team_row_disp['Service Time'])}
+Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time'])}
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time'])}
 ------------------------------------------------------------------------------------------
 
 🎯 Targets & Quality:
