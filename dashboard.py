@@ -1024,12 +1024,12 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_ok = calc_change(ok_pct, prev_ok_pct)  # Changed to percentage vs percentage
-    chg_issue = calc_change(issue, prev_issue)
+    chg_issue = calc_change(issue_pct, prev_issue_pct) # Changed to percentage vs percentage
     chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
@@ -1440,10 +1440,10 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage vs Percentage for completion rates)
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
-    chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  # Changed to percentage vs percentage
-    chg_kpi_iss = calc_change(kpi_iss, prev_kpi_iss)
+    chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
+    chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  # Changed to percentage vs percentage
     chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
     chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
