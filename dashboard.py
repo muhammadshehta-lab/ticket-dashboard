@@ -722,9 +722,13 @@ with st.sidebar:
             df["Date Only"]                = dp.dt.date
             df["Hour"]                     = dp.dt.hour.fillna(0).astype(int)
             df["Day Name"]                 = dp.dt.day_name().fillna("Unknown")
-            df["Request Take (min)"]       = df["Request Take"].apply(time_to_minutes).fillna(0)
-            df["Response Take (min)"]      = df["Response Take"].apply(time_to_minutes).fillna(0)
-            df["First Action Take (min)"]  = df["First Action Take"].apply(time_to_minutes).fillna(0)
+            
+            # Safe parsing
+            if "Request Take" in df.columns:
+                df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
+            if "Response Take" in df.columns:
+                df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
+                
             df["Is Email"] = (
                 df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
                 
@@ -991,17 +995,16 @@ with tab1:
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
     curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
     curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
     
     h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
     
-    ok_pct = (ok / total * 100) if total > 0 else 0
-    issue_pct = (issue / total * 100) if total > 0 else 0
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
+    
+    curr_avg_per_day = total / delta_days if delta_days > 0 else 0
     
     # Previous Metrics
     prev_total = len(dfm_prev)
@@ -1009,35 +1012,36 @@ with tab1:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
-    prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
-    prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
+    
+    prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes (Absolute values for non-percentage counts)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
-    chg_ok = calc_change(ok_pct, prev_ok_pct)
-    chg_issue = calc_change(issue_pct, prev_issue_pct)
+    chg_ok = calc_change(ok, prev_ok)
+    chg_issue = calc_change(issue, prev_issue)
+    chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2 = st.columns(2)
+    r2c1, r2c2, r2c3 = st.columns(3)
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions, neutral=True),  unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1rem; opacity:0.8'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1rem; opacity:0.8'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,}",    "card-completed", chg_ok), unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,}", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
     st.write("")
 
     if not dfm.empty:
@@ -1407,14 +1411,12 @@ with tab2:
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
     kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
-    kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
-    kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
+    kpi_curr_avg_per_day = total_kpi / delta_days if delta_days > 0 else 0
 
     # Previous KPI Metrics
     prev_kpi_total = len(df_kpi_prev)
@@ -1422,26 +1424,26 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
     prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
-    prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
-    prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+    prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
 
-    # KPI Changes
+    # KPI Changes (Absolute values for non-percentage counts)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
-    chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)
-    chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)
+    chg_kpi_ok = calc_change(kpi_ok, prev_kpi_ok)
+    chg_kpi_iss = calc_change(kpi_iss, prev_kpi_iss)
+    chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
     chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
-    k1, k2, k3, k4, k5 = st.columns(5)
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1rem; opacity:0.8'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1rem; opacity:0.8'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-    k4.markdown(kpi_colored("AFR (Average First Response)", h_kpi_afr, "card-aht", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
-    k5.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
+    k2.markdown(kpi_colored("Avg Tickets / Day",  f"{kpi_curr_avg_per_day:.1f}", "card-actions", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,}",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
+    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,}",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+    k5.markdown(kpi_colored("AFR (Average First Response)", h_kpi_afr, "card-aht", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
 
     st.write(""); st.divider()
     
