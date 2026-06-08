@@ -425,7 +425,6 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
                 color = "#94a3b8" 
         
         bg_color = color + "20" 
-        # Fixed: Move the trend indicator to absolute bottom right corner
         change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 800; color: {color}; background-color: {bg_color}; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">{arrow} {abs(change):.1f}%</div>'
         
     return (f'<div class="kpi-container {cls}">'
@@ -725,7 +724,6 @@ with st.sidebar:
             df["Hour"]                     = dp.dt.hour.fillna(0).astype(int)
             df["Day Name"]                 = dp.dt.day_name().fillna("Unknown")
             
-            # Safe parsing
             if "Request Take" in df.columns:
                 df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
             if "Response Take" in df.columns:
@@ -997,9 +995,8 @@ with tab1:
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
-    curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
-    curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
+    curr_afr_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
     
     h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
@@ -1017,9 +1014,8 @@ with tab1:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
-    prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_afr_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1028,11 +1024,11 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes (Absolute values for non-percentage counts)
+    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
-    chg_ok = calc_change(ok, prev_ok)
+    chg_ok = calc_change(ok_pct, prev_ok_pct)  # Changed to percentage vs percentage
     chg_issue = calc_change(issue, prev_issue)
     chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
@@ -1419,8 +1415,8 @@ with tab2:
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
@@ -1436,14 +1432,17 @@ with tab2:
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
     # Safe check for columns existence
-    prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     
     prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
+    
+    prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+    prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Absolute values for non-percentage counts)
+    # KPI Changes (Percentage vs Percentage for completion rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
-    chg_kpi_ok = calc_change(kpi_ok, prev_kpi_ok)
+    chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  # Changed to percentage vs percentage
     chg_kpi_iss = calc_change(kpi_iss, prev_kpi_iss)
     chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
     chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
