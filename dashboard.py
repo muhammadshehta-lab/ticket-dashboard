@@ -995,9 +995,9 @@ with tab1:
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
-    curr_frt_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
-    curr_aht_val = dfm.get("AHT (min)", pd.Series([0])).mean() if not dfm.empty else 0
-    curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_frt_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
+    curr_aht_val = dfm["AHT (min)"].mean() if "AHT (min)" in dfm.columns and not dfm.empty else 0
+    curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
     
     curr_merged_aht_val = curr_frt_val + curr_aht_val
     h_merged_aht = fmt_m(curr_merged_aht_val)
@@ -1013,9 +1013,9 @@ with tab1:
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_frt_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
-    prev_aht_val = dfm_prev.get("AHT (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_frt_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_aht_val = dfm_prev["AHT (min)"].mean() if "AHT (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
     prev_merged_aht_val = prev_frt_val + prev_aht_val
     
@@ -1024,7 +1024,7 @@ with tab1:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes (using percentages for performance, absolute for others)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1047,6 +1047,7 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
+        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
@@ -1133,7 +1134,15 @@ with tab1:
                     marker=dict(colors=new_colors)
                 )
                 
-                fig_sb.update_layout(**THEME, height=520) # Error strictly fixed here.
+                # Applying custom layout explicitly WITHOUT dict unpacking **THEME to avoid TypeError
+                fig_sb.update_layout(
+                    template="plotly_white",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(247,241,225,0.6)",
+                    font_color="#0f172a",
+                    height=520, 
+                    margin=dict(t=20, b=20, l=10, r=10)
+                )
                 st.plotly_chart(fig_sb, use_container_width=True)
             else:
                 st.info("No data available for this request type.")
@@ -1372,9 +1381,9 @@ with tab2:
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    kpi_curr_frt_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
-    kpi_curr_aht_val = df_kpi.get("AHT (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_frt_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_aht_val = df_kpi["AHT (min)"].mean() if "AHT (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     
     kpi_curr_merged_aht_val = kpi_curr_frt_val + kpi_curr_aht_val
     h_kpi_merged_aht = fmt_m(kpi_curr_merged_aht_val)
@@ -1387,9 +1396,9 @@ with tab2:
     kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_kpi_frt_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
-    prev_kpi_aht_val = df_kpi_prev.get("AHT (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_frt_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_aht_val = df_kpi_prev["AHT (min)"].mean() if "AHT (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
     prev_kpi_merged_aht_val = prev_kpi_frt_val + prev_kpi_aht_val
     
@@ -1449,9 +1458,9 @@ with tab2:
         stats["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
-        stats["_Service_Time_val"]    = grp["Request Take (min)"].mean()
-        stats["_FRT_val"]             = grp.get("Response Take (min)", pd.Series([0])).mean()
-        stats["_AHT_val"]             = grp.get("AHT (min)", pd.Series([0])).mean()
+        stats["_Service_Time_val"]    = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
+        stats["_FRT_val"]             = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
+        stats["_AHT_val"]             = grp["AHT (min)"].mean() if "AHT (min)" in df_sc.columns else 0
         stats["_c_ok_sum"]            = grp["_c_ok"].sum()
         stats["_c_all_sum"]           = grp["_c_all"].sum()
         
@@ -1582,8 +1591,11 @@ with tab2:
     team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
-    team_st = fmt_m(df_sc.get("Request Take (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
-    team_merged_aht = fmt_m(df_sc.get("Response Take (min)", pd.Series([0])).mean() + df_sc.get("AHT (min)", pd.Series([0])).mean() if not df_sc.empty else 0)
+    team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
+    
+    team_frt = df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0
+    team_aht_pure = df_sc["AHT (min)"].mean() if "AHT (min)" in df_sc.columns and not df_sc.empty else 0
+    team_merged_aht = fmt_m(team_frt + team_aht_pure)
 
     if global_target > 0:
         team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
