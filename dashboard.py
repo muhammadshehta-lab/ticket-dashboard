@@ -930,7 +930,7 @@ if st.session_state.page == "settings":
                         if uname == "admin":
                             st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me():
-                            st.error("❌ You cannot delete your own account while logged in!")
+                            st.error("❌ You অফিসে cannot delete your own account while logged in!")
                         else:
                             users().pop(uname)
                             _save_store()
@@ -995,8 +995,8 @@ with tab1:
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    curr_afr_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
-    curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
+    curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
     
     h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
@@ -1014,8 +1014,8 @@ with tab1:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    prev_afr_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1024,7 +1024,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1049,7 +1049,6 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
-        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
@@ -1057,11 +1056,9 @@ with tab1:
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
-            # Distinct Palette for Bar Chart
             bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
             marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
             
-            # Build the custom colored Bar Chart Slicer
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
@@ -1069,13 +1066,12 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
-            # Setting dynamic selection traces (native plotly interactivity)
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
-                selected=dict(marker=dict(opacity=1, line=dict(color='black', width=2))),
+                selected=dict(marker=dict(opacity=1)),
                 unselected=dict(marker=dict(opacity=0.3))
             )
             
@@ -1083,17 +1079,16 @@ with tab1:
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
-                height=max(400, len(req_pct)*60), # Taller/larger bars
-                bargap=0.15, # Makes bars thicker
+                height=max(400, len(req_pct)*60),
+                bargap=0.15,
                 xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2 if len(req_pct) > 0 else 100]),
-                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=14, weight="bold")), # Larger font
+                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=14, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
                 clickmode="event+select",
                 dragmode="select" 
             )
             
-            # Safe Native Streamlit Interactive Selection (v1.35+)
             selected_rt = "All Types"
             try:
                 chart_event = st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False}, on_select="rerun", selection_mode="points")
@@ -1105,13 +1100,11 @@ with tab1:
                     st.info(f"✅ Filtered by: **{selected_rt}**\n\n*(Click the bar again or click empty space to clear)*")
                     
             except TypeError:
-                # Safe Fallback for older Streamlit versions < 1.35
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
                 st.caption("Clicking bars is not supported in your Streamlit version. Use the menu below:")
                 slicer_options = ["All Types"] + list(req_pct.index)
                 selected_rt = st.radio("Filter", slicer_options, label_visibility="collapsed")
             
-        # Apply filter logic
         if selected_rt == "All Types":
             dfm_sb = dfm.copy()
         else:
@@ -1425,8 +1418,8 @@ with tab2:
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
@@ -1441,8 +1434,8 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
     prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
     
@@ -1505,7 +1498,6 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
-        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
