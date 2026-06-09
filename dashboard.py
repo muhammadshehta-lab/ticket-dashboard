@@ -521,7 +521,7 @@ AGENT_ALIASES = {
     
     "إسلام رمضان خليل": "Eslam Ramadan",
     "أصلان رمضان خليل": "Eslam Ramadan",
-    "اسلام رمضان": "Eslam Ramadan",
+    "islam رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
     "محمد خليفة جاب الله": "Mohamed Khalifa",
@@ -948,7 +948,7 @@ if st.session_state.page == "settings":
                         if uname == "admin":
                             st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me():
-                            st.error("❌ You cannot delete your own account while logged in!")
+                            st.error("❌ You offices cannot delete your own account while logged in!")
                         else:
                             users().pop(uname)
                             _save_store()
@@ -1013,8 +1013,8 @@ with tab1:
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    curr_afr_val = dfm.get("Response Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
-    curr_tat_val = dfm.get("Request Take (min)", pd.Series([0])).mean() if not dfm.empty else 0
+    curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
+    curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
     
     h_afr = fmt_m(curr_afr_val)
     h_tat = fmt_m(curr_tat_val)
@@ -1032,8 +1032,8 @@ with tab1:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    prev_afr_val = dfm_prev.get("Response Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev.get("Request Take (min)", pd.Series([0])).mean() if not dfm_prev.empty else 0
+    prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1042,7 +1042,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
+    # Calculate Trend Changes
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1067,12 +1067,31 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
+        req_counts = dfm['Request Type'].value_counts()
+        req_pct = (req_counts / len(dfm) * 100).round(1)
+        
+        # 🌟 FOOLPROOF SELECTION PARSER (Check state before column division to guarantee instant filtering)
+        selected_rt = "All Types"
+        if "req_type_slicer" in st.session_state:
+            selection = st.session_state["req_type_slicer"]
+            if isinstance(selection, dict) and "selection" in selection:
+                pts = selection["selection"].get("points", [])
+                if pts and len(pts) > 0:
+                    pt_idx = pts[0].get("point_index")
+                    if pt_idx is not None and pt_idx < len(req_pct):
+                        selected_rt = req_pct.index[pt_idx]
+
+        # Apply logic cleanly
+        if selected_rt == "All Types":
+            dfm_sb = dfm.copy()
+        else:
+            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
+
+        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
             st.markdown("<br><b>🎛️ Interactive Request Types</b><br><span style='font-size:0.85rem; color:#64748b;'>🖱️ Click any bar to filter • Click empty space to reset</span>", unsafe_allow_html=True)
-            req_counts = dfm['Request Type'].value_counts()
-            req_pct = (req_counts / len(dfm) * 100).round(1)
             
             # Distinct Palette for Bar Chart
             bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
@@ -1103,50 +1122,24 @@ with tab1:
                 margin=dict(l=0, r=0, t=10, b=10),
                 height=max(250, len(req_pct)*35), 
                 bargap=0.5,                      
-                xaxis=dict(
-                    visible=False, 
-                ),
+                xaxis=dict(visible=False),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
             )
             
-            # Safe Native Streamlit Interactive Selection (v1.35+)
-            selected_rt = "All Types"
-            try:
-                chart_event = st.plotly_chart(
-                    fig_req, 
-                    use_container_width=True, 
-                    config={'displayModeBar': False}, 
-                    on_select="rerun", 
-                    selection_mode="points"
-                )
-                
-                # Safely parse the event dictionary returned by modern Streamlit
-                if chart_event and hasattr(chart_event, "selection"):
-                    pts = chart_event.selection.get("points", []) if isinstance(chart_event.selection, dict) else getattr(chart_event.selection, "points", [])
-                    if pts and len(pts) > 0:
-                        # Extract the y-axis category value from the click event
-                        selected_rt = pts[0].get("y", pts[0].get("label", "All Types"))
-                
-                if selected_rt != "All Types":
-                    st.info(f"✅ Filtered by: **{selected_rt}**")
-                    
-            except Exception as e:
-                # Fallback for older Streamlit versions < 1.35
-                st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
-                st.warning("⚠️ التفاعل المباشر بالضغط على الأعمدة يحتاج إلى تحديث Streamlit. يرجى إضافة `streamlit>=1.35.0` في ملف `requirements.txt`.")
-                
-                # Fallback explicit menu
-                st.markdown("<br><b>🎛️ Manual Filter Menu (Fallback)</b>", unsafe_allow_html=True)
-                slicer_options = ["All Types"] + list(req_pct.index)
-                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options, label_visibility="collapsed")
+            # Render completely interactive chart bound to key state
+            st.plotly_chart(
+                fig_req, 
+                use_container_width=True, 
+                config={'displayModeBar': False}, 
+                on_select="rerun", 
+                selection_mode="points",
+                key="req_type_slicer"
+            )
             
-        # Apply filter logic
-        if selected_rt == "All Types":
-            dfm_sb = dfm.copy()
-        else:
-            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
+            if selected_rt != "All Types":
+                st.info(f"✅ Filtered by: **{selected_rt}**")
 
         with sb_col1:
             if selected_rt == "All Types":
@@ -1456,8 +1449,8 @@ with tab2:
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
@@ -1472,7 +1465,6 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
     prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     
@@ -1481,7 +1473,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage vs Percentage for completion/issue rates)
+    # KPI Changes 
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1537,7 +1529,6 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
-        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
