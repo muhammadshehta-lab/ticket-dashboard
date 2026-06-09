@@ -1087,7 +1087,7 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
-            # Plotly Interactive states (opacity only, no line color to prevent ValueError)
+            # Plotly Interactive states (opacity only to prevent ValueError)
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
@@ -1102,11 +1102,11 @@ with tab1:
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
-                height=max(250, len(req_pct)*35), # Lower height multiplier = thinner bars
-                bargap=0.45,                      # Higher bargap = thinner bars
+                height=max(250, len(req_pct)*35), 
+                bargap=0.45,                      
                 xaxis=dict(
                     visible=False, 
-                    range=[0, max(req_pct.values)*1.02 if len(req_pct) > 0 else 100] # Tighter range = longer bars
+                    range=[0, max(req_pct.values)*1.02 if len(req_pct) > 0 else 100] 
                 ),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
@@ -1115,7 +1115,7 @@ with tab1:
                 dragmode="select" 
             )
             
-            # Safe Native Streamlit Interactive Selection
+            # Safe Native Streamlit Interactive Selection (v1.35+)
             selected_rt = "All Types"
             try:
                 chart_event = st.plotly_chart(
@@ -1128,10 +1128,10 @@ with tab1:
                 )
                 
                 # Safely parse the event dictionary returned by modern Streamlit
-                if chart_event and "selection" in chart_event:
+                if chart_event and isinstance(chart_event, dict) and "selection" in chart_event:
                     points = chart_event["selection"].get("points", [])
                     if points and len(points) > 0:
-                        selected_rt = points[0]["y"]
+                        selected_rt = points[0].get("y", "All Types")
                 
                 if selected_rt != "All Types":
                     st.info(f"✅ Filtered by: **{selected_rt}**")
@@ -1457,8 +1457,8 @@ with tab2:
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
@@ -1473,15 +1473,15 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
     prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
     
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes 
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1537,6 +1537,7 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
+        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
