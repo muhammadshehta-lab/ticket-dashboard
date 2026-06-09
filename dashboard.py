@@ -521,7 +521,7 @@ AGENT_ALIASES = {
     
     "إسلام رمضان خليل": "Eslam Ramadan",
     "أصلان رمضان خليل": "Eslam Ramadan",
-    "islam رمضان": "Eslam Ramadan",
+    "اسلام رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
     "محمد خليفة جاب الله": "Mohamed Khalifa",
@@ -561,9 +561,7 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    # Trigger WhatsApp Notification
                     notify_admin_whatsapp(udata.get("display_name", uname))
-                    
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -948,7 +946,7 @@ if st.session_state.page == "settings":
                         if uname == "admin":
                             st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me():
-                            st.error("❌ You offices cannot delete your own account while logged in!")
+                            st.error("❌ You cannot delete your own account while logged in!")
                         else:
                             users().pop(uname)
                             _save_store()
@@ -1042,7 +1040,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes
+    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1070,7 +1068,7 @@ with tab1:
         req_counts = dfm['Request Type'].value_counts()
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
-        # 🌟 FOOLPROOF SELECTION PARSER (Check state before column division to guarantee instant filtering)
+        # 🌟 FOOLPROOF SELECTION PARSER (Check state before drawing dependent charts)
         selected_rt = "All Types"
         if "req_type_slicer" in st.session_state:
             selection = st.session_state["req_type_slicer"]
@@ -1081,7 +1079,7 @@ with tab1:
                     if pt_idx is not None and pt_idx < len(req_pct):
                         selected_rt = req_pct.index[pt_idx]
 
-        # Apply logic cleanly
+        # Apply filter logic
         if selected_rt == "All Types":
             dfm_sb = dfm.copy()
         else:
@@ -1121,22 +1119,30 @@ with tab1:
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
                 height=max(250, len(req_pct)*35), 
-                bargap=0.5,                      
+                bargap=0.45,                      
                 xaxis=dict(visible=False),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
+                clickmode="event+select" 
             )
             
             # Render completely interactive chart bound to key state
-            st.plotly_chart(
-                fig_req, 
-                use_container_width=True, 
-                config={'displayModeBar': False}, 
-                on_select="rerun", 
-                selection_mode="points",
-                key="req_type_slicer"
-            )
+            try:
+                st.plotly_chart(
+                    fig_req, 
+                    use_container_width=True, 
+                    config={'displayModeBar': False}, 
+                    on_select="rerun", 
+                    selection_mode="points",
+                    key="req_type_slicer"
+                )
+            except Exception as e:
+                # Fallback for older Streamlit versions
+                st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
+                st.warning("⚠️ التفاعل المباشر بالضغط على الأعمدة يحتاج إلى تحديث Streamlit. يرجى إضافة `streamlit>=1.35.0` في ملف `requirements.txt`.")
+                slicer_options = ["All Types"] + list(req_pct.index)
+                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options)
             
             if selected_rt != "All Types":
                 st.info(f"✅ Filtered by: **{selected_rt}**")
@@ -1465,15 +1471,15 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
     prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
     
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes 
+    # KPI Changes
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1609,10 +1615,18 @@ with tab2:
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
     sc["Sick Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Sick Leaves", 0))
 
+    sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
+    sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
+    
+    c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
+    c_ok = sc["_c_ok_sum"].fillna(0)
+    sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
+
+    # APPLY OVERRIDES DIRECTLY HERE (so Quality can be overwritten)
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
-            if col != "GLOBAL_TARGET":
+            if col != "GLOBAL_TARGET" and col in sc.columns:
                 sc.at[i, col] = val
 
     # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
@@ -1624,11 +1638,11 @@ with tab2:
         if sel_agents_t2:
             kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
 
-    sum_wd   = int(kpi_r_df["Working Days"].astype(float).sum())
-    sum_off  = int(kpi_r_df["Off Days"].astype(float).sum())
-    sum_ann  = int(kpi_r_df["Annual Leaves"].astype(float).sum())
-    sum_cas  = int(kpi_r_df["Casual Leaves"].astype(float).sum())
-    sum_sick = int(kpi_r_df["Sick Leaves"].astype(float).sum())
+    sum_wd   = int(pd.to_numeric(kpi_r_df["Working Days"], errors='coerce').fillna(0).sum())
+    sum_off  = int(pd.to_numeric(kpi_r_df["Off Days"], errors='coerce').fillna(0).sum())
+    sum_ann  = int(pd.to_numeric(kpi_r_df["Annual Leaves"], errors='coerce').fillna(0).sum())
+    sum_cas  = int(pd.to_numeric(kpi_r_df["Casual Leaves"], errors='coerce').fillna(0).sum())
+    sum_sick = int(pd.to_numeric(kpi_r_df["Sick Leaves"], errors='coerce').fillna(0).sum())
 
     rk1, rk2, rk3, rk4, rk5 = st.columns(5)
     rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-store"), unsafe_allow_html=True)
@@ -1640,8 +1654,11 @@ with tab2:
     
     st.markdown("### 📊 Expert Performance Scorecard Dashboard")
 
-    total_cases = sc["Tickets Count"].astype(float) + sc["JHAH Requests"].astype(float) + sc["Out Requests"].astype(float)
-    wdays = sc["Working Days"].astype(float).replace(0, 1)
+    total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
+                  pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
+                  pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
+                  
+    wdays = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)
     sc["Cases/Day"] = (total_cases / wdays).round(1)
 
     if not sc.empty:
@@ -1655,17 +1672,10 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
-    sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
-    sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
-    
-    c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
-    c_ok = sc["_c_ok_sum"].fillna(0)
-    sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
-
-    team_wd = round(sc["Working Days"].mean(), 1) if not sc.empty else 0
-    team_tc = round(sc["Tickets Count"].mean(), 1) if not sc.empty else 0
-    team_jhah = round(sc["JHAH Requests"].mean(), 1) if not sc.empty else 0
-    team_out = round(sc["Out Requests"].mean(), 1) if not sc.empty else 0
+    team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
+    team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
+    team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
+    team_out = round(pd.to_numeric(sc["Out Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
     team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
@@ -1684,12 +1694,12 @@ with tab2:
         "JHAH Requests": team_jhah, 
         "Out Requests": team_out,
         "Cases/Day": team_cpd,
-        "Reporting & Feedback": round(sc["Reporting & Feedback"].mean(), 1) if not sc.empty else 0,
-        "Email Counts": round(sc["Email Counts"].mean(), 1) if not sc.empty else 0,
-        "Off Days": round(sc["Off Days"].mean(), 1) if not sc.empty else 0,
-        "Annual Leaves": round(sc["Annual Leaves"].mean(), 1) if not sc.empty else 0,
-        "Casual Leaves": round(sc["Casual Leaves"].mean(), 1) if not sc.empty else 0,
-        "Sick Leaves": round(sc["Sick Leaves"].mean(), 1) if not sc.empty else 0,
+        "Reporting & Feedback": round(pd.to_numeric(sc["Reporting & Feedback"], errors='coerce').mean(), 1) if not sc.empty else 0,
+        "Email Counts": round(pd.to_numeric(sc["Email Counts"], errors='coerce').mean(), 1) if not sc.empty else 0,
+        "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0,
+        "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
+        "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
+        "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "% Achievement from Target": team_achiev, 
         "AFR": team_afr,
         "Service Time": team_st, 
@@ -1787,7 +1797,6 @@ with tab2:
                 nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
                 nem  = st.text_input("Email Counts", value=gv("Email Counts"))
             with fc3:
-                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
                 nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
             
             sc_col, rc_col = st.columns(2)
@@ -1806,7 +1815,6 @@ with tab2:
             if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
             if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
             if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
-            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
             if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
 
             if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
