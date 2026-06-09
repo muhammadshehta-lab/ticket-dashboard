@@ -561,7 +561,9 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
+                    # Trigger WhatsApp Notification
                     notify_admin_whatsapp(udata.get("display_name", uname))
+                    
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -1040,7 +1042,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
+    # Calculate Trend Changes
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1068,7 +1070,7 @@ with tab1:
         req_counts = dfm['Request Type'].value_counts()
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
-        # 🌟 FOOLPROOF SELECTION PARSER (Check state before drawing dependent charts)
+        # 🌟 FOOLPROOF SELECTION PARSER
         selected_rt = "All Types"
         if "req_type_slicer" in st.session_state:
             selection = st.session_state["req_type_slicer"]
@@ -1091,11 +1093,9 @@ with tab1:
         with sb_col2:
             st.markdown("<br><b>🎛️ Interactive Request Types</b><br><span style='font-size:0.85rem; color:#64748b;'>🖱️ Click any bar to filter • Click empty space to reset</span>", unsafe_allow_html=True)
             
-            # Distinct Palette for Bar Chart
             bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
             marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
             
-            # Build the custom colored Bar Chart Slicer
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
@@ -1103,7 +1103,6 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
-            # Opacity states ONLY (no line colors to avoid ValueError)
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
@@ -1113,7 +1112,6 @@ with tab1:
                 unselected=dict(marker=dict(opacity=0.25))
             )
             
-            # Adjust dimensions: thinner bars, longer reach
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
@@ -1124,10 +1122,8 @@ with tab1:
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                clickmode="event+select" 
             )
             
-            # Render completely interactive chart bound to key state
             try:
                 st.plotly_chart(
                     fig_req, 
@@ -1138,7 +1134,6 @@ with tab1:
                     key="req_type_slicer"
                 )
             except Exception as e:
-                # Fallback for older Streamlit versions
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
                 st.warning("⚠️ التفاعل المباشر بالضغط على الأعمدة يحتاج إلى تحديث Streamlit. يرجى إضافة `streamlit>=1.35.0` في ملف `requirements.txt`.")
                 slicer_options = ["All Types"] + list(req_pct.index)
@@ -1471,6 +1466,7 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
+    # Safe check for columns existence
     prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     
@@ -1615,14 +1611,7 @@ with tab2:
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
     sc["Sick Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Sick Leaves", 0))
 
-    sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
-    sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
-    
-    c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
-    c_ok = sc["_c_ok_sum"].fillna(0)
-    sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
-
-    # APPLY OVERRIDES DIRECTLY HERE (so Quality can be overwritten)
+    # APPLY OVERRIDES DIRECTLY HERE
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
@@ -1766,7 +1755,8 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    column_order = ["Expert", "Rank", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
+    # UPDATED COLUMN ORDER TO INCLUDE WORKING DAYS
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
@@ -1797,6 +1787,7 @@ with tab2:
                 nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
                 nem  = st.text_input("Email Counts", value=gv("Email Counts"))
             with fc3:
+                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
                 nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
             
             sc_col, rc_col = st.columns(2)
@@ -1815,6 +1806,7 @@ with tab2:
             if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
             if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
             if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
+            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
             if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
 
             if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
