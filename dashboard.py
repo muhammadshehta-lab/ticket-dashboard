@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import json, hashlib, time, pathlib, urllib.parse, re
+import json, hashlib, time, pathlib, urllib.parse, re, requests
 from datetime import timedelta
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -100,6 +100,21 @@ def _load_store() -> dict:
 
 def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  WHATSAPP ADMIN NOTIFICATION
+# ══════════════════════════════════════════════════════════════════════════════════
+def notify_admin_whatsapp(logged_in_user):
+    """Sends a WhatsApp message to the admin when a user logs in securely."""
+    try:
+        if "whatsapp" in st.secrets and "api_key" in st.secrets["whatsapp"]:
+            api_key = st.secrets["whatsapp"]["api_key"]
+            phone = "+201129217380"
+            msg = f"🚨 *System Login Alert*%0AUser: *{logged_in_user}*%0ATime: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={msg}&apikey={api_key}"
+            requests.get(url, timeout=3)
+    except Exception as e:
+        pass
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  CSS  — PUFF BACKGROUND THEME & BOLD/LARGE TYPOGRAPHY BLOCK
@@ -546,6 +561,9 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
+                    # Trigger WhatsApp Notification
+                    notify_admin_whatsapp(udata.get("display_name", uname))
+                    
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -930,7 +948,7 @@ if st.session_state.page == "settings":
                         if uname == "admin":
                             st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me():
-                            st.error("❌ You অফিসে cannot delete your own account while logged in!")
+                            st.error("❌ You cannot delete your own account while logged in!")
                         else:
                             users().pop(uname)
                             _save_store()
@@ -1024,7 +1042,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1049,16 +1067,19 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
+        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
-            st.markdown("<br><b>🎛️ Interactive Request Types</b><br><span style='font-size:0.85rem; color:#64748b;'>Click any bar to filter • Click again to reset</span>", unsafe_allow_html=True)
+            st.markdown("<br><b>🎛️ Interactive Request Types</b><br><span style='font-size:0.85rem; color:#64748b;'>🖱️ Click any bar to filter • Click empty space to reset</span>", unsafe_allow_html=True)
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
+            # Distinct Palette for Bar Chart
             bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
             marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
             
+            # Build the custom colored Bar Chart Slicer
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
@@ -1066,45 +1087,63 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
+            # Plotly Interactive states (opacity only, no line color to prevent ValueError)
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
                 selected=dict(marker=dict(opacity=1)),
-                unselected=dict(marker=dict(opacity=0.3))
+                unselected=dict(marker=dict(opacity=0.25))
             )
             
+            # Adjust dimensions: thinner bars, longer reach
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
-                height=max(400, len(req_pct)*60),
-                bargap=0.15,
-                xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2 if len(req_pct) > 0 else 100]),
-                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=14, weight="bold")),
+                height=max(250, len(req_pct)*35), # Lower height multiplier = thinner bars
+                bargap=0.45,                      # Higher bargap = thinner bars
+                xaxis=dict(
+                    visible=False, 
+                    range=[0, max(req_pct.values)*1.02 if len(req_pct) > 0 else 100] # Tighter range = longer bars
+                ),
+                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
                 clickmode="event+select",
                 dragmode="select" 
             )
             
+            # Safe Native Streamlit Interactive Selection
             selected_rt = "All Types"
             try:
-                chart_event = st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False}, on_select="rerun", selection_mode="points")
-                points = chart_event.get("selection", {}).get("points", [])
-                if points and len(points) > 0:
-                    selected_rt = points[0]["y"]
+                chart_event = st.plotly_chart(
+                    fig_req, 
+                    use_container_width=True, 
+                    config={'displayModeBar': False}, 
+                    on_select="rerun", 
+                    selection_mode="points",
+                    key="req_type_slicer"
+                )
+                
+                # Safely parse the event dictionary returned by modern Streamlit
+                if chart_event and "selection" in chart_event:
+                    points = chart_event["selection"].get("points", [])
+                    if points and len(points) > 0:
+                        selected_rt = points[0]["y"]
                 
                 if selected_rt != "All Types":
-                    st.info(f"✅ Filtered by: **{selected_rt}**\n\n*(Click the bar again or click empty space to clear)*")
+                    st.info(f"✅ Filtered by: **{selected_rt}**")
                     
             except TypeError:
+                # Fallback for older Streamlit versions < 1.35
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
-                st.caption("Clicking bars is not supported in your Streamlit version. Use the menu below:")
+                st.warning("⚠️ التفاعل المباشر بالضغط على الأعمدة يحتاج إلى تحديث Streamlit. يرجى إضافة `streamlit>=1.35.0` في ملف `requirements.txt`.")
                 slicer_options = ["All Types"] + list(req_pct.index)
-                selected_rt = st.radio("Filter", slicer_options, label_visibility="collapsed")
+                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options)
             
+        # Apply filter logic
         if selected_rt == "All Types":
             dfm_sb = dfm.copy()
         else:
@@ -1418,8 +1457,8 @@ with tab2:
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
     
-    kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+    kpi_curr_afr_val = df_kpi.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
+    kpi_curr_tat_val = df_kpi.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi.empty else 0
     
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
     
@@ -1434,15 +1473,15 @@ with tab2:
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+    prev_kpi_afr_val = df_kpi_prev.get("Response Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
+    prev_kpi_tat_val = df_kpi_prev.get("Request Take (min)", pd.Series([0])).mean() if not df_kpi_prev.empty else 0
     
     prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
     
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage vs Percentage for completion/issue rates)
+    # KPI Changes 
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
