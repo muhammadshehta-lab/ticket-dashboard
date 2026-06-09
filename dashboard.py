@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import json, hashlib, time, pathlib, urllib.parse, re, requests
+import json, hashlib, time, pathlib, urllib.parse, re
 from datetime import timedelta
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -100,27 +100,6 @@ def _load_store() -> dict:
 
 def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  WHATSAPP ADMIN NOTIFICATION
-# ══════════════════════════════════════════════════════════════════════════════════
-def notify_admin_whatsapp(logged_in_user):
-    """Sends a WhatsApp message to the admin when a user logs in securely."""
-    try:
-        if "whatsapp" in st.secrets and "api_key" in st.secrets["whatsapp"]:
-            api_key = st.secrets["whatsapp"]["api_key"]
-            # Admin phone number fixed with country code
-            phone = "+201129217380"
-            
-            # Format the message (URL encoded for HTTP request)
-            msg = f"🚨 *System Login Alert*%0AUser: *{logged_in_user}*%0ATime: {time.strftime('%Y-%m-%d %H:%M:%S')}"
-            
-            # Send via CallMeBot API
-            url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={msg}&apikey={api_key}"
-            requests.get(url, timeout=3)
-    except Exception as e:
-        # Fails silently so it does not block the user from logging in
-        pass
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  CSS  — PUFF BACKGROUND THEME & BOLD/LARGE TYPOGRAPHY BLOCK
@@ -567,9 +546,6 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    # Trigger WhatsApp Notification
-                    notify_admin_whatsapp(udata.get("display_name", uname))
-                    
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -1048,7 +1024,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes
+    # Calculate Trend Changes (Percentage vs Percentage for completion rates)
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1073,6 +1049,7 @@ with tab1:
     st.write("")
 
     if not dfm.empty:
+        # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
         with sb_col2:
@@ -1080,34 +1057,43 @@ with tab1:
             req_counts = dfm['Request Type'].value_counts()
             req_pct = (req_counts / len(dfm) * 100).round(1)
             
+            # Distinct Palette for Bar Chart
             bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
             marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
             
+            # Build the custom colored Bar Chart Slicer
             fig_req = px.bar(
                 x=req_pct.values, 
                 y=req_pct.index, 
                 orientation='h',
                 text=[f"{v}%" for v in req_pct.values],
             )
+            
+            # Setting dynamic selection traces (native plotly interactivity)
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
-                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
+                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
+                selected=dict(marker=dict(opacity=1, line=dict(color='black', width=2))),
+                unselected=dict(marker=dict(opacity=0.3))
             )
             
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
-                height=max(300, len(req_pct)*45),
+                height=max(400, len(req_pct)*60), # Taller/larger bars
+                bargap=0.15, # Makes bars thicker
                 xaxis=dict(visible=False, range=[0, max(req_pct.values)*1.2 if len(req_pct) > 0 else 100]),
-                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
+                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=14, weight="bold")), # Larger font
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                clickmode="event+select" 
+                clickmode="event+select",
+                dragmode="select" 
             )
             
+            # Safe Native Streamlit Interactive Selection (v1.35+)
             selected_rt = "All Types"
             try:
                 chart_event = st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False}, on_select="rerun", selection_mode="points")
@@ -1119,18 +1105,24 @@ with tab1:
                     st.info(f"✅ Filtered by: **{selected_rt}**\n\n*(Click the bar again or click empty space to clear)*")
                     
             except TypeError:
+                # Safe Fallback for older Streamlit versions < 1.35
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
                 st.caption("Clicking bars is not supported in your Streamlit version. Use the menu below:")
                 slicer_options = ["All Types"] + list(req_pct.index)
                 selected_rt = st.radio("Filter", slicer_options, label_visibility="collapsed")
             
+        # Apply filter logic
         if selected_rt == "All Types":
             dfm_sb = dfm.copy()
         else:
             dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
-            st.markdown("### ⏱️ Service Time Breakdown (AFR & TAT)")
+            if selected_rt == "All Types":
+                st.markdown("### ⏱️ Service Time Breakdown (AFR & TAT)")
+            else:
+                st.markdown(f"### ⏱️ Service Time Breakdown (AFR & TAT) <br><span style='color:#3b82f6; font-size:1.2rem'>➤ {selected_rt}</span>", unsafe_allow_html=True)
+                
             if not dfm_sb.empty:
                 dfm_sb["Response Tier"] = dfm_sb["Response Take (min)"].apply(assign_time_tier)
                 dfm_sb["Service Tier"]  = dfm_sb["Request Take (min)"].apply(assign_time_tier)
@@ -1460,7 +1452,7 @@ with tab2:
     # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
-    chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)
+    chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
     chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
     chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
@@ -1513,6 +1505,7 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
+        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
