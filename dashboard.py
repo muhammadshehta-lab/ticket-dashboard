@@ -561,7 +561,6 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    # Trigger WhatsApp Notification
                     notify_admin_whatsapp(udata.get("display_name", uname))
                     
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
@@ -1042,7 +1041,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1122,6 +1121,7 @@ with tab1:
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
+                clickmode="event+select" 
             )
             
             try:
@@ -1475,7 +1475,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes
+    # KPI Changes 
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1531,6 +1531,7 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
+        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
@@ -1611,7 +1612,14 @@ with tab2:
     sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
     sc["Sick Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Sick Leaves", 0))
 
-    # APPLY OVERRIDES DIRECTLY HERE
+    sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
+    sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
+    
+    c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
+    c_ok = sc["_c_ok_sum"].fillna(0)
+    sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
+
+    # APPLY OVERRIDES DIRECTLY HERE 
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
@@ -1755,7 +1763,6 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    # UPDATED COLUMN ORDER TO INCLUDE WORKING DAYS
     column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
     display_df = display_df[column_order]
 
