@@ -1759,4 +1759,202 @@ with tab2:
     def style_performers(row):
         exp = row["Expert"]
         if exp == "🏆 Team AVG":
-            return ['
+            return ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+        elif exp == gold_disp:
+            return ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+        elif exp == silver_disp:
+            return ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+        elif exp == bronze_disp:
+            return ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+        elif exp == aname and not is_admin():
+            return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+        return [''] * len(row)
+
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
+    display_df = display_df[column_order]
+
+    styled_df = display_df.style.apply(style_performers, axis=1)
+    styled_df = styled_df.set_properties(**{'text-align': 'center'})
+    styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+
+    html_table = styled_df.hide(axis="index").to_html()
+    st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
+
+    if is_admin():
+        st.divider()
+        st.markdown(f"#### ✏️ Manual KPI Override Editor (Period: {d_from} to {d_to})")
+        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة. اكتب رقماً فقط في الحقل الذي تريد تثبيته لهذه الفترة الزمنية المحددة.")
+        
+        agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
+        sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
+        
+        cur = period_ovs.get(sel_agent, {})
+        def gv(k):
+            return str(cur.get(k, ""))
+
+        with st.form(f"ov_form_{sel_agent}"):
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                nout = st.text_input("Out Requests", value=gv("Out Requests"))
+                njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
+            with fc2:
+                nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
+                nem  = st.text_input("Email Counts", value=gv("Email Counts"))
+            with fc3:
+                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
+                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
+            
+            sc_col, rc_col = st.columns(2)
+            with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
+            with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
+
+        if do_save:
+            new_ov = {}
+            def parse_int(v):
+                try: return int(float(v))
+                except: return None
+            def parse_str(v):
+                return str(v).strip() if str(v).strip() else None
+
+            if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
+            if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
+            if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
+            if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
+            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
+            if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
+
+            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+            
+            if new_ov:
+                overrides()[PERIOD_KEY][sel_agent] = new_ov
+            else:
+                if sel_agent in overrides().get(PERIOD_KEY, {}):
+                    overrides()[PERIOD_KEY].pop(sel_agent)
+                    
+            _save_store()
+            st.success(f"✅ Override parameters saved specifically for period **{d_from} to {d_to}**.")
+            st.rerun()
+
+        if do_clear:
+            if PERIOD_KEY in overrides() and sel_agent in overrides()[PERIOD_KEY]:
+                overrides()[PERIOD_KEY].pop(sel_agent)
+                _save_store()
+                st.success(f"🔄 Cleared overrides for period **{d_from} to {d_to}**.")
+                st.rerun()
+            else:
+                st.warning("No active overrides found to clear for this period.")
+
+        active_ovs = overrides().get(PERIOD_KEY, {})
+        disp_ovs = {k: v for k, v in active_ovs.items() if k != "GLOBAL_TARGET"}
+        if disp_ovs:
+            st.write("")
+            with st.expander("🗂️ Active Metric Overrides (This Period)"):
+                st.json(disp_ovs)
+        
+        st.divider()
+        st.markdown("#### ✉️ Performance Review Emails")
+        
+        email_agents_list = [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x]
+        selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
+        
+        if selected_email_agent:
+            agent_row = sc_final[sc_final["Expert"] == selected_email_agent].iloc[0]
+            team_row_disp = sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
+            
+            def safe_float(v):
+                try: return float(str(v).replace('%','').replace(',',''))
+                except: return 0.0
+            
+            achiev_val = safe_float(agent_row["% Achievement from Target"])
+            qual_val = safe_float(agent_row["Service Quality"])
+            
+            agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Out Requests'])
+            team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Out Requests'])
+            
+            if achiev_val >= 100:
+                perf_word = "outstanding"
+                target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
+            elif achiev_val >= 80:
+                perf_word = "solid"
+                target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
+            else:
+                perf_word = "developing"
+                target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
+            
+            if qual_val >= 95:
+                qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
+            elif qual_val >= 85:
+                qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
+            else:
+                qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
+            
+            clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
+            
+            markdown_email = f"""
+Dear **{clean_name}**,
+
+I hope this email finds you well. 
+
+As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to personally share your metrics and highlight your **{perf_word}** contributions to the team.
+
+### 📊 Your Performance Scorecard:
+
+| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** |
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} |
+
+**🎯 Targets & Quality:** {target_msg}  
+{qual_msg}
+
+Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
+
+Best regards,  
+**Mohammed Shehta** Team Leader
+"""
+            
+            st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
+            st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
+            
+            st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:2px solid #cbd5e1; font-size:1.1rem; color:#1e293b;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
+            
+            email_body_plain = f"""Dear {clean_name},
+
+I hope this email finds you well. 
+
+As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
+
+📊 Your Performance Scorecard:
+------------------------------------------------------------------------------------------
+Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time
+------------------------------------------------------------------------------------------
+Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time'])}
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time'])}
+------------------------------------------------------------------------------------------
+
+🎯 Targets & Quality:
+{target_msg.replace('**', '')}
+{qual_msg.replace('**', '')}
+
+Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
+
+Best regards,
+Mohammed Shehta
+Team Leader"""
+
+            with st.expander("Show Plain Text Version (For manual copy/paste)"):
+                st.text_area("Plain Text Draft", value=email_body_plain, height=300)
+            
+            subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
+            body_encoded = urllib.parse.quote(email_body_plain)
+            
+            st.write("")
+            gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
+            st.markdown(
+                f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#ea4335; color:white; text-decoration:none; border-radius:8px; font-weight:900; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(234, 67, 53, 0.3);">'
+                f'🌐 Open Draft in Gmail</a>', 
+                unsafe_allow_html=True
+            )
+
+st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
+# --- END OF SCRIPT ---
