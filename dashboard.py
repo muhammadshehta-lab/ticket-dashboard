@@ -1158,18 +1158,20 @@ with tab1:
     flex: 7;
     display: flex;
     flex-direction: column;
+    height: 100%;
   }}
   #bar-col {{
     flex: 3;
     display: flex;
     flex-direction: column;
+    height: 100%;
   }}
   #sb-title {{
     font-size: 1.1rem;
     font-weight: 900;
     color: #0f172a;
     margin-bottom: 6px;
-    min-height: 32px;
+    min-height: 36px;
     line-height: 1.3;
   }}
   #sb-title span {{
@@ -1187,31 +1189,31 @@ with tab1:
     color: #64748b;
     margin-bottom: 6px;
   }}
-  #sunburst-div {{ flex: 1; }}
-  #bar-div {{ flex: 1; }}
+  #sunburst-div {{ flex: 1; min-height: 0; }}
+  #bar-div       {{ flex: 1; min-height: 0; }}
 </style>
 </head>
 <body>
 <div id="wrapper">
   <div id="sunburst-col">
-    <div id="sb-title">⏱️ Service Time Breakdown (AFR &amp; TAT)</div>
+    <div id="sb-title">&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)</div>
     <div id="sunburst-div"></div>
   </div>
   <div id="bar-col">
-    <div id="bar-title">🎛️ Interactive Request Types</div>
-    <div id="bar-hint">🖱️ Click any bar to filter • Click again to reset</div>
+    <div id="bar-title">&#x1F39B;&#xFE0F; Interactive Request Types</div>
+    <div id="bar-hint">&#x1F5B1;&#xFE0F; Click any bar to filter &bull; Click again to reset</div>
     <div id="bar-div"></div>
   </div>
 </div>
 
 <script>
-const SB_PAYLOADS  = {sb_payloads_json};
-const BAR_DATA     = {bar_data_json};
+const SB_PAYLOADS = {sb_payloads_json};
+const BAR_DATA    = {bar_data_json};
 
-let selectedRt = "All Types";
+let selectedRt     = "All Types";
 let selectedBarIdx = null;
 
-// ── Bar chart ────────────────────────────────────────────────────────────────
+// ── Bar chart: name on y-axis tick, percentage label inside bar ───────────────
 const barTrace = {{
   type: "bar",
   orientation: "h",
@@ -1220,82 +1222,103 @@ const barTrace = {{
   text: BAR_DATA.values.map(v => v.toFixed(1) + "%"),
   textposition: "inside",
   insidetextanchor: "middle",
+  textfont: {{ color: "#ffffff", size: 12 }},
   marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1) }},
   hovertemplate: "<b>%{{y}}</b><br>%{{x:.1f}}%<extra></extra>",
 }};
 
 const barLayout = {{
-  margin: {{ l: 0, r: 0, t: 10, b: 10 }},
-  bargap: 0.35,
-  xaxis: {{ visible: false }},
-  yaxis: {{ autorange: "reversed", tickfont: {{ size: 13, color: "#0f172a" }}, fixedrange: true }},
-  plot_bgcolor: "rgba(0,0,0,0)",
+  margin: {{ l: 8, r: 8, t: 10, b: 10 }},
+  bargap: 0.28,
+  xaxis: {{ visible: false, range: [0, Math.max(...BAR_DATA.values) * 1.02] }},
+  yaxis: {{
+    autorange: "reversed",
+    tickfont: {{ size: 12, color: "#0f172a" }},
+    fixedrange: true,
+    automargin: true,
+  }},
+  plot_bgcolor:  "rgba(0,0,0,0)",
   paper_bgcolor: "rgba(0,0,0,0)",
-  font: {{ color: "#0f172a", weight: "bold" }},
+  font: {{ color: "#0f172a" }},
   autosize: true,
 }};
 
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 
-// ── Sunburst ─────────────────────────────────────────────────────────────────
+// ── Sunburst builder ──────────────────────────────────────────────────────────
+// Inner ring (category nodes, parent=="") → label only, NO percentage
+// Outer ring (leaf tiers, parent!="")     → label + % of parent
 function buildSunburstTrace(rt) {{
   const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
+
+  const texttemplate = d.labels.map((lbl, i) => {{
+    if (d.parents[i] === "") {{
+      return "<b>%{{label}}</b>";                  // category: name only
+    }}
+    return "%{{label}}<br>%{{percentParent:.0%}}"; // tier: name + %
+  }});
+
   return {{
-    type: "sunburst",
-    labels: d.labels,
-    parents: d.parents,
-    values: d.values,
+    type:         "sunburst",
+    labels:       d.labels,
+    parents:      d.parents,
+    values:       d.values,
     branchvalues: "total",
-    marker: {{ colors: d.colors }},
-    textinfo: "label+percent parent",
+    marker:       {{ colors: d.colors }},
+    texttemplate: texttemplate,
+    textinfo:     "none",
     insidetextorientation: "radial",
     hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>",
-    leaf: {{ opacity: 0.92 }},
+    leaf: {{ opacity: 0.93 }},
   }};
 }}
 
 const sbLayout = {{
-  margin: {{ t: 10, b: 10, l: 10, r: 10 }},
+  margin:        {{ t: 10, b: 10, l: 10, r: 10 }},
   paper_bgcolor: "rgba(0,0,0,0)",
-  plot_bgcolor: "rgba(247,241,225,0.6)",
-  font: {{ color: "#0f172a" }},
-  autosize: true,
-  transition: {{ duration: 750, easing: "cubic-in-out" }},
+  plot_bgcolor:  "rgba(247,241,225,0.6)",
+  font:          {{ color: "#0f172a" }},
+  autosize:      true,
+  transition:    {{ duration: 700, easing: "cubic-in-out" }},
 }};
 
-Plotly.newPlot("sunburst-div", [buildSunburstTrace("All Types")], sbLayout, {{ displayModeBar: false, responsive: true }});
+// Default render — both halves (Response Time + Service Resolution)
+Plotly.newPlot(
+  "sunburst-div",
+  [buildSunburstTrace("All Types")],
+  sbLayout,
+  {{ displayModeBar: false, responsive: true }}
+);
 
-// ── Bar click handler ─────────────────────────────────────────────────────────
+// ── Bar click → smooth sunburst morph ─────────────────────────────────────────
 document.getElementById("bar-div").on("plotly_click", function(data) {{
   const clicked = data.points[0].y;
 
   if (selectedRt === clicked) {{
-    // Second click → reset to All Types
-    selectedRt = "All Types";
+    // Toggle off → back to All Types
+    selectedRt     = "All Types";
     selectedBarIdx = null;
   }} else {{
-    selectedRt = clicked;
+    selectedRt     = clicked;
     selectedBarIdx = data.points[0].pointIndex;
   }}
 
-  // Update bar opacities — dim unselected
-  const n = BAR_DATA.labels.length;
+  // Dim unselected bars
   const newOpacity = BAR_DATA.labels.map((_, i) => {{
     if (selectedRt === "All Types") return 1;
-    return i === selectedBarIdx ? 1 : 0.35;
+    return i === selectedBarIdx ? 1 : 0.28;
   }});
-
   Plotly.restyle("bar-div", {{ "marker.opacity": [newOpacity] }});
 
   // Update title
   const titleEl = document.getElementById("sb-title");
   if (selectedRt === "All Types") {{
-    titleEl.innerHTML = "⏱️ Service Time Breakdown (AFR &amp; TAT)";
+    titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)";
   }} else {{
-    titleEl.innerHTML = `⏱️ Service Time Breakdown (AFR &amp; TAT)<br><span>➤ ${{selectedRt}}</span>`;
+    titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)<br><span>&#x27A4; " + selectedRt + "</span>";
   }}
 
-  // Animate sunburst with Plotly.react (smooth morph, no remount)
+  // Smooth morph via Plotly.react (no DOM remount, pure animation)
   Plotly.react(
     "sunburst-div",
     [buildSunburstTrace(selectedRt)],
