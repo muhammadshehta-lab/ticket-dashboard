@@ -521,7 +521,7 @@ AGENT_ALIASES = {
     
     "إسلام رمضان خليل": "Eslam Ramadan",
     "أصلان رمضان خليل": "Eslam Ramadan",
-    "اسلام رمضان": "Eslam Ramadan",
+    "islam رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
     "محمد خليفة جاب الله": "Mohamed Khalifa",
@@ -1070,7 +1070,6 @@ with tab1:
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
         # ── Pre-compute all data Python-side, then hand off to a single browser HTML component
-        # This completely bypasses Streamlit's rerun mechanism and enables 100% native smooth JS animation!
         dfm_work = dfm.copy()
         dfm_work["Response Tier"] = dfm_work["Response Take (min)"].apply(assign_time_tier)
         dfm_work["Service Tier"]  = dfm_work["Request Take (min)"].apply(assign_time_tier)
@@ -1092,7 +1091,7 @@ with tab1:
             "Over 1 Hour":        "#ea4a5a",
         }
 
-        sb_payloads = {}   # Holds the sunburst frame data for every single request type
+        sb_payloads = {}   
         all_rt_keys = ["All Types"] + bar_labels
 
         for rt in all_rt_keys:
@@ -1135,10 +1134,8 @@ with tab1:
         sb_payloads_json = _json.dumps(sb_payloads)
         bar_data_json    = _json.dumps({"labels": bar_labels, "values": bar_values, "colors": bar_colors})
         
-        # Calculate dynamic height based on number of bars to keep them thin and readable
         component_height = max(560, len(bar_labels) * 45 + 80)
 
-        # 🚀 THE MAGIC: Custom HTML/JS Component holding both charts side-by-side!
         html_component = f"""
 <!DOCTYPE html>
 <html>
@@ -1230,8 +1227,8 @@ const barTrace = {{
 
 const barLayout = {{
   margin: {{ l: 8, r: 8, t: 10, b: 10 }},
-  bargap: 0.5, // Thinner bars
-  xaxis: {{ visible: false }}, // Allows bars to stretch fully
+  bargap: 0.5,
+  xaxis: {{ visible: false }},
   yaxis: {{
     autorange: "reversed",
     tickfont: {{ size: 12, color: "#0f172a", weight: "bold" }},
@@ -1260,7 +1257,7 @@ function buildTrace(rt) {{
     labels:       d.labels,
     parents:      d.parents,
     values:       d.values,
-    // Note: branchvalues removed to allow dynamic root switching!
+    branchvalues: "total", // 🎯 Re-enabling total branch matching to fix the ratio!
     marker:       {{ colors: d.colors }},
     texttemplate: texttemplate,
     textinfo:     "none",
@@ -1278,7 +1275,6 @@ const sbLayout = {{
   autosize:      true,
 }};
 
-// Preload all animations frames into Plotly
 const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{
   name: rt,
   data: [buildTrace(rt)],
@@ -1293,7 +1289,7 @@ Plotly.newPlot(
   Plotly.addFrames("sunburst-div", allFrames);
 }});
 
-// ── Interactivity Logic (Click to Animate)
+// ── Bar click handler
 document.getElementById("bar-div").on("plotly_click", function(data) {{
   const clicked    = data.points[0].y;
   const clickedIdx = data.points[0].pointIndex;
@@ -1306,7 +1302,6 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
     selectedBarIdx = clickedIdx;
   }}
 
-  // Magic JS animation!
   Plotly.animate(
     "sunburst-div",
     [selectedRt],
@@ -1316,14 +1311,12 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
     }}
   );
 
-  // Dim out unselected bars
   const newOpacity = BAR_DATA.labels.map((_, i) => {{
     if (selectedRt === "All Types") return 1;
     return i === selectedBarIdx ? 1 : 0.25;
   }});
   Plotly.restyle("bar-div", {{ "marker.opacity": [newOpacity] }});
 
-  // Update chart title dynamically
   const titleEl = document.getElementById("sb-title");
   if (selectedRt === "All Types") {{
     titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)";
@@ -1332,7 +1325,6 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
   }}
 }});
 
-// Click on empty space to clear filter
 document.getElementById("bar-div").on("plotly_deselect", function() {{
   if (selectedRt !== "All Types") {{
     selectedRt = "All Types";
@@ -1769,7 +1761,7 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # APPLY OVERRIDES DIRECTLY HERE 
+    # APPLY OVERRIDES DIRECTLY HERE
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
