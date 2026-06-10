@@ -1041,7 +1041,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1102,14 +1102,11 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
-            # Opacity states ONLY
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
                 hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
-                selected=dict(marker=dict(opacity=1)),
-                unselected=dict(marker=dict(opacity=0.25))
             )
             
             fig_req.update_layout(
@@ -1122,6 +1119,8 @@ with tab1:
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
+                clickmode="event+select",
+                uirevision="req_bar_chart" # Add UI revision to hold DOM state
             )
             
             try:
@@ -1135,7 +1134,7 @@ with tab1:
                 )
             except Exception:
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
-                st.warning("⚠️ التفاعل المباشر يحتاج تحديث Streamlit.")
+                st.warning("⚠️ التفاعل المباشر بالضغط يحتاج تحديث إصدار Streamlit.")
                 slicer_options = ["All Types"] + list(req_pct.index)
                 selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options)
             
@@ -1164,7 +1163,6 @@ with tab1:
                 else:
                     sb_df = sd.copy()
                 
-                # Removed `branchvalues="total"` so Plotly natively handles single vs multi-root without breaking
                 fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets")
                 
                 custom_colors = {
@@ -1203,7 +1201,9 @@ with tab1:
                     plot_bgcolor="rgba(247,241,225,0.6)",
                     font_color="#0f172a",
                     height=520, 
-                    margin=dict(t=20, b=20, l=10, r=10)
+                    margin=dict(t=20, b=20, l=10, r=10),
+                    uirevision="sunburst_kpi_chart", # Holds DOM state to allow smooth morphing
+                    transition=dict(duration=500, easing="cubic-in-out") # The magic animation line
                 )
                 st.plotly_chart(fig_sb, use_container_width=True)
             else:
