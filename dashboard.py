@@ -1159,59 +1159,94 @@ with tab1:
                 dfm_sb["Response Tier"] = dfm_sb["Response Take (min)"].apply(assign_time_tier)
                 dfm_sb["Service Tier"]  = dfm_sb["Request Take (min)"].apply(assign_time_tier)
 
-                sd = dfm_sb.groupby("Service Tier").size().reset_index(name="Tickets")
-                sd["SLA Category"] = "Service Resolution"
-                sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
-
-                if selected_rt == "All Types":
-                    rd = dfm_sb.groupby("Response Tier").size().reset_index(name="Tickets")
-                    rd["SLA Category"] = "Response Time"
-                    rd.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
-                    sb_df = pd.concat([rd, sd], ignore_index=True)
-                else:
-                    sb_df = sd.copy()
-
-                fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", branchvalues="total")
-                
                 custom_colors = {
-                    "Response Time": "#3b82f6",       # Blue
-                    "Service Resolution": "#10b981",  # Green
-                    "Under 15 Mins": "#2ea44f", 
-                    "15-30 Mins": "#2188ff", 
-                    "30-45 Mins": "#bc8cff", 
-                    "45-60 Mins": "#f9c513", 
-                    "Over 1 Hour": "#ea4a5a"
+                    "Response Time":       "#3b82f6",
+                    "Service Resolution":  "#10b981",
+                    "Under 15 Mins":       "#2ea44f",
+                    "15-30 Mins":          "#2188ff",
+                    "30-45 Mins":          "#bc8cff",
+                    "45-60 Mins":          "#f9c513",
+                    "Over 1 Hour":         "#ea4a5a",
                 }
-                
-                trace = fig_sb.data[0]
-                new_colors = [custom_colors.get(label, "#cccccc") for label in trace.labels]
-                
-                new_text = []
-                new_hover = []
-                for p, label in zip(trace.parents, trace.labels):
-                    if p == "" or p is None:
-                        new_text.append(f"<b>{label}</b>")
-                        new_hover.append("<b>%{label}</b><br>Total Tickets: %{value:,}<extra></extra>")
-                    else:
-                        new_text.append("%{label}<br>%{value:,}<br>%{percentParent:.1%}")
-                        new_hover.append("<b>%{label}</b><br>Tickets Count: %{value:,}<br>Percentage: %{percentParent:.1%}<extra></extra>")
-                        
-                fig_sb.update_traces(
-                    texttemplate=new_text,
-                    textinfo="none",
-                    hovertemplate=new_hover,
-                    marker=dict(colors=new_colors)
+
+                # ── Build FULL dataset (both halves) — used for "All Types" frame
+                rd_full = dfm_sb.groupby("Response Tier").size().reset_index(name="Tickets")
+                rd_full["SLA Category"] = "Response Time"
+                rd_full.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
+
+                sd_full = dfm_sb.groupby("Service Tier").size().reset_index(name="Tickets")
+                sd_full["SLA Category"] = "Service Resolution"
+                sd_full.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
+
+                sb_all = pd.concat([rd_full, sd_full], ignore_index=True)
+
+                # ── Build SERVICE-ONLY dataset — used for specific-type frame
+                sd_only = sd_full.copy()
+
+                # ── Helper: build labels/parents/values/colors/text/hover from a df
+                def build_sunburst_arrays(sb_df):
+                    labels, parents, values, colors, texts, hovers = [], [], [], [], [], []
+                    # Root node (invisible centre)
+                    labels.append(""); parents.append(""); values.append(0)
+                    colors.append("rgba(0,0,0,0)"); texts.append(""); hovers.append("<extra></extra>")
+                    # Category nodes
+                    for cat in sb_df["SLA Category"].unique():
+                        cat_total = int(sb_df[sb_df["SLA Category"] == cat]["Tickets"].sum())
+                        labels.append(cat); parents.append(""); values.append(cat_total)
+                        colors.append(custom_colors.get(cat, "#cccccc"))
+                        texts.append(f"<b>{cat}</b>")
+                        hovers.append("<b>%{label}</b><br>Total Tickets: %{value:,}<extra></extra>")
+                    # Tier nodes
+                    for _, row in sb_df.iterrows():
+                        tier, cat, tickets = row["SLA Tier"], row["SLA Category"], int(row["Tickets"])
+                        labels.append(tier); parents.append(cat); values.append(tickets)
+                        colors.append(custom_colors.get(tier, "#cccccc"))
+                        texts.append("%{label}<br>%{value:,}<br>%{percentParent:.1%}")
+                        hovers.append("<b>%{label}</b><br>Tickets: %{value:,}<br>Share: %{percentParent:.1%}<extra></extra>")
+                    return labels, parents, values, colors, texts, hovers
+
+                # ── Choose which dataset is the CURRENT visible state
+                if selected_rt == "All Types":
+                    cur_labels, cur_parents, cur_values, cur_colors, cur_texts, cur_hovers = build_sunburst_arrays(sb_all)
+                else:
+                    cur_labels, cur_parents, cur_values, cur_colors, cur_texts, cur_hovers = build_sunburst_arrays(sd_only)
+
+                # ── Build figure with go.Sunburst + smooth transition
+                fig_sb = go.Figure(
+                    go.Sunburst(
+                        labels=cur_labels,
+                        parents=cur_parents,
+                        values=cur_values,
+                        branchvalues="total",
+                        marker=dict(colors=cur_colors),
+                        texttemplate=cur_texts,
+                        textinfo="none",
+                        hovertemplate=cur_hovers,
+                        insidetextorientation="radial",
+                        leaf=dict(opacity=0.9),
+                    )
                 )
-                
+
                 fig_sb.update_layout(
                     template="plotly_white",
                     paper_bgcolor="rgba(0,0,0,0)",
                     plot_bgcolor="rgba(247,241,225,0.6)",
                     font_color="#0f172a",
-                    height=520, 
-                    margin=dict(t=20, b=20, l=10, r=10)
+                    height=520,
+                    margin=dict(t=20, b=20, l=10, r=10),
+                    transition={
+                        "duration": 800,
+                        "easing": "cubic-in-out",
+                        "ordering": "traces first",
+                    },
                 )
-                st.plotly_chart(fig_sb, use_container_width=True)
+
+                st.plotly_chart(
+                    fig_sb,
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                    key="sunburst_chart",          # stable key → Plotly morphs instead of re-mounting
+                )
             else:
                 st.info("No data available for this request type.")
 
