@@ -1069,339 +1069,145 @@ with tab1:
         req_counts = dfm['Request Type'].value_counts()
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
-        # ── Pre-compute all data Python-side, then hand off to a single browser component
-        dfm_work = dfm.copy()
-        dfm_work["Response Tier"] = dfm_work["Response Take (min)"].apply(assign_time_tier)
-        dfm_work["Service Tier"]  = dfm_work["Request Take (min)"].apply(assign_time_tier)
-
-        bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569",
-                       "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
-
-        # Bar chart data
-        bar_labels  = list(req_pct.index)
-        bar_values  = list(req_pct.values)
-        bar_colors  = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
-
-        # Sunburst colour map
-        SB_COLORS = {
-            "Response Time":      "#3b82f6",
-            "Service Resolution": "#10b981",
-            "Under 15 Mins":      "#2ea44f",
-            "15-30 Mins":         "#2188ff",
-            "30-45 Mins":         "#bc8cff",
-            "45-60 Mins":         "#f9c513",
-            "Over 1 Hour":        "#ea4a5a",
-        }
-
-        # Build per-request-type sunburst payloads
-        sb_payloads = {}   # key → {labels, parents, values, colors}
-        all_rt_keys = ["All Types"] + bar_labels
-
-        for rt in all_rt_keys:
-            if rt == "All Types":
-                sub = dfm_work.copy()
-                use_response = True
-            else:
-                sub = dfm_work[dfm_work["Request Type"] == rt].copy()
-                use_response = False
-
-            if sub.empty:
-                sb_payloads[rt] = {"labels": [], "parents": [], "values": [], "colors": []}
-                continue
-
-            lbl, par, val, col = [], [], [], []
-
-            if use_response:
-                rd = sub.groupby("Response Tier").size()
-                sd = sub.groupby("Service Tier").size()
-
-                rt_total = int(rd.sum())
-                lbl.append("Response Time");      par.append("");               val.append(rt_total); col.append(SB_COLORS["Response Time"])
-                for tier, cnt in rd.items():
-                    lbl.append(tier); par.append("Response Time"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cccccc"))
-
-                sr_total = int(sd.sum())
-                lbl.append("Service Resolution"); par.append("");               val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
-                for tier, cnt in sd.items():
-                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cccccc"))
-            else:
-                sd = sub.groupby("Service Tier").size()
-                sr_total = int(sd.sum())
-                lbl.append("Service Resolution"); par.append("");               val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
-                for tier, cnt in sd.items():
-                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cccccc"))
-
-            sb_payloads[rt] = {"labels": lbl, "parents": par, "values": val, "colors": col}
-
-        import json as _json
-        sb_payloads_json = _json.dumps(sb_payloads)
-        bar_data_json    = _json.dumps({"labels": bar_labels, "values": bar_values, "colors": bar_colors})
-        component_height = max(560, len(bar_labels) * 52 + 80)
-
-        html_component = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: transparent; font-family: inherit; }}
-  #wrapper {{
-    display: flex;
-    gap: 16px;
-    width: 100%;
-    height: {component_height}px;
-    align-items: flex-start;
-  }}
-  #sunburst-col {{
-    flex: 7;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }}
-  #bar-col {{
-    flex: 3;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }}
-  #sb-title {{
-    font-size: 1.1rem;
-    font-weight: 900;
-    color: #0f172a;
-    margin-bottom: 6px;
-    min-height: 36px;
-    line-height: 1.3;
-  }}
-  #sb-title span {{
-    color: #3b82f6;
-    font-size: 1rem;
-  }}
-  #bar-title {{
-    font-size: 0.92rem;
-    font-weight: 800;
-    color: #0f172a;
-    margin-bottom: 2px;
-  }}
-  #bar-hint {{
-    font-size: 0.78rem;
-    color: #64748b;
-    margin-bottom: 6px;
-  }}
-  #sunburst-div {{ flex: 1; min-height: 0; }}
-  #bar-div       {{ flex: 1; min-height: 0; }}
-</style>
-</head>
-<body>
-<div id="wrapper">
-  <div id="sunburst-col">
-    <div id="sb-title">&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)</div>
-    <div id="sunburst-div"></div>
-  </div>
-  <div id="bar-col">
-    <div id="bar-title">&#x1F39B;&#xFE0F; Interactive Request Types</div>
-    <div id="bar-hint">&#x1F5B1;&#xFE0F; Click any bar to filter &bull; Click again to reset</div>
-    <div id="bar-div"></div>
-  </div>
-</div>
-
-<script>
-const SB_PAYLOADS = {sb_payloads_json};
-const BAR_DATA    = {bar_data_json};
-
-let selectedRt     = "All Types";
-let selectedBarIdx = null;
-
-// ── Bar chart: name on y-axis tick, percentage label inside bar ───────────────
-const barTrace = {{
-  type: "bar",
-  orientation: "h",
-  x: BAR_DATA.values,
-  y: BAR_DATA.labels,
-  text: BAR_DATA.values.map(v => v.toFixed(1) + "%"),
-  textposition: "inside",
-  insidetextanchor: "middle",
-  textfont: {{ color: "#ffffff", size: 12 }},
-  marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1) }},
-  hovertemplate: "<b>%{{y}}</b><br>%{{x:.1f}}%<extra></extra>",
-}};
-
-const barLayout = {{
-  margin: {{ l: 8, r: 8, t: 10, b: 10 }},
-  bargap: 0.28,
-  xaxis: {{ visible: false, range: [0, Math.max(...BAR_DATA.values) * 1.02] }},
-  yaxis: {{
-    autorange: "reversed",
-    tickfont: {{ size: 12, color: "#0f172a" }},
-    fixedrange: true,
-    automargin: true,
-  }},
-  plot_bgcolor:  "rgba(0,0,0,0)",
-  paper_bgcolor: "rgba(0,0,0,0)",
-  font: {{ color: "#0f172a" }},
-  autosize: true,
-}};
-
-Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
-
-// ── Build ONE combined sunburst with ALL data (All Types view) ───────────────
-// Each request-type gets its own branch under a hidden root "ALL"
-// Structure:
-//   "" → "ALL" (hidden root)
-//   "ALL" → "Response Time", "Service Resolution"         (for All Types view)
-//   "ALL" → "RT:Eligibility Issue" etc.                   (per-type branches, hidden at top level)
-//   "RT:Eligibility Issue" → "Service Resolution (filtered)" → tiers
-
-// We build a SINGLE flat dataset combining everything.
-// To show "All Types" we set level="" (root), which shows Response+Service halves.
-// To show a specific RT we set level="RT:<name>" which drills into that branch.
-
-const ALL_LABELS   = [];
-const ALL_PARENTS  = [];
-const ALL_VALUES   = [];
-const ALL_COLORS   = [];
-const ALL_TEXTTMPL = [];
-
-const CAT_COLOR = {{
-  "Response Time":      "#3b82f6",
-  "Service Resolution": "#10b981",
-}};
-const TIER_COLOR = {{
-  "Under 15 Mins": "#2ea44f",
-  "15-30 Mins":    "#2188ff",
-  "30-45 Mins":    "#bc8cff",
-  "45-60 Mins":    "#f9c513",
-  "Over 1 Hour":   "#ea4a5a",
-}};
-
-function addNode(label, parent, value, color, tmpl) {{
-  ALL_LABELS.push(label);
-  ALL_PARENTS.push(parent);
-  ALL_VALUES.push(value);
-  ALL_COLORS.push(color);
-  ALL_TEXTTMPL.push(tmpl);
-}}
-
-// Root (invisible)
-addNode("ALL", "", 0, "rgba(0,0,0,0)", "");
-
-// ── "All Types" branch — shown when level="ALL" ──────────────────────────────
-const allD = SB_PAYLOADS["All Types"];
-// Response Time category
-const rtIdx = allD.labels.indexOf("Response Time");
-if (rtIdx !== -1) {{
-  addNode("Response Time", "ALL", allD.values[rtIdx], CAT_COLOR["Response Time"], "<b>%{{label}}</b>");
-  allD.labels.forEach((lbl, i) => {{
-    if (allD.parents[i] === "Response Time") {{
-      addNode("RT_all_" + lbl, "Response Time", allD.values[i], TIER_COLOR[lbl] || "#cccccc", lbl + "<br>%{{percentParent:.0%}}");
-    }}
-  }});
-}}
-// Service Resolution category
-const srIdx = allD.labels.indexOf("Service Resolution");
-if (srIdx !== -1) {{
-  addNode("Service Resolution", "ALL", allD.values[srIdx], CAT_COLOR["Service Resolution"], "<b>%{{label}}</b>");
-  allD.labels.forEach((lbl, i) => {{
-    if (allD.parents[i] === "Service Resolution") {{
-      addNode("SR_all_" + lbl, "Service Resolution", allD.values[i], TIER_COLOR[lbl] || "#cccccc", lbl + "<br>%{{percentParent:.0%}}");
-    }}
-  }});
-}}
-
-// ── Per-request-type branches — shown when level="BRANCH_<rt>" ───────────────
-BAR_DATA.labels.forEach((rt, bi) => {{
-  const d = SB_PAYLOADS[rt];
-  if (!d || d.labels.length === 0) return;
-  const branchKey = "BRANCH_" + bi;
-  // branch root (invisible connector from ALL)
-  const srCat = d.labels.indexOf("Service Resolution");
-  const branchTotal = srCat !== -1 ? d.values[srCat] : 0;
-  addNode(branchKey, "ALL", branchTotal, "rgba(0,0,0,0)", "");
-  // Service Resolution node under branch
-  if (srCat !== -1) {{
-    addNode("SR_" + bi, branchKey, d.values[srCat], CAT_COLOR["Service Resolution"], "<b>Service Resolution</b>");
-    d.labels.forEach((lbl, i) => {{
-      if (d.parents[i] === "Service Resolution") {{
-        addNode("SR_" + bi + "_" + lbl, "SR_" + bi, d.values[i], TIER_COLOR[lbl] || "#cccccc", lbl + "<br>%{{percentParent:.0%}}");
-      }}
-    }});
-  }}
-}});
-
-const sbTrace = {{
-  type:         "sunburst",
-  labels:       ALL_LABELS,
-  parents:      ALL_PARENTS,
-  values:       ALL_VALUES,
-  branchvalues: "total",
-  level:        "ALL",                  // start at "All Types" view
-  maxdepth:     3,
-  marker:       {{ colors: ALL_COLORS }},
-  texttemplate: ALL_TEXTTMPL,
-  textinfo:     "none",
-  insidetextorientation: "radial",
-  hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>",
-  leaf: {{ opacity: 0.93 }},
-}};
-
-const sbLayout = {{
-  margin:        {{ t: 10, b: 10, l: 10, r: 10 }},
-  paper_bgcolor: "rgba(0,0,0,0)",
-  plot_bgcolor:  "rgba(247,241,225,0.6)",
-  font:          {{ color: "#0f172a" }},
-  autosize:      true,
-}};
-
-Plotly.newPlot(
-  "sunburst-div",
-  [sbTrace],
-  sbLayout,
-  {{ displayModeBar: false, responsive: true }}
-);
-
-// ── Bar click → native drill-down animation via Plotly.restyle level ──────────
-document.getElementById("bar-div").on("plotly_click", function(data) {{
-  const clicked      = data.points[0].y;
-  const clickedIdx   = data.points[0].pointIndex;
-
-  if (selectedRt === clicked) {{
-    // Toggle off → zoom back to root "ALL"
-    selectedRt     = "All Types";
-    selectedBarIdx = null;
-    Plotly.restyle("sunburst-div", {{ level: "ALL" }});
-  }} else {{
-    selectedRt     = clicked;
-    selectedBarIdx = clickedIdx;
-    // Drill into this request type's branch — exact same animation as clicking inside the sunburst
-    Plotly.restyle("sunburst-div", {{ level: "BRANCH_" + clickedIdx }});
-  }}
-
-  // Dim unselected bars
-  const newOpacity = BAR_DATA.labels.map((_, i) => {{
-    if (selectedRt === "All Types") return 1;
-    return i === selectedBarIdx ? 1 : 0.28;
-  }});
-  Plotly.restyle("bar-div", {{ "marker.opacity": [newOpacity] }});
-
-  // Update title
-  const titleEl = document.getElementById("sb-title");
-  if (selectedRt === "All Types") {{
-    titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)";
-  }} else {{
-    titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)<br><span>&#x27A4; " + selectedRt + "</span>";
-  }}
-}});
-</script>
-</body>
-</html>
-"""
-        import streamlit.components.v1 as components
-        components.html(html_component, height=component_height + 20, scrolling=False)
-
-        # ── Keep Python-side selected_rt in sync for any downstream filtering
+        # 🌟 FOOLPROOF SELECTION PARSER
         selected_rt = "All Types"
-        dfm_sb = dfm.copy()
+        if "req_type_slicer" in st.session_state:
+            selection = st.session_state["req_type_slicer"]
+            if isinstance(selection, dict) and "selection" in selection:
+                pts = selection["selection"].get("points", [])
+                if pts and len(pts) > 0:
+                    pt_idx = pts[0].get("point_index")
+                    if pt_idx is not None and pt_idx < len(req_pct):
+                        selected_rt = req_pct.index[pt_idx]
+
+        # Apply filter logic
+        if selected_rt == "All Types":
+            dfm_sb = dfm.copy()
+        else:
+            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
+
+        # Layout Division: 70% Chart | 30% Interactive Slicer
+        sb_col1, sb_col2 = st.columns([7, 3])
+        
+        with sb_col2:
+            st.markdown("<br><b>🎛️ Interactive Request Types</b><br><span style='font-size:0.85rem; color:#64748b;'>🖱️ Click any bar to filter • Click empty space to reset</span>", unsafe_allow_html=True)
+            
+            bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569", "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
+            marker_colors = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
+            
+            fig_req = px.bar(
+                x=req_pct.values, 
+                y=req_pct.index, 
+                orientation='h',
+                text=[f"{v}%" for v in req_pct.values],
+            )
+            
+            # Opacity states ONLY
+            fig_req.update_traces(
+                marker_color=marker_colors, 
+                textposition='inside',
+                insidetextanchor='middle',
+                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
+                selected=dict(marker=dict(opacity=1)),
+                unselected=dict(marker=dict(opacity=0.25))
+            )
+            
+            fig_req.update_layout(
+                template="plotly_white",
+                font_color="#0f172a",
+                margin=dict(l=0, r=0, t=10, b=10),
+                height=max(250, len(req_pct)*35), 
+                bargap=0.5,                      
+                xaxis=dict(visible=False),
+                yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+            )
+            
+            try:
+                st.plotly_chart(
+                    fig_req, 
+                    use_container_width=True, 
+                    config={'displayModeBar': False}, 
+                    on_select="rerun", 
+                    selection_mode="points",
+                    key="req_type_slicer"
+                )
+            except Exception:
+                st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
+                st.warning("⚠️ التفاعل المباشر يحتاج تحديث Streamlit.")
+                slicer_options = ["All Types"] + list(req_pct.index)
+                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options)
+            
+            if selected_rt != "All Types":
+                st.info(f"✅ Filtered by: **{selected_rt}**")
+
+        with sb_col1:
+            if selected_rt == "All Types":
+                st.markdown("### ⏱️ Service Time Breakdown (AFR & TAT)")
+            else:
+                st.markdown(f"### ⏱️ Service Time Breakdown (TAT) <br><span style='color:#3b82f6; font-size:1.2rem'>➤ {selected_rt}</span>", unsafe_allow_html=True)
+                
+            if not dfm_sb.empty:
+                dfm_sb["Response Tier"] = dfm_sb["Response Take (min)"].apply(assign_time_tier)
+                dfm_sb["Service Tier"]  = dfm_sb["Request Take (min)"].apply(assign_time_tier)
+                
+                sd = dfm_sb.groupby("Service Tier").size().reset_index(name="Tickets")
+                sd["SLA Category"] = "Service Resolution"
+                sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
+
+                if selected_rt == "All Types":
+                    rd = dfm_sb.groupby("Response Tier").size().reset_index(name="Tickets")
+                    rd["SLA Category"] = "Response Time"
+                    rd.rename(columns={"Response Tier": "SLA Tier"}, inplace=True)
+                    sb_df = pd.concat([rd, sd], ignore_index=True)
+                else:
+                    sb_df = sd.copy()
+                
+                # Removed `branchvalues="total"` so Plotly natively handles single vs multi-root without breaking
+                fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets")
+                
+                custom_colors = {
+                    "Response Time": "#3b82f6",       # Blue
+                    "Service Resolution": "#10b981",  # Green
+                    "Under 15 Mins": "#2ea44f", 
+                    "15-30 Mins": "#2188ff", 
+                    "30-45 Mins": "#bc8cff", 
+                    "45-60 Mins": "#f9c513", 
+                    "Over 1 Hour": "#ea4a5a"
+                }
+                
+                trace = fig_sb.data[0]
+                new_colors = [custom_colors.get(label, "#cccccc") for label in trace.labels]
+                
+                new_text = []
+                new_hover = []
+                for p, label in zip(trace.parents, trace.labels):
+                    if p == "" or p is None:
+                        new_text.append(f"<b>{label}</b>")
+                        new_hover.append("<b>%{label}</b><br>Total Tickets: %{value:,}<extra></extra>")
+                    else:
+                        new_text.append("%{label}<br>%{value:,}<br>%{percentParent:.1%}")
+                        new_hover.append("<b>%{label}</b><br>Tickets Count: %{value:,}<br>Percentage: %{percentParent:.1%}<extra></extra>")
+                        
+                fig_sb.update_traces(
+                    texttemplate=new_text,
+                    textinfo="none",
+                    hovertemplate=new_hover,
+                    marker=dict(colors=new_colors)
+                )
+                
+                fig_sb.update_layout(
+                    template="plotly_white",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(247,241,225,0.6)",
+                    font_color="#0f172a",
+                    height=520, 
+                    margin=dict(t=20, b=20, l=10, r=10)
+                )
+                st.plotly_chart(fig_sb, use_container_width=True)
+            else:
+                st.info("No data available for this request type.")
 
     st.divider()
 
@@ -1675,7 +1481,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage vs Percentage for completion/issue rates)
+    # KPI Changes
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1731,7 +1537,6 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
-        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
@@ -1819,7 +1624,7 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # APPLY OVERRIDES DIRECTLY HERE 
+    # APPLY OVERRIDES DIRECTLY HERE
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
