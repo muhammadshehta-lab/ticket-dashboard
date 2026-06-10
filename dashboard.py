@@ -521,7 +521,7 @@ AGENT_ALIASES = {
     
     "إسلام رمضان خليل": "Eslam Ramadan",
     "أصلان رمضان خليل": "Eslam Ramadan",
-    "اسلام رمضان": "Eslam Ramadan",
+    "islam رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
     "محمد خليفة جاب الله": "Mohamed Khalifa",
@@ -1041,7 +1041,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1070,7 +1070,6 @@ with tab1:
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
         # ── Pre-compute all data Python-side, then hand off to a single browser HTML component
-        # This completely bypasses Streamlit's rerun mechanism and enables 100% native smooth JS animation!
         dfm_work = dfm.copy()
         dfm_work["Response Tier"] = dfm_work["Response Take (min)"].apply(assign_time_tier)
         dfm_work["Service Tier"]  = dfm_work["Request Take (min)"].apply(assign_time_tier)
@@ -1092,7 +1091,7 @@ with tab1:
             "Over 1 Hour":        "#ea4a5a",
         }
 
-        sb_payloads = {}   # Holds the sunburst frame data for every single request type
+        sb_payloads = {}   
         all_rt_keys = ["All Types"] + bar_labels
 
         for rt in all_rt_keys:
@@ -1135,10 +1134,8 @@ with tab1:
         sb_payloads_json = _json.dumps(sb_payloads)
         bar_data_json    = _json.dumps({"labels": bar_labels, "values": bar_values, "colors": bar_colors})
         
-        # Calculate dynamic height based on number of bars to keep them thick and readable
-        component_height = max(650, len(bar_labels) * 55 + 100)
+        component_height = max(560, len(bar_labels) * 45 + 80)
 
-        # 🚀 THE MAGIC: Custom HTML/JS Component holding both charts side-by-side with Pop-out 3D Effect!
         html_component = f"""
 <!DOCTYPE html>
 <html>
@@ -1150,25 +1147,22 @@ with tab1:
   body {{ background: transparent; font-family: inherit; }}
   #wrapper {{
     display: flex;
-    gap: 20px;
+    gap: 16px;
     width: 100%;
     height: {component_height}px;
-    align-items: stretch;
-  }}
-  .chart-card {{
-    background: linear-gradient(145deg, #fdfbf7, #ebe1c5);
-    border-radius: 20px;
-    padding: 20px;
-    box-shadow: 8px 8px 16px rgba(187, 163, 112, 0.4), -8px -8px 16px rgba(255, 255, 255, 0.8);
-    border: 1px solid #f4ebd0;
-    display: flex;
-    flex-direction: column;
+    align-items: flex-start;
   }}
   #sunburst-col {{
-    flex: 5.5;
+    flex: 7;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }}
   #bar-col {{
-    flex: 4.5;
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }}
   #sb-title {{
     font-size: 1.25rem;
@@ -1183,13 +1177,13 @@ with tab1:
     font-size: 1.05rem;
   }}
   #bar-title {{
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     font-weight: 800;
     color: #0f172a;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }}
   #bar-hint {{
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     color: #64748b;
     margin-bottom: 6px;
   }}
@@ -1199,11 +1193,11 @@ with tab1:
 </head>
 <body>
 <div id="wrapper">
-  <div id="sunburst-col" class="chart-card">
+  <div id="sunburst-col">
     <div id="sb-title">&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)</div>
     <div id="sunburst-div"></div>
   </div>
-  <div id="bar-col" class="chart-card">
+  <div id="bar-col">
     <div id="bar-title">&#x1F39B;&#xFE0F; Interactive Request Types</div>
     <div id="bar-hint">&#x1F5B1;&#xFE0F; Click any bar to filter &bull; Click empty space to reset</div>
     <div id="bar-div"></div>
@@ -1226,19 +1220,15 @@ const barTrace = {{
   text: BAR_DATA.values.map(v => v.toFixed(1) + "%"),
   textposition: "inside",
   insidetextanchor: "middle",
-  textfont: {{ color: "#ffffff", size: 13, weight: "bold" }},
-  marker: {{ 
-    color: BAR_DATA.colors, 
-    opacity: BAR_DATA.colors.map(() => 1),
-    line: {{ color: 'rgba(0,0,0,0.4)', width: 1.5 }} // Adds a 3D-like border pop-out effect
-  }},
+  textfont: {{ color: "#ffffff", size: 12, weight: "bold" }},
+  marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1) }},
   hovertemplate: "<b>%{{y}}</b><br>%{{x:.1f}}%<extra></extra>",
 }};
 
 const barLayout = {{
   margin: {{ l: 8, r: 8, t: 10, b: 10 }},
-  bargap: 0.3, // Thicker Bars
-  xaxis: {{ visible: false }}, // Allows bars to stretch fully
+  bargap: 0.5,
+  xaxis: {{ visible: false }},
   yaxis: {{
     autorange: "reversed",
     tickfont: {{ size: 12, color: "#0f172a", weight: "bold" }},
@@ -1267,7 +1257,7 @@ function buildTrace(rt) {{
     labels:       d.labels,
     parents:      d.parents,
     values:       d.values,
-    // Note: branchvalues removed to allow dynamic root switching!
+    branchvalues: "total", // 🎯 Re-enabling total branch matching to fix the ratio!
     marker:       {{ colors: d.colors }},
     texttemplate: texttemplate,
     textinfo:     "none",
@@ -1280,12 +1270,11 @@ function buildTrace(rt) {{
 const sbLayout = {{
   margin:        {{ t: 10, b: 10, l: 10, r: 10 }},
   paper_bgcolor: "rgba(0,0,0,0)",
-  plot_bgcolor:  "rgba(0,0,0,0)",
+  plot_bgcolor:  "rgba(247,241,225,0.6)",
   font:          {{ color: "#0f172a" }},
   autosize:      true,
 }};
 
-// Preload all animations frames into Plotly
 const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{
   name: rt,
   data: [buildTrace(rt)],
@@ -1300,7 +1289,7 @@ Plotly.newPlot(
   Plotly.addFrames("sunburst-div", allFrames);
 }});
 
-// ── Interactivity Logic (Click to Animate)
+// ── Bar click handler
 document.getElementById("bar-div").on("plotly_click", function(data) {{
   const clicked    = data.points[0].y;
   const clickedIdx = data.points[0].pointIndex;
@@ -1313,7 +1302,6 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
     selectedBarIdx = clickedIdx;
   }}
 
-  // Magic JS animation!
   Plotly.animate(
     "sunburst-div",
     [selectedRt],
@@ -1323,14 +1311,12 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
     }}
   );
 
-  // Dim out unselected bars
   const newOpacity = BAR_DATA.labels.map((_, i) => {{
     if (selectedRt === "All Types") return 1;
     return i === selectedBarIdx ? 1 : 0.25;
   }});
   Plotly.restyle("bar-div", {{ "marker.opacity": [newOpacity] }});
 
-  // Update chart title dynamically
   const titleEl = document.getElementById("sb-title");
   if (selectedRt === "All Types") {{
     titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)";
@@ -1339,7 +1325,6 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
   }}
 }});
 
-// Click on empty space to clear filter
 document.getElementById("bar-div").on("plotly_deselect", function() {{
   if (selectedRt !== "All Types") {{
     selectedRt = "All Types";
@@ -1359,7 +1344,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
 </html>
 """
         import streamlit.components.v1 as components
-        components.html(html_component, height=component_height + 40, scrolling=False)
+        components.html(html_component, height=component_height + 20, scrolling=False)
 
     st.divider()
 
@@ -1633,7 +1618,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes 
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1776,7 +1761,7 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # APPLY OVERRIDES DIRECTLY HERE 
+    # APPLY OVERRIDES DIRECTLY HERE
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
