@@ -368,7 +368,7 @@ def requests()  -> list: return st.session_state.store["requests"]
 def overrides() -> dict: return st.session_state.store["overrides"]
 def me()        -> str:  return st.session_state.username
 def is_admin()  -> bool: return st.session_state.role == "admin"
-def cur_user()  dict: return users().get(me(), {})
+def cur_user()  -> dict: return users().get(me(), {})
 
 def agent_name_of(uname: str) -> str:
     return users().get(uname, {}).get("agent_name")
@@ -561,7 +561,6 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    # Trigger WhatsApp Notification
                     notify_admin_whatsapp(udata.get("display_name", uname))
                     
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
@@ -1070,23 +1069,6 @@ with tab1:
         req_counts = dfm['Request Type'].value_counts()
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
-        # 🌟 FOOLPROOF SELECTION PARSER
-        selected_rt = "All Types"
-        if "req_type_slicer" in st.session_state:
-            selection = st.session_state["req_type_slicer"]
-            if isinstance(selection, dict) and "selection" in selection:
-                pts = selection["selection"].get("points", [])
-                if pts and len(pts) > 0:
-                    pt_idx = pts[0].get("point_index")
-                    if pt_idx is not None and pt_idx < len(req_pct):
-                        selected_rt = req_pct.index[pt_idx]
-
-        # Apply filter logic
-        if selected_rt == "All Types":
-            dfm_sb = dfm.copy()
-        else:
-            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
-
         # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
@@ -1103,14 +1085,12 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
-            # Opacity states ONLY (no line colors to avoid ValueError)
+            # Simple native traces. No overriding selection style. Let Streamlit handle the magic.
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
-                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
-                selected=dict(marker=dict(opacity=1)),
-                unselected=dict(marker=dict(opacity=0.25))
+                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
             )
             
             # Adjust dimensions: thinner bars, longer reach
@@ -1119,16 +1099,17 @@ with tab1:
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
                 height=max(250, len(req_pct)*35), 
-                bargap=0.45,                      
+                bargap=0.5,                      
                 xaxis=dict(visible=False),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                clickmode="event+select" 
+                paper_bgcolor="rgba(0,0,0,0)"
             )
             
+            selected_rt = "All Types"
             try:
-                st.plotly_chart(
+                # 🌟 NATIVE STREAMLIT INTERACTIVE SELECTION (Executes in-place)
+                chart_event = st.plotly_chart(
                     fig_req, 
                     use_container_width=True, 
                     config={'displayModeBar': False}, 
@@ -1136,25 +1117,48 @@ with tab1:
                     selection_mode="points",
                     key="req_type_slicer"
                 )
+                
+                # Parsing the direct dictionary object returned by the component
+                if chart_event and isinstance(chart_event, dict) and "selection" in chart_event:
+                    pts = chart_event["selection"].get("points", [])
+                    if pts and len(pts) > 0:
+                        selected_rt = pts[0].get("y", "All Types")
+                # Parsing the attribute object (Streamlit standardizes differently sometimes)
+                elif chart_event and hasattr(chart_event, "selection"):
+                    sel = chart_event.selection
+                    pts = sel.get("points", []) if isinstance(sel, dict) else getattr(sel, "points", [])
+                    if pts and len(pts) > 0:
+                        pt = pts[0]
+                        selected_rt = pt.get("y", "All Types") if isinstance(pt, dict) else getattr(pt, "y", "All Types")
+                        
+                if selected_rt != "All Types":
+                    st.info(f"✅ Filtered by: **{selected_rt}**")
+                    
             except Exception as e:
+                # Fallback for older Streamlit versions < 1.35
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
                 st.warning("⚠️ التفاعل المباشر بالضغط على الأعمدة يحتاج إلى تحديث Streamlit. يرجى إضافة `streamlit>=1.35.0` في ملف `requirements.txt`.")
+                
+                st.markdown("<br><b>🎛️ Manual Filter Menu (Fallback)</b>", unsafe_allow_html=True)
                 slicer_options = ["All Types"] + list(req_pct.index)
-                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options)
+                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options, label_visibility="collapsed")
             
-            if selected_rt != "All Types":
-                st.info(f"✅ Filtered by: **{selected_rt}**")
+        # Apply filter logic
+        if selected_rt == "All Types":
+            dfm_sb = dfm.copy()
+        else:
+            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
             if selected_rt == "All Types":
                 st.markdown("### ⏱️ Service Time Breakdown (AFR & TAT)")
             else:
-                st.markdown(f"### ⏱️ Service Time Breakdown (TAT) <br><span style='color:#3b82f6; font-size:1.2rem'>➤ {selected_rt}</span>", unsafe_allow_html=True)
+                st.markdown(f"### ⏱️ Service Time Breakdown (AFR & TAT) <br><span style='color:#3b82f6; font-size:1.2rem'>➤ {selected_rt}</span>", unsafe_allow_html=True)
                 
             if not dfm_sb.empty:
                 dfm_sb["Response Tier"] = dfm_sb["Response Take (min)"].apply(assign_time_tier)
                 dfm_sb["Service Tier"]  = dfm_sb["Request Take (min)"].apply(assign_time_tier)
-                
+
                 sd = dfm_sb.groupby("Service Tier").size().reset_index(name="Tickets")
                 sd["SLA Category"] = "Service Resolution"
                 sd.rename(columns={"Service Tier": "SLA Tier"}, inplace=True)
@@ -1166,7 +1170,7 @@ with tab1:
                     sb_df = pd.concat([rd, sd], ignore_index=True)
                 else:
                     sb_df = sd.copy()
-                    
+
                 fig_sb = px.sunburst(sb_df, path=["SLA Category", "SLA Tier"], values="Tickets", branchvalues="total")
                 
                 custom_colors = {
@@ -1483,7 +1487,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes 
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1539,6 +1543,7 @@ with tab2:
         stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
+        # Checking columns strictly before calculating means
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
         else:
