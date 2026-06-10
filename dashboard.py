@@ -1245,33 +1245,105 @@ const barLayout = {{
 
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 
-// ── Sunburst builder ──────────────────────────────────────────────────────────
-// Inner ring (category nodes, parent=="") → label only, NO percentage
-// Outer ring (leaf tiers, parent!="")     → label + % of parent
-function buildSunburstTrace(rt) {{
-  const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
+// ── Build ONE combined sunburst with ALL data (All Types view) ───────────────
+// Each request-type gets its own branch under a hidden root "ALL"
+// Structure:
+//   "" → "ALL" (hidden root)
+//   "ALL" → "Response Time", "Service Resolution"         (for All Types view)
+//   "ALL" → "RT:Eligibility Issue" etc.                   (per-type branches, hidden at top level)
+//   "RT:Eligibility Issue" → "Service Resolution (filtered)" → tiers
 
-  const texttemplate = d.labels.map((lbl, i) => {{
-    if (d.parents[i] === "") {{
-      return "<b>%{{label}}</b>";                  // category: name only
-    }}
-    return "%{{label}}<br>%{{percentParent:.0%}}"; // tier: name + %
-  }});
+// We build a SINGLE flat dataset combining everything.
+// To show "All Types" we set level="" (root), which shows Response+Service halves.
+// To show a specific RT we set level="RT:<name>" which drills into that branch.
 
-  return {{
-    type:         "sunburst",
-    labels:       d.labels,
-    parents:      d.parents,
-    values:       d.values,
-    branchvalues: "total",
-    marker:       {{ colors: d.colors }},
-    texttemplate: texttemplate,
-    textinfo:     "none",
-    insidetextorientation: "radial",
-    hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>",
-    leaf: {{ opacity: 0.93 }},
-  }};
+const ALL_LABELS   = [];
+const ALL_PARENTS  = [];
+const ALL_VALUES   = [];
+const ALL_COLORS   = [];
+const ALL_TEXTTMPL = [];
+
+const CAT_COLOR = {{
+  "Response Time":      "#3b82f6",
+  "Service Resolution": "#10b981",
+}};
+const TIER_COLOR = {{
+  "Under 15 Mins": "#2ea44f",
+  "15-30 Mins":    "#2188ff",
+  "30-45 Mins":    "#bc8cff",
+  "45-60 Mins":    "#f9c513",
+  "Over 1 Hour":   "#ea4a5a",
+}};
+
+function addNode(label, parent, value, color, tmpl) {{
+  ALL_LABELS.push(label);
+  ALL_PARENTS.push(parent);
+  ALL_VALUES.push(value);
+  ALL_COLORS.push(color);
+  ALL_TEXTTMPL.push(tmpl);
 }}
+
+// Root (invisible)
+addNode("ALL", "", 0, "rgba(0,0,0,0)", "");
+
+// ── "All Types" branch — shown when level="ALL" ──────────────────────────────
+const allD = SB_PAYLOADS["All Types"];
+// Response Time category
+const rtIdx = allD.labels.indexOf("Response Time");
+if (rtIdx !== -1) {{
+  addNode("Response Time", "ALL", allD.values[rtIdx], CAT_COLOR["Response Time"], "<b>%{{label}}</b>");
+  allD.labels.forEach((lbl, i) => {{
+    if (allD.parents[i] === "Response Time") {{
+      addNode("RT_all_" + lbl, "Response Time", allD.values[i], TIER_COLOR[lbl] || "#cccccc", lbl + "<br>%{{percentParent:.0%}}");
+    }}
+  }});
+}}
+// Service Resolution category
+const srIdx = allD.labels.indexOf("Service Resolution");
+if (srIdx !== -1) {{
+  addNode("Service Resolution", "ALL", allD.values[srIdx], CAT_COLOR["Service Resolution"], "<b>%{{label}}</b>");
+  allD.labels.forEach((lbl, i) => {{
+    if (allD.parents[i] === "Service Resolution") {{
+      addNode("SR_all_" + lbl, "Service Resolution", allD.values[i], TIER_COLOR[lbl] || "#cccccc", lbl + "<br>%{{percentParent:.0%}}");
+    }}
+  }});
+}}
+
+// ── Per-request-type branches — shown when level="BRANCH_<rt>" ───────────────
+BAR_DATA.labels.forEach((rt, bi) => {{
+  const d = SB_PAYLOADS[rt];
+  if (!d || d.labels.length === 0) return;
+  const branchKey = "BRANCH_" + bi;
+  // branch root (invisible connector from ALL)
+  const srCat = d.labels.indexOf("Service Resolution");
+  const branchTotal = srCat !== -1 ? d.values[srCat] : 0;
+  addNode(branchKey, "ALL", branchTotal, "rgba(0,0,0,0)", "");
+  // Service Resolution node under branch
+  if (srCat !== -1) {{
+    addNode("SR_" + bi, branchKey, d.values[srCat], CAT_COLOR["Service Resolution"], "<b>Service Resolution</b>");
+    d.labels.forEach((lbl, i) => {{
+      if (d.parents[i] === "Service Resolution") {{
+        addNode("SR_" + bi + "_" + lbl, "SR_" + bi, d.values[i], TIER_COLOR[lbl] || "#cccccc", lbl + "<br>%{{percentParent:.0%}}");
+      }}
+    }});
+  }}
+}});
+
+const sbTrace = {{
+  type:         "sunburst",
+  labels:       ALL_LABELS,
+  parents:      ALL_PARENTS,
+  values:       ALL_VALUES,
+  branchvalues: "total",
+  level:        "ALL",                  // start at "All Types" view
+  maxdepth:     3,
+  marker:       {{ colors: ALL_COLORS }},
+  texttemplate: ALL_TEXTTMPL,
+  textinfo:     "none",
+  insidetextorientation: "radial",
+  hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>",
+  leaf: {{ opacity: 0.93 }},
+}};
 
 const sbLayout = {{
   margin:        {{ t: 10, b: 10, l: 10, r: 10 }},
@@ -1279,28 +1351,30 @@ const sbLayout = {{
   plot_bgcolor:  "rgba(247,241,225,0.6)",
   font:          {{ color: "#0f172a" }},
   autosize:      true,
-  transition:    {{ duration: 700, easing: "cubic-in-out" }},
 }};
 
-// Default render — both halves (Response Time + Service Resolution)
 Plotly.newPlot(
   "sunburst-div",
-  [buildSunburstTrace("All Types")],
+  [sbTrace],
   sbLayout,
   {{ displayModeBar: false, responsive: true }}
 );
 
-// ── Bar click → smooth sunburst morph ─────────────────────────────────────────
+// ── Bar click → native drill-down animation via Plotly.restyle level ──────────
 document.getElementById("bar-div").on("plotly_click", function(data) {{
-  const clicked = data.points[0].y;
+  const clicked      = data.points[0].y;
+  const clickedIdx   = data.points[0].pointIndex;
 
   if (selectedRt === clicked) {{
-    // Toggle off → back to All Types
+    // Toggle off → zoom back to root "ALL"
     selectedRt     = "All Types";
     selectedBarIdx = null;
+    Plotly.restyle("sunburst-div", {{ level: "ALL" }});
   }} else {{
     selectedRt     = clicked;
-    selectedBarIdx = data.points[0].pointIndex;
+    selectedBarIdx = clickedIdx;
+    // Drill into this request type's branch — exact same animation as clicking inside the sunburst
+    Plotly.restyle("sunburst-div", {{ level: "BRANCH_" + clickedIdx }});
   }}
 
   // Dim unselected bars
@@ -1317,14 +1391,6 @@ document.getElementById("bar-div").on("plotly_click", function(data) {{
   }} else {{
     titleEl.innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)<br><span>&#x27A4; " + selectedRt + "</span>";
   }}
-
-  // Smooth morph via Plotly.react (no DOM remount, pure animation)
-  Plotly.react(
-    "sunburst-div",
-    [buildSunburstTrace(selectedRt)],
-    sbLayout,
-    {{ displayModeBar: false, responsive: true }}
-  );
 }});
 </script>
 </body>
