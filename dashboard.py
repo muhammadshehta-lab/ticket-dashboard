@@ -1041,7 +1041,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1069,23 +1069,6 @@ with tab1:
         req_counts = dfm['Request Type'].value_counts()
         req_pct = (req_counts / len(dfm) * 100).round(1)
         
-        # 🌟 FOOLPROOF SELECTION PARSER
-        selected_rt = "All Types"
-        if "req_type_slicer" in st.session_state:
-            selection = st.session_state["req_type_slicer"]
-            if isinstance(selection, dict) and "selection" in selection:
-                pts = selection["selection"].get("points", [])
-                if pts and len(pts) > 0:
-                    pt_idx = pts[0].get("point_index")
-                    if pt_idx is not None and pt_idx < len(req_pct):
-                        selected_rt = req_pct.index[pt_idx]
-
-        # Apply filter logic
-        if selected_rt == "All Types":
-            dfm_sb = dfm.copy()
-        else:
-            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
-
         # Layout Division: 70% Chart | 30% Interactive Slicer
         sb_col1, sb_col2 = st.columns([7, 3])
         
@@ -1102,30 +1085,31 @@ with tab1:
                 text=[f"{v}%" for v in req_pct.values],
             )
             
+            # Simple native traces. No overriding selection style. Let Streamlit handle the magic.
             fig_req.update_traces(
                 marker_color=marker_colors, 
                 textposition='inside',
                 insidetextanchor='middle',
-                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>",
-                selected=dict(marker=dict(opacity=1)),
-                unselected=dict(marker=dict(opacity=0.25))
+                hovertemplate="<b>%{y}</b><br>Percentage: %{x}%<extra></extra>"
             )
             
+            # Adjust dimensions: thinner bars, longer reach
             fig_req.update_layout(
                 template="plotly_white",
                 font_color="#0f172a",
                 margin=dict(l=0, r=0, t=10, b=10),
                 height=max(250, len(req_pct)*35), 
-                bargap=0.45,                      
+                bargap=0.5,                      
                 xaxis=dict(visible=False),
                 yaxis=dict(title="", autorange="reversed", tickfont=dict(size=12, weight="bold")),
                 plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                clickmode="event+select" 
+                paper_bgcolor="rgba(0,0,0,0)"
             )
             
+            selected_rt = "All Types"
             try:
-                st.plotly_chart(
+                # 🌟 NATIVE STREAMLIT INTERACTIVE SELECTION (Executes in-place)
+                chart_event = st.plotly_chart(
                     fig_req, 
                     use_container_width=True, 
                     config={'displayModeBar': False}, 
@@ -1133,14 +1117,37 @@ with tab1:
                     selection_mode="points",
                     key="req_type_slicer"
                 )
+                
+                # Parsing the direct dictionary object returned by the component
+                if chart_event and isinstance(chart_event, dict) and "selection" in chart_event:
+                    pts = chart_event["selection"].get("points", [])
+                    if pts and len(pts) > 0:
+                        selected_rt = pts[0].get("y", "All Types")
+                # Parsing the attribute object (Streamlit standardizes differently sometimes)
+                elif chart_event and hasattr(chart_event, "selection"):
+                    sel = chart_event.selection
+                    pts = sel.get("points", []) if isinstance(sel, dict) else getattr(sel, "points", [])
+                    if pts and len(pts) > 0:
+                        pt = pts[0]
+                        selected_rt = pt.get("y", "All Types") if isinstance(pt, dict) else getattr(pt, "y", "All Types")
+                        
+                if selected_rt != "All Types":
+                    st.info(f"✅ Filtered by: **{selected_rt}**")
+                    
             except Exception as e:
+                # Fallback for older Streamlit versions < 1.35
                 st.plotly_chart(fig_req, use_container_width=True, config={'displayModeBar': False})
                 st.warning("⚠️ التفاعل المباشر بالضغط على الأعمدة يحتاج إلى تحديث Streamlit. يرجى إضافة `streamlit>=1.35.0` في ملف `requirements.txt`.")
+                
+                st.markdown("<br><b>🎛️ Manual Filter Menu (Fallback)</b>", unsafe_allow_html=True)
                 slicer_options = ["All Types"] + list(req_pct.index)
-                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options)
+                selected_rt = st.selectbox("🔍 اختر نوع الطلب:", slicer_options, label_visibility="collapsed")
             
-            if selected_rt != "All Types":
-                st.info(f"✅ Filtered by: **{selected_rt}**")
+        # Apply filter logic
+        if selected_rt == "All Types":
+            dfm_sb = dfm.copy()
+        else:
+            dfm_sb = dfm[dfm["Request Type"] == selected_rt].copy()
 
         with sb_col1:
             if selected_rt == "All Types":
@@ -1475,7 +1482,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes 
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1752,202 +1759,4 @@ with tab2:
     def style_performers(row):
         exp = row["Expert"]
         if exp == "🏆 Team AVG":
-            return ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
-        elif exp == gold_disp:
-            return ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
-        elif exp == silver_disp:
-            return ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
-        elif exp == bronze_disp:
-            return ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
-        elif exp == aname and not is_admin():
-            return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
-        return [''] * len(row)
-
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
-    display_df = display_df[column_order]
-
-    styled_df = display_df.style.apply(style_performers, axis=1)
-    styled_df = styled_df.set_properties(**{'text-align': 'center'})
-    styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
-
-    html_table = styled_df.hide(axis="index").to_html()
-    st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
-
-    if is_admin():
-        st.divider()
-        st.markdown(f"#### ✏️ Manual KPI Override Editor (Period: {d_from} to {d_to})")
-        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة. اكتب رقماً فقط في الحقل الذي تريد تثبيته لهذه الفترة الزمنية المحددة.")
-        
-        agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
-        sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
-        
-        cur = period_ovs.get(sel_agent, {})
-        def gv(k):
-            return str(cur.get(k, ""))
-
-        with st.form(f"ov_form_{sel_agent}"):
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                nout = st.text_input("Out Requests", value=gv("Out Requests"))
-                njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
-            with fc2:
-                nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
-                nem  = st.text_input("Email Counts", value=gv("Email Counts"))
-            with fc3:
-                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
-                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
-            
-            sc_col, rc_col = st.columns(2)
-            with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
-            with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
-
-        if do_save:
-            new_ov = {}
-            def parse_int(v):
-                try: return int(float(v))
-                except: return None
-            def parse_str(v):
-                return str(v).strip() if str(v).strip() else None
-
-            if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
-            if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
-            if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
-            if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
-            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
-            if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
-
-            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-            
-            if new_ov:
-                overrides()[PERIOD_KEY][sel_agent] = new_ov
-            else:
-                if sel_agent in overrides().get(PERIOD_KEY, {}):
-                    overrides()[PERIOD_KEY].pop(sel_agent)
-                    
-            _save_store()
-            st.success(f"✅ Override parameters saved specifically for period **{d_from} to {d_to}**.")
-            st.rerun()
-
-        if do_clear:
-            if PERIOD_KEY in overrides() and sel_agent in overrides()[PERIOD_KEY]:
-                overrides()[PERIOD_KEY].pop(sel_agent)
-                _save_store()
-                st.success(f"🔄 Cleared overrides for period **{d_from} to {d_to}**.")
-                st.rerun()
-            else:
-                st.warning("No active overrides found to clear for this period.")
-
-        active_ovs = overrides().get(PERIOD_KEY, {})
-        disp_ovs = {k: v for k, v in active_ovs.items() if k != "GLOBAL_TARGET"}
-        if disp_ovs:
-            st.write("")
-            with st.expander("🗂️ Active Metric Overrides (This Period)"):
-                st.json(disp_ovs)
-        
-        st.divider()
-        st.markdown("#### ✉️ Performance Review Emails")
-        
-        email_agents_list = [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x]
-        selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
-        
-        if selected_email_agent:
-            agent_row = sc_final[sc_final["Expert"] == selected_email_agent].iloc[0]
-            team_row_disp = sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
-            
-            def safe_float(v):
-                try: return float(str(v).replace('%','').replace(',',''))
-                except: return 0.0
-            
-            achiev_val = safe_float(agent_row["% Achievement from Target"])
-            qual_val = safe_float(agent_row["Service Quality"])
-            
-            agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Out Requests'])
-            team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Out Requests'])
-            
-            if achiev_val >= 100:
-                perf_word = "outstanding"
-                target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
-            elif achiev_val >= 80:
-                perf_word = "solid"
-                target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
-            else:
-                perf_word = "developing"
-                target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
-            
-            if qual_val >= 95:
-                qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
-            elif qual_val >= 85:
-                qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
-            else:
-                qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
-            
-            clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
-            
-            markdown_email = f"""
-Dear **{clean_name}**,
-
-I hope this email finds you well. 
-
-As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to personally share your metrics and highlight your **{perf_word}** contributions to the team.
-
-### 📊 Your Performance Scorecard:
-
-| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} |
-
-**🎯 Targets & Quality:** {target_msg}  
-{qual_msg}
-
-Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
-
-Best regards,  
-**Mohammed Shehta** Team Leader
-"""
-            
-            st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-            st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
-            
-            st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:2px solid #cbd5e1; font-size:1.1rem; color:#1e293b;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
-            
-            email_body_plain = f"""Dear {clean_name},
-
-I hope this email finds you well. 
-
-As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
-
-📊 Your Performance Scorecard:
-------------------------------------------------------------------------------------------
-Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time
-------------------------------------------------------------------------------------------
-Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time'])}
-------------------------------------------------------------------------------------------
-
-🎯 Targets & Quality:
-{target_msg.replace('**', '')}
-{qual_msg.replace('**', '')}
-
-Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
-
-Best regards,
-Mohammed Shehta
-Team Leader"""
-
-            with st.expander("Show Plain Text Version (For manual copy/paste)"):
-                st.text_area("Plain Text Draft", value=email_body_plain, height=300)
-            
-            subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
-            body_encoded = urllib.parse.quote(email_body_plain)
-            
-            st.write("")
-            gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
-            st.markdown(
-                f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#ea4335; color:white; text-decoration:none; border-radius:8px; font-weight:900; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(234, 67, 53, 0.3);">'
-                f'🌐 Open Draft in Gmail</a>', 
-                unsafe_allow_html=True
-            )
-
-st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
-# --- END OF SCRIPT ---
+            return ['
