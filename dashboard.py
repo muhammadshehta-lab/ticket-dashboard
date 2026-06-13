@@ -102,19 +102,127 @@ def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  WHATSAPP ADMIN NOTIFICATION
+#  LOGIN ALERT NOTIFICATION  — 4-method fallback chain
+#
+#  Priority order (first success wins):
+#   1. CallMeBot  WhatsApp  — free, needs one-time bot activation
+#   2. UltraMsg   WhatsApp  — freemium, needs account at ultramsg.com
+#   3. Telegram   Bot       — 100% free & instant (EASIEST to set up)
+#   4. Sidebar log          — always works, shown to admin in sidebar
+#
+#  ── QUICKEST SETUP: Telegram (Method 3) ─────────────────────────────────────
+#  Step 1: Open Telegram, search for  @BotFather  and send:  /newbot
+#  Step 2: Follow prompts → you get a BOT_TOKEN like: 123456:ABCdef...
+#  Step 3: Open your new bot and press Start (or send /start)
+#  Step 4: Visit in browser to get your chat_id:
+#          https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
+#          Look for "chat":{"id": 123456789}
+#  Step 5: Add to .streamlit/secrets.toml:
+#          [telegram]
+#          bot_token = "8976485209:AAGv-86mH2ZN79Pq14YVjyymQUOED90MsaA"
+#          chat_id   = "8976485209"
+#
+#  ── CallMeBot Setup (Method 1) ───────────────────────────────────────────────
+#  Save +34 644 44 06 63, open WhatsApp chat, send exactly:
+#  "I allow callmebot to send me messages"
+#  Bot replies with your API key → add to secrets.toml:
+#  [whatsapp]
+#  api_key = "YOUR_KEY"
+#
+#  ── UltraMsg Setup (Method 2) ────────────────────────────────────────────────
+#  Register at ultramsg.com → get instance_id + token → add to secrets.toml:
+#  [ultramsg]
+#  instance_id = "instanceXXXX"
+#  token       = "YOUR_TOKEN"
 # ══════════════════════════════════════════════════════════════════════════════════
-def notify_admin_whatsapp(logged_in_user):
-    """Sends a WhatsApp message to the admin when a user logs in securely."""
+
+ADMIN_PHONE     = "01129217380"
+ADMIN_PHONE_INT = "+201129217380"
+
+def _build_login_message(display_name: str, username: str, role: str) -> str:
+    now   = time.strftime("%Y-%m-%d %H:%M:%S")
+    emoji = "👑" if role == "admin" else "👤"
+    return (
+        f"🔔 *Dashboard Login Alert*\n"
+        f"{emoji} Name   : *{display_name}*\n"
+        f"🆔 User ID : *{username}*\n"
+        f"🎭 Role   : *{role.upper()}*\n"
+        f"🕐 Time   : {now}\n"
+        f"─────────────────────\n"
+        f"AlDawaa In-Store Requests Dashboard"
+    )
+
+# ── Method 1: CallMeBot WhatsApp ─────────────────────────────────────────────
+def _notify_via_callmebot(message: str) -> bool:
     try:
-        if "whatsapp" in st.secrets and "api_key" in st.secrets["whatsapp"]:
-            api_key = st.secrets["whatsapp"]["api_key"]
-            phone = "+201129217380"
-            msg = f"🚨 *System Login Alert*%0AUser: *{logged_in_user}*%0ATime: {time.strftime('%Y-%m-%d %H:%M:%S')}"
-            url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={msg}&apikey={api_key}"
-            requests.get(url, timeout=3)
-    except Exception as e:
-        pass
+        if "whatsapp" not in st.secrets or "api_key" not in st.secrets["whatsapp"]:
+            return False
+        api_key     = st.secrets["whatsapp"]["api_key"]
+        encoded_msg = urllib.parse.quote(message)
+        url  = (f"https://api.callmebot.com/whatsapp.php"
+                f"?phone={ADMIN_PHONE_INT}&text={encoded_msg}&apikey={api_key}")
+        resp = requests.get(url, timeout=6)
+        return resp.status_code == 200 and "message queued" in resp.text.lower()
+    except Exception:
+        return False
+
+# ── Method 2: UltraMsg WhatsApp ──────────────────────────────────────────────
+def _notify_via_ultramsg(message: str) -> bool:
+    try:
+        if "ultramsg" not in st.secrets:
+            return False
+        instance_id = st.secrets["ultramsg"]["instance_id"]
+        token       = st.secrets["ultramsg"]["token"]
+        url     = f"https://api.ultramsg.com/{instance_id}/messages/chat"
+        payload = {"token": token, "to": ADMIN_PHONE_INT, "body": message}
+        resp    = requests.post(url, data=payload, timeout=6)
+        return resp.status_code == 200 and "sent" in resp.text.lower()
+    except Exception:
+        return False
+
+# ── Method 3: Telegram Bot (easiest & most reliable free option) ─────────────
+def _notify_via_telegram(message: str) -> bool:
+    """
+    Sends a Telegram message to the admin via a bot.
+    Setup takes ~2 minutes — see instructions in the header above.
+    """
+    try:
+        if "telegram" not in st.secrets:
+            return False
+        bot_token = st.secrets["telegram"]["bot_token"]
+        chat_id   = st.secrets["telegram"]["chat_id"]
+        url  = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {
+            "chat_id":    chat_id,
+            "text":       message,
+            "parse_mode": "Markdown",
+        }
+        resp = requests.post(url, json=payload, timeout=6)
+        return resp.status_code == 200 and resp.json().get("ok", False)
+    except Exception:
+        return False
+
+# ── Main dispatcher ───────────────────────────────────────────────────────────
+def notify_admin_whatsapp(display_name: str, username: str = "", role: str = "expert") -> None:
+    """Tries all notification methods in order; logs to sidebar if all fail."""
+    message = _build_login_message(display_name, username, role)
+
+    if _notify_via_callmebot(message):
+        return
+    if _notify_via_ultramsg(message):
+        return
+    if _notify_via_telegram(message):
+        return
+
+    # All methods failed — store for admin sidebar display
+    if "missed_notifications" not in st.session_state:
+        st.session_state.missed_notifications = []
+    st.session_state.missed_notifications.append({
+        "user": display_name,
+        "uid":  username,
+        "role": role,
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  CSS  — PUFF BACKGROUND THEME & BOLD/LARGE TYPOGRAPHY BLOCK
@@ -561,7 +669,11 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    notify_admin_whatsapp(udata.get("display_name", uname))
+                    notify_admin_whatsapp(
+                        display_name = udata.get("display_name", uname),
+                        username     = uname,
+                        role         = udata.get("role", "expert"),
+                    )
                     
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
@@ -655,6 +767,18 @@ with st.sidebar:
     if is_admin() and pending_count() > 0:
         pc = pending_count()
         st.warning(f"🔔 {pc} pending system change request{'s' if pc > 1 else ''}")
+
+    # ── Show missed WhatsApp notifications (when API key is not configured) ──
+    missed = st.session_state.get("missed_notifications", [])
+    if is_admin() and missed:
+        with st.expander(f"⚠️ {len(missed)} Undelivered Login Alert(s)", expanded=True):
+            for n in missed:
+                st.markdown(
+                    f"👤 **{n['user']}** (`{n['uid']}`) — {n['role'].upper()}  \n"
+                    f"🕐 {n['time']}",
+                    unsafe_allow_html=False,
+                )
+            st.caption("Configure WhatsApp secrets to enable automatic delivery.")
 
     st.success("📡 Live Sync Active")
     if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
