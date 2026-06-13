@@ -1041,7 +1041,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes
+    # Calculate Trend Changes 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1065,6 +1065,8 @@ with tab1:
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
     st.write("")
 
+    req_counts = pd.Series(dtype=int)
+    req_pct = pd.Series(dtype=float)
     if not dfm.empty:
         req_counts = dfm['Request Type'].value_counts()
         req_pct = (req_counts / len(dfm) * 100).round(1)
@@ -1234,8 +1236,8 @@ const barTrace = {{
 
 const barLayout = {{
   margin: {{ l: 8, r: 8, t: 10, b: 10 }},
-  bargap: 0.3,
-  xaxis: {{ visible: false }},
+  bargap: 0.3, 
+  xaxis: {{ visible: false }}, 
   yaxis: {{
     autorange: "reversed",
     tickfont: {{ size: 12, color: "#0f172a", weight: "bold" }},
@@ -1576,10 +1578,26 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
     if is_admin():
         st.divider()
         st.markdown("#### 📥 Export Operational Report")
-        op_summary = pd.DataFrame({
-            "Metric": ["Total Tickets", "Stores Served", "Total Actions", "Closed Completed", "Closed with Issue", "Avg Tickets / Day", "AFR", "TAT"],
-            "Value": [total, stores_count, status_actions_sum, ok, issue, round(curr_avg_per_day, 1), h_afr, h_tat]
-        })
+        
+        base_metrics = [
+            {"Metric": "Total Tickets", "Value": total},
+            {"Metric": "Stores Served", "Value": stores_count},
+            {"Metric": "Total Actions", "Value": status_actions_sum},
+            {"Metric": "Closed Completed", "Value": ok},
+            {"Metric": "Closed with Issue", "Value": issue},
+            {"Metric": "Avg Tickets / Day", "Value": round(curr_avg_per_day, 1)},
+            {"Metric": "AFR", "Value": h_afr},
+            {"Metric": "TAT", "Value": h_tat}
+        ]
+        
+        if not dfm.empty:
+            base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
+            for rt_name, rt_count in req_counts.items():
+                rt_percent = req_pct[rt_name]
+                base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} ({rt_percent}%)"})
+                
+        op_summary = pd.DataFrame(base_metrics)
+        
         csv_op = op_summary.to_csv(index=False).encode('utf-8-sig')
         st.download_button(label="📥 Download Operational Summary (CSV)", data=csv_op, file_name=f"Operational_Summary_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
 
@@ -1636,7 +1654,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1779,7 +1797,7 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # APPLY OVERRIDES DIRECTLY HERE 
+    # APPLY OVERRIDES DIRECTLY HERE
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
