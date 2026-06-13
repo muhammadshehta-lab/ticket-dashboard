@@ -1041,7 +1041,7 @@ with tab1:
     
     prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
 
-    # Calculate Trend Changes 
+    # Calculate Trend Changes
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
@@ -1591,10 +1591,31 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         ]
         
         if not dfm.empty:
+            # 1. Weekdays Averages
+            base_metrics.append({"Metric": "--- AVG TICKETS PER WEEKDAY ---", "Value": ""})
+            daily_counts = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets')
+            avg_per_weekday = daily_counts.groupby('Day Name')['Tickets'].mean().round(1)
+            ordered_days = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+            for d in ordered_days:
+                val = avg_per_weekday.get(d, 0)
+                base_metrics.append({"Metric": f"Avg Tickets ({d})", "Value": val})
+                
+            # 2. Request Types Breakdown + Avg TAT
             base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
+            
+            has_tat = "Request Take (min)" in dfm.columns
+            if has_tat:
+                rt_tat = dfm.groupby("Request Type")["Request Take (min)"].mean()
+            else:
+                rt_tat = pd.Series(dtype=float)
+            
             for rt_name, rt_count in req_counts.items():
                 rt_percent = req_pct[rt_name]
-                base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} ({rt_percent}%)"})
+                tat_str = fmt_m(rt_tat.get(rt_name, 0)) if has_tat else "00:00:00"
+                base_metrics.append({
+                    "Metric": f"Type: {rt_name}", 
+                    "Value": f"{rt_count} Tickets ({rt_percent}%) | Avg TAT: {tat_str}"
+                })
                 
         op_summary = pd.DataFrame(base_metrics)
         
