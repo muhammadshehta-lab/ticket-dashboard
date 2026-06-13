@@ -768,7 +768,93 @@ with st.sidebar:
         pc = pending_count()
         st.warning(f"🔔 {pc} pending system change request{'s' if pc > 1 else ''}")
 
-    # ── Show missed WhatsApp notifications (when API key is not configured) ──
+    # ── Notification diagnostics panel (admin only) ───────────────────────────
+    if is_admin():
+        with st.expander("🔔 Notification Diagnostics", expanded=False):
+            st.caption("Test each notification method and see live error details.")
+
+            # ── Secrets status ───────────────────────────────────────────────
+            st.markdown("**Secrets configured:**")
+            has_tg  = "telegram" in st.secrets and "bot_token" in st.secrets.get("telegram", {})
+            has_cmb = "whatsapp" in st.secrets and "api_key"   in st.secrets.get("whatsapp", {})
+            has_um  = "ultramsg" in st.secrets
+            st.write(f"{'✅' if has_tg  else '❌'} Telegram")
+            st.write(f"{'✅' if has_cmb else '❌'} CallMeBot WhatsApp")
+            st.write(f"{'✅' if has_um  else '❌'} UltraMsg WhatsApp")
+
+            st.divider()
+
+            # ── Telegram test ────────────────────────────────────────────────
+            st.markdown("**Test Telegram:**")
+            if has_tg:
+                if st.button("📨 Send Telegram Test", use_container_width=True):
+                    try:
+                        bot_token = st.secrets["telegram"]["bot_token"]
+                        chat_id   = st.secrets["telegram"]["chat_id"]
+                        # First verify the bot token is valid
+                        me_url  = f"https://api.telegram.org/bot{bot_token}/getMe"
+                        me_resp = requests.get(me_url, timeout=6)
+                        if me_resp.status_code != 200:
+                            st.error(f"❌ Bad bot token. API says: {me_resp.text[:200]}")
+                        else:
+                            bot_name = me_resp.json().get("result", {}).get("username", "?")
+                            st.info(f"✅ Bot found: @{bot_name}")
+                            # Now send the message
+                            send_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                            payload  = {"chat_id": chat_id, "text": "🔔 Test alert from AlDawaa Dashboard!", "parse_mode": "Markdown"}
+                            resp     = requests.post(send_url, json=payload, timeout=6)
+                            if resp.status_code == 200 and resp.json().get("ok"):
+                                st.success("✅ Telegram message sent successfully!")
+                            else:
+                                data = resp.json()
+                                st.error(f"❌ Failed — Error {data.get('error_code')}: {data.get('description')}")
+                                st.caption("👉 Make sure you opened the bot and pressed START before testing.")
+                    except Exception as ex:
+                        st.error(f"❌ Exception: {ex}")
+
+                # Quick chat_id finder
+                if st.button("🔍 Find my chat_id", use_container_width=True):
+                    try:
+                        bot_token = st.secrets["telegram"]["bot_token"]
+                        url  = f"https://api.telegram.org/bot{bot_token}/getUpdates"
+                        resp = requests.get(url, timeout=6)
+                        data = resp.json()
+                        results = data.get("result", [])
+                        if not results:
+                            st.warning("No updates found. Open your bot in Telegram and send /start first, then retry.")
+                        else:
+                            for r in results[-3:]:
+                                msg  = r.get("message", {})
+                                chat = msg.get("chat", {})
+                                st.code(f"chat_id = {chat.get('id')}  (from: {chat.get('first_name','')} {chat.get('last_name','')})")
+                    except Exception as ex:
+                        st.error(f"❌ Exception: {ex}")
+            else:
+                st.warning("No Telegram secrets found. Add [telegram] section to secrets.toml")
+                st.code('[telegram]\nbot_token = "123456:ABCdef..."\nchat_id   = "123456789"', language="toml")
+
+            # ── CallMeBot test ───────────────────────────────────────────────
+            st.divider()
+            st.markdown("**Test CallMeBot WhatsApp:**")
+            if has_cmb:
+                if st.button("📱 Send CallMeBot Test", use_container_width=True):
+                    try:
+                        api_key = st.secrets["whatsapp"]["api_key"]
+                        msg     = urllib.parse.quote("🔔 Test from AlDawaa Dashboard!")
+                        url     = f"https://api.callmebot.com/whatsapp.php?phone={ADMIN_PHONE_INT}&text={msg}&apikey={api_key}"
+                        resp    = requests.get(url, timeout=8)
+                        st.code(f"Status: {resp.status_code}\nResponse: {resp.text[:300]}")
+                        if resp.status_code == 200:
+                            st.success("✅ Request sent — check WhatsApp")
+                        else:
+                            st.error("❌ CallMeBot returned an error")
+                    except Exception as ex:
+                        st.error(f"❌ Exception: {ex}")
+            else:
+                st.warning("No CallMeBot key in secrets.toml")
+                st.code('[whatsapp]\napi_key = "YOUR_KEY"', language="toml")
+
+    # ── Missed notifications log ──────────────────────────────────────────────
     missed = st.session_state.get("missed_notifications", [])
     if is_admin() and missed:
         with st.expander(f"⚠️ {len(missed)} Undelivered Login Alert(s)", expanded=True):
@@ -778,7 +864,7 @@ with st.sidebar:
                     f"🕐 {n['time']}",
                     unsafe_allow_html=False,
                 )
-            st.caption("Configure WhatsApp secrets to enable automatic delivery.")
+            st.caption("Use the Diagnostics panel above to configure notifications.")
 
     st.success("📡 Live Sync Active")
     if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
