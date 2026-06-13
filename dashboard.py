@@ -102,127 +102,19 @@ def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  LOGIN ALERT NOTIFICATION  — 4-method fallback chain
-#
-#  Priority order (first success wins):
-#   1. CallMeBot  WhatsApp  — free, needs one-time bot activation
-#   2. UltraMsg   WhatsApp  — freemium, needs account at ultramsg.com
-#   3. Telegram   Bot       — 100% free & instant (EASIEST to set up)
-#   4. Sidebar log          — always works, shown to admin in sidebar
-#
-#  ── QUICKEST SETUP: Telegram (Method 3) ─────────────────────────────────────
-#  Step 1: Open Telegram, search for  @BotFather  and send:  /newbot
-#  Step 2: Follow prompts → you get a BOT_TOKEN like: 123456:ABCdef...
-#  Step 3: Open your new bot and press Start (or send /start)
-#  Step 4: Visit in browser to get your chat_id:
-#          https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
-#          Look for "chat":{"id": 123456789}
-#  Step 5: Add to .streamlit/secrets.toml:
-#          [telegram]
-#          bot_token = "8976485209:AAGv-86mH2ZN79Pq14YVjyymQUOED90MsaA"
-#          chat_id   = "8976485209"
-#
-#  ── CallMeBot Setup (Method 1) ───────────────────────────────────────────────
-#  Save +34 644 44 06 63, open WhatsApp chat, send exactly:
-#  "I allow callmebot to send me messages"
-#  Bot replies with your API key → add to secrets.toml:
-#  [whatsapp]
-#  api_key = "YOUR_KEY"
-#
-#  ── UltraMsg Setup (Method 2) ────────────────────────────────────────────────
-#  Register at ultramsg.com → get instance_id + token → add to secrets.toml:
-#  [ultramsg]
-#  instance_id = "instanceXXXX"
-#  token       = "YOUR_TOKEN"
+#  WHATSAPP ADMIN NOTIFICATION
 # ══════════════════════════════════════════════════════════════════════════════════
-
-ADMIN_PHONE     = "01129217380"
-ADMIN_PHONE_INT = "+201129217380"
-
-def _build_login_message(display_name: str, username: str, role: str) -> str:
-    now   = time.strftime("%Y-%m-%d %H:%M:%S")
-    emoji = "👑" if role == "admin" else "👤"
-    return (
-        f"🔔 *Dashboard Login Alert*\n"
-        f"{emoji} Name   : *{display_name}*\n"
-        f"🆔 User ID : *{username}*\n"
-        f"🎭 Role   : *{role.upper()}*\n"
-        f"🕐 Time   : {now}\n"
-        f"─────────────────────\n"
-        f"AlDawaa In-Store Requests Dashboard"
-    )
-
-# ── Method 1: CallMeBot WhatsApp ─────────────────────────────────────────────
-def _notify_via_callmebot(message: str) -> bool:
+def notify_admin_whatsapp(logged_in_user):
+    """Sends a WhatsApp message to the admin when a user logs in securely."""
     try:
-        if "whatsapp" not in st.secrets or "api_key" not in st.secrets["whatsapp"]:
-            return False
-        api_key     = st.secrets["whatsapp"]["api_key"]
-        encoded_msg = urllib.parse.quote(message)
-        url  = (f"https://api.callmebot.com/whatsapp.php"
-                f"?phone={ADMIN_PHONE_INT}&text={encoded_msg}&apikey={api_key}")
-        resp = requests.get(url, timeout=6)
-        return resp.status_code == 200 and "message queued" in resp.text.lower()
-    except Exception:
-        return False
-
-# ── Method 2: UltraMsg WhatsApp ──────────────────────────────────────────────
-def _notify_via_ultramsg(message: str) -> bool:
-    try:
-        if "ultramsg" not in st.secrets:
-            return False
-        instance_id = st.secrets["ultramsg"]["instance_id"]
-        token       = st.secrets["ultramsg"]["token"]
-        url     = f"https://api.ultramsg.com/{instance_id}/messages/chat"
-        payload = {"token": token, "to": ADMIN_PHONE_INT, "body": message}
-        resp    = requests.post(url, data=payload, timeout=6)
-        return resp.status_code == 200 and "sent" in resp.text.lower()
-    except Exception:
-        return False
-
-# ── Method 3: Telegram Bot (easiest & most reliable free option) ─────────────
-def _notify_via_telegram(message: str) -> bool:
-    """
-    Sends a Telegram message to the admin via a bot.
-    Setup takes ~2 minutes — see instructions in the header above.
-    """
-    try:
-        if "telegram" not in st.secrets:
-            return False
-        bot_token = st.secrets["telegram"]["bot_token"]
-        chat_id   = st.secrets["telegram"]["chat_id"]
-        url  = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {
-            "chat_id":    chat_id,
-            "text":       message,
-            "parse_mode": "Markdown",
-        }
-        resp = requests.post(url, json=payload, timeout=6)
-        return resp.status_code == 200 and resp.json().get("ok", False)
-    except Exception:
-        return False
-
-# ── Main dispatcher ───────────────────────────────────────────────────────────
-def notify_admin_whatsapp(display_name: str, username: str = "", role: str = "expert") -> None:
-    """Tries all notification methods in order; logs to sidebar if all fail."""
-    message = _build_login_message(display_name, username, role)
-
-    if _notify_via_callmebot(message):
-        return
-    if _notify_via_ultramsg(message):
-        return
-    if _notify_via_telegram(message):
-        return
-
-    # All methods failed — store for admin sidebar display
-    if "missed_notifications" not in st.session_state:
-        st.session_state.missed_notifications = []
-    st.session_state.missed_notifications.append({
-        "user": display_name,
-        "uid":  username,
-        "role": role,
-        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-    })
+        if "whatsapp" in st.secrets and "api_key" in st.secrets["whatsapp"]:
+            api_key = st.secrets["whatsapp"]["api_key"]
+            phone = "+201129217380"
+            msg = f"🚨 *System Login Alert*%0AUser: *{logged_in_user}*%0ATime: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={msg}&apikey={api_key}"
+            requests.get(url, timeout=3)
+    except Exception as e:
+        pass
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  CSS  — PUFF BACKGROUND THEME & BOLD/LARGE TYPOGRAPHY BLOCK
@@ -629,7 +521,7 @@ AGENT_ALIASES = {
     
     "إسلام رمضان خليل": "Eslam Ramadan",
     "أصلان رمضان خليل": "Eslam Ramadan",
-    "islam رمضان": "Eslam Ramadan",
+    "اسلام رمضان": "Eslam Ramadan",
     "50461": "Eslam Ramadan",
     
     "محمد خليفة جاب الله": "Mohamed Khalifa",
@@ -669,11 +561,7 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    notify_admin_whatsapp(
-                        display_name = udata.get("display_name", uname),
-                        username     = uname,
-                        role         = udata.get("role", "expert"),
-                    )
+                    notify_admin_whatsapp(udata.get("display_name", uname))
                     
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
@@ -767,104 +655,6 @@ with st.sidebar:
     if is_admin() and pending_count() > 0:
         pc = pending_count()
         st.warning(f"🔔 {pc} pending system change request{'s' if pc > 1 else ''}")
-
-    # ── Notification diagnostics panel (admin only) ───────────────────────────
-    if is_admin():
-        with st.expander("🔔 Notification Diagnostics", expanded=False):
-            st.caption("Test each notification method and see live error details.")
-
-            # ── Secrets status ───────────────────────────────────────────────
-            st.markdown("**Secrets configured:**")
-            has_tg  = "telegram" in st.secrets and "bot_token" in st.secrets.get("telegram", {})
-            has_cmb = "whatsapp" in st.secrets and "api_key"   in st.secrets.get("whatsapp", {})
-            has_um  = "ultramsg" in st.secrets
-            st.write(f"{'✅' if has_tg  else '❌'} Telegram")
-            st.write(f"{'✅' if has_cmb else '❌'} CallMeBot WhatsApp")
-            st.write(f"{'✅' if has_um  else '❌'} UltraMsg WhatsApp")
-
-            st.divider()
-
-            # ── Telegram test ────────────────────────────────────────────────
-            st.markdown("**Test Telegram:**")
-            if has_tg:
-                if st.button("📨 Send Telegram Test", use_container_width=True):
-                    try:
-                        bot_token = st.secrets["telegram"]["bot_token"]
-                        chat_id   = st.secrets["telegram"]["chat_id"]
-                        # First verify the bot token is valid
-                        me_url  = f"https://api.telegram.org/bot{bot_token}/getMe"
-                        me_resp = requests.get(me_url, timeout=6)
-                        if me_resp.status_code != 200:
-                            st.error(f"❌ Bad bot token. API says: {me_resp.text[:200]}")
-                        else:
-                            bot_name = me_resp.json().get("result", {}).get("username", "?")
-                            st.info(f"✅ Bot found: @{bot_name}")
-                            # Now send the message
-                            send_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-                            payload  = {"chat_id": chat_id, "text": "🔔 Test alert from AlDawaa Dashboard!", "parse_mode": "Markdown"}
-                            resp     = requests.post(send_url, json=payload, timeout=6)
-                            if resp.status_code == 200 and resp.json().get("ok"):
-                                st.success("✅ Telegram message sent successfully!")
-                            else:
-                                data = resp.json()
-                                st.error(f"❌ Failed — Error {data.get('error_code')}: {data.get('description')}")
-                                st.caption("👉 Make sure you opened the bot and pressed START before testing.")
-                    except Exception as ex:
-                        st.error(f"❌ Exception: {ex}")
-
-                # Quick chat_id finder
-                if st.button("🔍 Find my chat_id", use_container_width=True):
-                    try:
-                        bot_token = st.secrets["telegram"]["bot_token"]
-                        url  = f"https://api.telegram.org/bot{bot_token}/getUpdates"
-                        resp = requests.get(url, timeout=6)
-                        data = resp.json()
-                        results = data.get("result", [])
-                        if not results:
-                            st.warning("No updates found. Open your bot in Telegram and send /start first, then retry.")
-                        else:
-                            for r in results[-3:]:
-                                msg  = r.get("message", {})
-                                chat = msg.get("chat", {})
-                                st.code(f"chat_id = {chat.get('id')}  (from: {chat.get('first_name','')} {chat.get('last_name','')})")
-                    except Exception as ex:
-                        st.error(f"❌ Exception: {ex}")
-            else:
-                st.warning("No Telegram secrets found. Add [telegram] section to secrets.toml")
-                st.code('[telegram]\nbot_token = "123456:ABCdef..."\nchat_id   = "123456789"', language="toml")
-
-            # ── CallMeBot test ───────────────────────────────────────────────
-            st.divider()
-            st.markdown("**Test CallMeBot WhatsApp:**")
-            if has_cmb:
-                if st.button("📱 Send CallMeBot Test", use_container_width=True):
-                    try:
-                        api_key = st.secrets["whatsapp"]["api_key"]
-                        msg     = urllib.parse.quote("🔔 Test from AlDawaa Dashboard!")
-                        url     = f"https://api.callmebot.com/whatsapp.php?phone={ADMIN_PHONE_INT}&text={msg}&apikey={api_key}"
-                        resp    = requests.get(url, timeout=8)
-                        st.code(f"Status: {resp.status_code}\nResponse: {resp.text[:300]}")
-                        if resp.status_code == 200:
-                            st.success("✅ Request sent — check WhatsApp")
-                        else:
-                            st.error("❌ CallMeBot returned an error")
-                    except Exception as ex:
-                        st.error(f"❌ Exception: {ex}")
-            else:
-                st.warning("No CallMeBot key in secrets.toml")
-                st.code('[whatsapp]\napi_key = "YOUR_KEY"', language="toml")
-
-    # ── Missed notifications log ──────────────────────────────────────────────
-    missed = st.session_state.get("missed_notifications", [])
-    if is_admin() and missed:
-        with st.expander(f"⚠️ {len(missed)} Undelivered Login Alert(s)", expanded=True):
-            for n in missed:
-                st.markdown(
-                    f"👤 **{n['user']}** (`{n['uid']}`) — {n['role'].upper()}  \n"
-                    f"🕐 {n['time']}",
-                    unsafe_allow_html=False,
-                )
-            st.caption("Use the Diagnostics panel above to configure notifications.")
 
     st.success("📡 Live Sync Active")
     if is_admin() and st.button("🔄 Refresh Data Now", use_container_width=True):
@@ -1344,7 +1134,7 @@ with tab1:
         sb_payloads_json = _json.dumps(sb_payloads)
         bar_data_json    = _json.dumps({"labels": bar_labels, "values": bar_values, "colors": bar_colors})
         
-        component_height = max(560, len(bar_labels) * 45 + 80)
+        component_height = max(650, len(bar_labels) * 55 + 100)
 
         html_component = f"""
 <!DOCTYPE html>
@@ -1357,22 +1147,25 @@ with tab1:
   body {{ background: transparent; font-family: inherit; }}
   #wrapper {{
     display: flex;
-    gap: 16px;
+    gap: 20px;
     width: 100%;
     height: {component_height}px;
-    align-items: flex-start;
+    align-items: stretch;
+  }}
+  .chart-card {{
+    background: linear-gradient(145deg, #fdfbf7, #ebe1c5);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 8px 8px 16px rgba(187, 163, 112, 0.4), -8px -8px 16px rgba(255, 255, 255, 0.8);
+    border: 1px solid #f4ebd0;
+    display: flex;
+    flex-direction: column;
   }}
   #sunburst-col {{
-    flex: 7;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
+    flex: 5.5;
   }}
   #bar-col {{
-    flex: 3;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
+    flex: 4.5;
   }}
   #sb-title {{
     font-size: 1.25rem;
@@ -1387,13 +1180,13 @@ with tab1:
     font-size: 1.05rem;
   }}
   #bar-title {{
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     font-weight: 800;
     color: #0f172a;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }}
   #bar-hint {{
-    font-size: 0.82rem;
+    font-size: 0.85rem;
     color: #64748b;
     margin-bottom: 6px;
   }}
@@ -1403,11 +1196,11 @@ with tab1:
 </head>
 <body>
 <div id="wrapper">
-  <div id="sunburst-col">
+  <div id="sunburst-col" class="chart-card">
     <div id="sb-title">&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)</div>
     <div id="sunburst-div"></div>
   </div>
-  <div id="bar-col">
+  <div id="bar-col" class="chart-card">
     <div id="bar-title">&#x1F39B;&#xFE0F; Interactive Request Types</div>
     <div id="bar-hint">&#x1F5B1;&#xFE0F; Click any bar to filter &bull; Click empty space to reset</div>
     <div id="bar-div"></div>
@@ -1430,14 +1223,18 @@ const barTrace = {{
   text: BAR_DATA.values.map(v => v.toFixed(1) + "%"),
   textposition: "inside",
   insidetextanchor: "middle",
-  textfont: {{ color: "#ffffff", size: 12, weight: "bold" }},
-  marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1) }},
+  textfont: {{ color: "#ffffff", size: 13, weight: "bold" }},
+  marker: {{ 
+    color: BAR_DATA.colors, 
+    opacity: BAR_DATA.colors.map(() => 1),
+    line: {{ color: 'rgba(0,0,0,0.4)', width: 1.5 }}
+  }},
   hovertemplate: "<b>%{{y}}</b><br>%{{x:.1f}}%<extra></extra>",
 }};
 
 const barLayout = {{
   margin: {{ l: 8, r: 8, t: 10, b: 10 }},
-  bargap: 0.5,
+  bargap: 0.3,
   xaxis: {{ visible: false }},
   yaxis: {{
     autorange: "reversed",
@@ -1467,7 +1264,7 @@ function buildTrace(rt) {{
     labels:       d.labels,
     parents:      d.parents,
     values:       d.values,
-    branchvalues: "total", // 🎯 Re-enabling total branch matching to fix the ratio!
+    branchvalues: "total", 
     marker:       {{ colors: d.colors }},
     texttemplate: texttemplate,
     textinfo:     "none",
@@ -1480,7 +1277,7 @@ function buildTrace(rt) {{
 const sbLayout = {{
   margin:        {{ t: 10, b: 10, l: 10, r: 10 }},
   paper_bgcolor: "rgba(0,0,0,0)",
-  plot_bgcolor:  "rgba(247,241,225,0.6)",
+  plot_bgcolor:  "rgba(0,0,0,0)",
   font:          {{ color: "#0f172a" }},
   autosize:      true,
 }};
@@ -1499,7 +1296,7 @@ Plotly.newPlot(
   Plotly.addFrames("sunburst-div", allFrames);
 }});
 
-// ── Bar click handler
+// ── Interactivity Logic (Click to Animate)
 document.getElementById("bar-div").on("plotly_click", function(data) {{
   const clicked    = data.points[0].y;
   const clickedIdx = data.points[0].pointIndex;
@@ -1554,7 +1351,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
 </html>
 """
         import streamlit.components.v1 as components
-        components.html(html_component, height=component_height + 20, scrolling=False)
+        components.html(html_component, height=component_height + 40, scrolling=False)
 
     st.divider()
 
@@ -1776,6 +1573,17 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         else:
             st.info("No insurance (HIC) records available for this period.")
 
+    if is_admin():
+        st.divider()
+        st.markdown("#### 📥 Export Operational Report")
+        op_summary = pd.DataFrame({
+            "Metric": ["Total Tickets", "Stores Served", "Total Actions", "Closed Completed", "Closed with Issue", "Avg Tickets / Day", "AFR", "TAT"],
+            "Value": [total, stores_count, status_actions_sum, ok, issue, round(curr_avg_per_day, 1), h_afr, h_tat]
+        })
+        csv_op = op_summary.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(label="📥 Download Operational Summary (CSV)", data=csv_op, file_name=f"Operational_Summary_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
+
+
 # ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
 with tab2:
     st.markdown("### 👥 Team Performance and KPIs")
@@ -1828,7 +1636,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage vs Percentage for completion/issue rates)
+    # KPI Changes
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1971,7 +1779,7 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # APPLY OVERRIDES DIRECTLY HERE
+    # APPLY OVERRIDES DIRECTLY HERE 
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
@@ -2124,6 +1932,14 @@ with tab2:
 
     html_table = styled_df.hide(axis="index").to_html()
     st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
+    
+    if is_admin():
+        st.divider()
+        st.markdown("#### 📥 Export Team Performance Report")
+        export_sc = display_df.copy()
+        export_sc["Expert"] = export_sc["Expert"].apply(lambda x: str(x).replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", ""))
+        csv_sc = export_sc.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(label="📥 Download Team Scorecard (CSV)", data=csv_sc, file_name=f"Team_Scorecard_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
 
     if is_admin():
         st.divider()
