@@ -79,8 +79,7 @@ def _load_store() -> dict:
                 "agent_name": "Yahia Ali Shafei",
             }
         },
-        "requests":  [],
-        "overrides": {},
+        "requests":  []
     }
     
     if _DATA_FILE.exists():
@@ -91,8 +90,6 @@ def _load_store() -> dict:
                     default_store["users"][k] = v
             if "requests" in loaded:
                 default_store["requests"] = loaded["requests"]
-            if "overrides" in loaded:
-                default_store["overrides"] = loaded["overrides"]
         except Exception:
             pass
             
@@ -365,7 +362,6 @@ if "view_request_form" not in st.session_state:
 # ── Helpers لإدارة العمليات التشغيلية ───────────────────────────────────────────────
 def users()     -> dict: return st.session_state.store["users"]
 def requests()  -> list: return st.session_state.store["requests"]
-def overrides() -> dict: return st.session_state.store["overrides"]
 def me()        -> str:  return st.session_state.username
 def is_admin()  -> bool: return st.session_state.role == "admin"
 def cur_user()  -> dict: return users().get(me(), {})
@@ -541,6 +537,15 @@ EXCLUSION_LIST = [
     'nan', 'none', ''
 ]
 
+def normalize_expert_name(name):
+    n_lower = str(name).lower().strip()
+    if n_lower in AGENT_ALIASES:
+        return AGENT_ALIASES[n_lower]
+    id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
+    if name in id_to_name:
+        return id_to_name[name]
+    return name
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -561,7 +566,7 @@ if not st.session_state.authenticated:
                 uname = inp_u.strip().lower()
                 udata = users().get(uname)
                 if udata and udata["password_hash"] == _hash(inp_p):
-                    notify_admin_whatsapp(udata.get("display_name", uname))
+                    notify_admin_whatsapp(udata.get("display_name", uname) + " ✅ Success")
                     
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
@@ -575,6 +580,7 @@ if not st.session_state.authenticated:
                         st.session_state.page = "dashboard"
                         st.rerun()
                 else:
+                    notify_admin_whatsapp(uname + " ❌ Failed Attempt")
                     st.error("❌ Incorrect username or password.")
             
             st.write("")
@@ -669,20 +675,25 @@ with st.sidebar:
                     json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             else:
                 st.error("❌ Secrets file layout unconfigured.")
-                return pd.DataFrame(), pd.DataFrame()
+                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             
             client = gspread.authorize(creds)
             sheet = client.open("AlDawaa Tickets Data")
             
             all_dfs = []
             roster_df = pd.DataFrame() 
+            out_req_df = pd.DataFrame()
             
             for ws in sheet.worksheets():
+                title = ws.title.strip()
                 data = ws.get_all_values()
                 if len(data) < 2: continue
                 
-                if ws.title.strip() == "Working Days":
+                if title == "Working Days":
                     roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                    continue
+                elif title == "Out Requests":
+                    out_req_df = pd.DataFrame(data)
                     continue
                 
                 dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
@@ -706,7 +717,7 @@ with st.sidebar:
                 all_dfs.append(dft)
             
             if not all_dfs: 
-                return pd.DataFrame(), roster_df
+                return pd.DataFrame(), roster_df, out_req_df
                 
             df = pd.concat(all_dfs, ignore_index=True, sort=False)
             df.replace("", np.nan, inplace=True)
@@ -723,17 +734,8 @@ with st.sidebar:
             df["HIC"]          = df["HIC"].fillna("Unknown")
             df["Assigned By"]  = df["Assigned By"].fillna("Unassigned").astype(str).str.strip()
             df["Store ID"]     = df["Store ID"].fillna("Unknown").astype(str).str.strip()
-            
-            id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
-            def normalize_name(name):
-                n_lower = name.lower()
-                if n_lower in AGENT_ALIASES:
-                    return AGENT_ALIASES[n_lower]
-                if name in id_to_name:
-                    return id_to_name[name]
-                return name
                 
-            df["Assigned By"] = df["Assigned By"].apply(normalize_name)
+            df["Assigned By"] = df["Assigned By"].apply(normalize_expert_name)
             
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
             df["Request Date"]             = dp
@@ -749,13 +751,13 @@ with st.sidebar:
             df["Is Email"] = (
                 df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
                 
-            return df, roster_df
+            return df, roster_df, out_req_df
             
         except Exception as e:
             st.error(f"❌ Connection Error: {e}")
-            return pd.DataFrame(), pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    df_raw, df_roster = load_data()
+    df_raw, df_roster, df_out_req = load_data()
     
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
@@ -791,9 +793,46 @@ with st.sidebar:
     prev_d_to = d_from - timedelta(days=1)
     prev_d_from = prev_d_to - timedelta(days=delta_days - 1)
     
-    PERIOD_KEY = f"{d_from}_{d_to}"
-    
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  PARSE OUT REQUESTS SHEET FOR THE SELECTED DATE RANGE
+# ══════════════════════════════════════════════════════════════════════════════════
+out_req_dict = {}
+global_jhah = 0
+global_support = 0
+
+if not df_out_req.empty and len(df_out_req) > 2:
+    row0 = df_out_req.iloc[0].values
+    target_mo = d_to.strftime("%m-%Y")
+    col_idx = -1
+    for i, val in enumerate(row0):
+        if str(val).strip() == target_mo:
+            col_idx = i
+            break
+    
+    if col_idx != -1:
+        for i in range(2, len(df_out_req)):
+            exp_name = str(df_out_req.iloc[i, 1]).strip()
+            if not exp_name: continue
+            
+            norm_name = normalize_expert_name(exp_name).lower()
+            
+            q_val = str(df_out_req.iloc[i, col_idx]).strip() if col_idx < len(df_out_req.columns) else ""
+            j_val = str(df_out_req.iloc[i, col_idx+1]).strip() if col_idx+1 < len(df_out_req.columns) else ""
+            s_val = str(df_out_req.iloc[i, col_idx+2]).strip() if col_idx+2 < len(df_out_req.columns) else ""
+            
+            out_req_dict[norm_name] = {
+                "Quality": q_val,
+                "JHAH": j_val,
+                "Support Req": s_val
+            }
+            
+            # Safe aggregate for global overview
+            try: global_jhah += int(float(j_val)) if j_val else 0
+            except: pass
+            try: global_support += int(float(s_val)) if s_val else 0
+            except: pass
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -980,11 +1019,6 @@ if st.session_state.page == "settings":
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
-period_ovs = overrides().get(PERIOD_KEY, {})
-global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
-global_jhah = int(period_ovs.get("GLOBAL_JHAH", 0))
-global_support = int(period_ovs.get("GLOBAL_SUPPORT", 0))
-
 caption_text = (
     f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
     if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
@@ -995,10 +1029,7 @@ st.caption(caption_text)
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
 # ══════════════════════════════════════════════════════════════════════════════════
-if is_admin():
-    tab1, tab2, tab3 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs", "✏️ Manual Overrides"])
-else:
-    tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
+tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
 
 # ── TAB 1 — Operational Insights ──────────────────────────────────────────────────
 with tab1:
@@ -1598,12 +1629,11 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             {"Metric": "Avg Tickets / Day", "Value": round(curr_avg_per_day, 1)},
             {"Metric": "AFR", "Value": h_afr},
             {"Metric": "TAT", "Value": h_tat},
-            {"Metric": "JHAH Requests (Manually)", "Value": global_jhah},
-            {"Metric": "Support Requests (Manually)", "Value": global_support}
+            {"Metric": "JHAH Requests (Sheet)", "Value": global_jhah},
+            {"Metric": "Support Requests (Sheet)", "Value": global_support}
         ]
         
         if not dfm.empty:
-            # 1. Weekdays Averages
             base_metrics.append({"Metric": "--- AVG TICKETS PER WEEKDAY ---", "Value": ""})
             daily_counts = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets')
             avg_per_weekday = daily_counts.groupby('Day Name')['Tickets'].mean().round(1)
@@ -1612,7 +1642,6 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                 val = avg_per_weekday.get(d, 0)
                 base_metrics.append({"Metric": f"Avg Tickets ({d})", "Value": val})
                 
-            # 2. Request Types Breakdown + Avg TAT
             base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
             
             has_tat = "Request Take (min)" in dfm.columns
@@ -1687,7 +1716,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage vs Percentage for completion/issue rates)
+    # KPI Changes 
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1814,12 +1843,26 @@ with tab2:
     c_ok = sc["_c_ok_sum"].fillna(0)
     sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
 
-    # APPLY OVERRIDES DIRECTLY HERE
+    # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab)
     for i, row in sc.iterrows():
-        ov = period_ovs.get(row["Expert"], {})
-        for col, val in ov.items(): 
-            if col not in ["GLOBAL_TARGET", "GLOBAL_JHAH", "GLOBAL_SUPPORT"] and col in sc.columns:
-                sc.at[i, col] = val
+        exp_key = str(row["Expert"]).strip().lower()
+        if exp_key in out_req_dict:
+            sheet_data = out_req_dict[exp_key]
+            
+            if sheet_data["JHAH"]:
+                try: sc.at[i, "JHAH Requests"] = int(float(sheet_data["JHAH"]))
+                except: pass
+            
+            if sheet_data["Support Req"]:
+                try: sc.at[i, "Out Requests"] = int(float(sheet_data["Support Req"]))
+                except: pass
+                
+            if sheet_data["Quality"]:
+                q_str = sheet_data["Quality"]
+                if "%" not in q_str:
+                    try: q_str = f"{float(q_str):.1f}%"
+                    except: pass
+                sc.at[i, "Service Quality"] = q_str
 
     # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
     st.markdown("### 📅 Schedule & Leaves Summary")
@@ -1858,11 +1901,8 @@ with tab2:
     else:
         sc["Rank"] = []
 
-    if global_target > 0:
-        sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
-    else:
-        tavg_cpd = sc["Cases/Day"].mean()
-        sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
+    tavg_cpd = sc["Cases/Day"].mean()
+    sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
     team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
@@ -1873,10 +1913,11 @@ with tab2:
     team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
     team_afr = fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0)
 
-    if global_target > 0:
-        team_achiev = f"{round((team_cpd / global_target) * 100, 1)}%"
-    else:
-        team_achiev = "100.0%"
+    def parse_pct(p):
+        try: return float(str(p).replace("%", ""))
+        except: return 0.0
+        
+    avg_qual = sc["Service Quality"].apply(parse_pct).mean()
 
     team_row = {
         "Expert": "🏆 Team AVG", 
@@ -1892,16 +1933,11 @@ with tab2:
         "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
-        "% Achievement from Target": team_achiev, 
+        "% Achievement from Target": "100.0%", 
         "AFR": team_afr,
         "Service Time": team_st, 
-        "Service Quality": "100.0%"
+        "Service Quality": f"{avg_qual:.1f}%"
     }
-    
-    team_ov = period_ovs.get("🏆 Team AVG", {})
-    for col, val in team_ov.items():
-        if col not in ["GLOBAL_TARGET", "GLOBAL_JHAH", "GLOBAL_SUPPORT"]:
-            team_row[col] = val
 
     sc.drop(columns=["_Service_Time_val", "_AFR_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
 
@@ -1975,7 +2011,7 @@ with tab2:
         export_sc["Expert"] = export_sc["Expert"].apply(lambda x: str(x).replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", ""))
         csv_sc = export_sc.to_csv(index=False).encode('utf-8-sig')
         st.download_button(label="📥 Download Team Scorecard (CSV)", data=csv_sc, file_name=f"Team_Scorecard_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
-        
+
         st.divider()
         st.markdown("#### ✉️ Performance Review Emails")
         
@@ -2080,95 +2116,6 @@ Team Leader"""
                 f'🌐 Open Draft in Gmail</a>', 
                 unsafe_allow_html=True
             )
-
-# ── TAB 3 — Manual Overrides (ADMIN ONLY) ─────────────────────────────────────────
-if is_admin():
-    with tab3:
-        st.markdown("### 🎯 Global Settings (This Period)")
-        with st.form("global_target_form"):
-            c_g1, c_g2, c_g3 = st.columns(3)
-            with c_g1: new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
-            with c_g2: new_jhah = st.number_input("Global JHAH Requests (Manual)", value=int(global_jhah), step=1, min_value=0)
-            with c_g3: new_support = st.number_input("Global Support Requests (Manual)", value=int(global_support), step=1, min_value=0)
-            
-            if st.form_submit_button("💾 Save Global Parameters", use_container_width=True):
-                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-                overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target
-                overrides()[PERIOD_KEY]["GLOBAL_JHAH"] = new_jhah
-                overrides()[PERIOD_KEY]["GLOBAL_SUPPORT"] = new_support
-                _save_store()
-                st.success("✅ Global parameters saved successfully!")
-                st.rerun()
-
-        st.divider()
-        st.markdown(f"### ✏️ Agent KPI Override Editor")
-        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة. اكتب رقماً فقط في الحقل الذي تريد تثبيته لهذه الفترة الزمنية المحددة.")
-        
-        agent_opts = OFFICIAL_EXPERTS + ["🏆 Team AVG"]
-        sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
-        
-        cur = period_ovs.get(sel_agent, {})
-        def gv(k):
-            return str(cur.get(k, ""))
-
-        with st.form(f"ov_form_{sel_agent}"):
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                nout = st.text_input("Out Requests", value=gv("Out Requests"))
-                njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
-            with fc2:
-                nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
-                nem  = st.text_input("Email Counts", value=gv("Email Counts"))
-            with fc3:
-                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
-                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
-            
-            sc_col, rc_col = st.columns(2)
-            with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
-            with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
-
-        if do_save:
-            new_ov = {}
-            def parse_int(v):
-                try: return int(float(v))
-                except: return None
-            def parse_str(v):
-                return str(v).strip() if str(v).strip() else None
-
-            if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
-            if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
-            if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
-            if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
-            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
-            if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
-
-            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-            
-            if new_ov:
-                overrides()[PERIOD_KEY][sel_agent] = new_ov
-            else:
-                if sel_agent in overrides().get(PERIOD_KEY, {}):
-                    overrides()[PERIOD_KEY].pop(sel_agent)
-                    
-            _save_store()
-            st.success(f"✅ Override parameters saved specifically for period **{d_from} to {d_to}**.")
-            st.rerun()
-
-        if do_clear:
-            if PERIOD_KEY in overrides() and sel_agent in overrides()[PERIOD_KEY]:
-                overrides()[PERIOD_KEY].pop(sel_agent)
-                _save_store()
-                st.success(f"🔄 Cleared overrides for period **{d_from} to {d_to}**.")
-                st.rerun()
-            else:
-                st.warning("No active overrides found to clear for this period.")
-
-        active_ovs = overrides().get(PERIOD_KEY, {})
-        disp_ovs = {k: v for k, v in active_ovs.items() if k not in ["GLOBAL_TARGET", "GLOBAL_JHAH", "GLOBAL_SUPPORT"]}
-        if disp_ovs:
-            st.write("")
-            with st.expander("🗂️ Active Metric Overrides (This Period)"):
-                st.json(disp_ovs)
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
