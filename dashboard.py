@@ -797,6 +797,8 @@ with st.sidebar:
     prev_d_to = d_from - timedelta(days=1)
     prev_d_from = prev_d_to - timedelta(days=delta_days - 1)
     
+    PERIOD_KEY = f"{d_from}_{d_to}"
+    
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -1775,6 +1777,9 @@ with tab2:
             stats["_AFR_val"] = grp["Response Take (min)"].mean()
         else:
             stats["_AFR_val"] = 0
+
+        stats["_c_ok_sum"]            = grp["_c_ok"].sum()
+        stats["_c_all_sum"]           = grp["_c_all"].sum()
         
         sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
     else:
@@ -1784,6 +1789,8 @@ with tab2:
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
         sc["_AFR_val"] = 0
+        sc["_c_ok_sum"] = 0
+        sc["_c_all_sum"] = 0
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
@@ -1945,7 +1952,7 @@ with tab2:
         "Service Quality": f"{avg_qual:.1f}%"
     }
 
-    sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
+    sc.drop(columns=["_Service_Time_val", "_AFR_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
 
     sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
