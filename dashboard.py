@@ -980,6 +980,11 @@ if st.session_state.page == "settings":
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
+period_ovs = overrides().get(PERIOD_KEY, {})
+global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
+global_jhah = int(period_ovs.get("GLOBAL_JHAH", 0))
+global_support = int(period_ovs.get("GLOBAL_SUPPORT", 0))
+
 caption_text = (
     f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
     if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
@@ -990,7 +995,10 @@ st.caption(caption_text)
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
 # ══════════════════════════════════════════════════════════════════════════════════
-tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
+if is_admin():
+    tab1, tab2, tab3 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs", "✏️ Manual Overrides"])
+else:
+    tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
 
 # ── TAB 1 — Operational Insights ──────────────────────────────────────────────────
 with tab1:
@@ -1052,7 +1060,7 @@ with tab1:
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3 = st.columns(3)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1063,6 +1071,8 @@ with tab1:
     r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests (Manual)", f"{global_jhah:,}", "card-store", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests (Manual)", f"{global_support:,}", "card-frt", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1587,7 +1597,9 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             {"Metric": "Closed with Issue", "Value": issue},
             {"Metric": "Avg Tickets / Day", "Value": round(curr_avg_per_day, 1)},
             {"Metric": "AFR", "Value": h_afr},
-            {"Metric": "TAT", "Value": h_tat}
+            {"Metric": "TAT", "Value": h_tat},
+            {"Metric": "JHAH Requests (Manually)", "Value": global_jhah},
+            {"Metric": "Support Requests (Manually)", "Value": global_support}
         ]
         
         if not dfm.empty:
@@ -1692,22 +1704,6 @@ with tab2:
     k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
 
     st.write(""); st.divider()
-    
-    period_ovs = overrides().get(PERIOD_KEY, {})
-    global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
-
-    if is_admin():
-        col_t1, col_t2 = st.columns([1, 3])
-        with col_t1:
-            st.markdown(f"#### 🎯 Set Daily Target")
-            with st.form("global_target_form"):
-                new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
-                if st.form_submit_button("💾 Save Global Target", use_container_width=True):
-                    if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-                    overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target
-                    _save_store()
-                    st.success("✅ Target saved successfully!")
-                    st.rerun()
 
     OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
     df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
@@ -1822,7 +1818,7 @@ with tab2:
     for i, row in sc.iterrows():
         ov = period_ovs.get(row["Expert"], {})
         for col, val in ov.items(): 
-            if col != "GLOBAL_TARGET" and col in sc.columns:
+            if col not in ["GLOBAL_TARGET", "GLOBAL_JHAH", "GLOBAL_SUPPORT"] and col in sc.columns:
                 sc.at[i, col] = val
 
     # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
@@ -1904,7 +1900,7 @@ with tab2:
     
     team_ov = period_ovs.get("🏆 Team AVG", {})
     for col, val in team_ov.items():
-        if col != "GLOBAL_TARGET":
+        if col not in ["GLOBAL_TARGET", "GLOBAL_JHAH", "GLOBAL_SUPPORT"]:
             team_row[col] = val
 
     sc.drop(columns=["_Service_Time_val", "_AFR_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
@@ -1979,77 +1975,6 @@ with tab2:
         export_sc["Expert"] = export_sc["Expert"].apply(lambda x: str(x).replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", ""))
         csv_sc = export_sc.to_csv(index=False).encode('utf-8-sig')
         st.download_button(label="📥 Download Team Scorecard (CSV)", data=csv_sc, file_name=f"Team_Scorecard_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
-
-    if is_admin():
-        st.divider()
-        st.markdown(f"#### ✏️ Manual KPI Override Editor (Period: {d_from} to {d_to})")
-        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة. اكتب رقماً فقط في الحقل الذي تريد تثبيته لهذه الفترة الزمنية المحددة.")
-        
-        agent_opts = list(sc["Expert"]) + ["🏆 Team AVG"]
-        sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
-        
-        cur = period_ovs.get(sel_agent, {})
-        def gv(k):
-            return str(cur.get(k, ""))
-
-        with st.form(f"ov_form_{sel_agent}"):
-            fc1, fc2, fc3 = st.columns(3)
-            with fc1:
-                nout = st.text_input("Out Requests", value=gv("Out Requests"))
-                njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
-            with fc2:
-                nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
-                nem  = st.text_input("Email Counts", value=gv("Email Counts"))
-            with fc3:
-                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
-                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
-            
-            sc_col, rc_col = st.columns(2)
-            with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
-            with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
-
-        if do_save:
-            new_ov = {}
-            def parse_int(v):
-                try: return int(float(v))
-                except: return None
-            def parse_str(v):
-                return str(v).strip() if str(v).strip() else None
-
-            if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
-            if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
-            if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
-            if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
-            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
-            if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
-
-            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-            
-            if new_ov:
-                overrides()[PERIOD_KEY][sel_agent] = new_ov
-            else:
-                if sel_agent in overrides().get(PERIOD_KEY, {}):
-                    overrides()[PERIOD_KEY].pop(sel_agent)
-                    
-            _save_store()
-            st.success(f"✅ Override parameters saved specifically for period **{d_from} to {d_to}**.")
-            st.rerun()
-
-        if do_clear:
-            if PERIOD_KEY in overrides() and sel_agent in overrides()[PERIOD_KEY]:
-                overrides()[PERIOD_KEY].pop(sel_agent)
-                _save_store()
-                st.success(f"🔄 Cleared overrides for period **{d_from} to {d_to}**.")
-                st.rerun()
-            else:
-                st.warning("No active overrides found to clear for this period.")
-
-        active_ovs = overrides().get(PERIOD_KEY, {})
-        disp_ovs = {k: v for k, v in active_ovs.items() if k != "GLOBAL_TARGET"}
-        if disp_ovs:
-            st.write("")
-            with st.expander("🗂️ Active Metric Overrides (This Period)"):
-                st.json(disp_ovs)
         
         st.divider()
         st.markdown("#### ✉️ Performance Review Emails")
@@ -2155,6 +2080,95 @@ Team Leader"""
                 f'🌐 Open Draft in Gmail</a>', 
                 unsafe_allow_html=True
             )
+
+# ── TAB 3 — Manual Overrides (ADMIN ONLY) ─────────────────────────────────────────
+if is_admin():
+    with tab3:
+        st.markdown("### 🎯 Global Settings (This Period)")
+        with st.form("global_target_form"):
+            c_g1, c_g2, c_g3 = st.columns(3)
+            with c_g1: new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
+            with c_g2: new_jhah = st.number_input("Global JHAH Requests (Manual)", value=int(global_jhah), step=1, min_value=0)
+            with c_g3: new_support = st.number_input("Global Support Requests (Manual)", value=int(global_support), step=1, min_value=0)
+            
+            if st.form_submit_button("💾 Save Global Parameters", use_container_width=True):
+                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+                overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target
+                overrides()[PERIOD_KEY]["GLOBAL_JHAH"] = new_jhah
+                overrides()[PERIOD_KEY]["GLOBAL_SUPPORT"] = new_support
+                _save_store()
+                st.success("✅ Global parameters saved successfully!")
+                st.rerun()
+
+        st.divider()
+        st.markdown(f"### ✏️ Agent KPI Override Editor")
+        st.info("💡 **ملاحظة هامة:** اترك الحقل فارغاً (Empty) ليتم حسابه تلقائياً بمرونة. اكتب رقماً فقط في الحقل الذي تريد تثبيته لهذه الفترة الزمنية المحددة.")
+        
+        agent_opts = OFFICIAL_EXPERTS + ["🏆 Team AVG"]
+        sel_agent  = st.selectbox("Choose agent to edit", agent_opts, key="agent_ov_sel")
+        
+        cur = period_ovs.get(sel_agent, {})
+        def gv(k):
+            return str(cur.get(k, ""))
+
+        with st.form(f"ov_form_{sel_agent}"):
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                nout = st.text_input("Out Requests", value=gv("Out Requests"))
+                njh  = st.text_input("JHAH Requests", value=gv("JHAH Requests"))
+            with fc2:
+                nrfb = st.text_input("Reporting & Feedback", value=gv("Reporting & Feedback"))
+                nem  = st.text_input("Email Counts", value=gv("Email Counts"))
+            with fc3:
+                nafr = st.text_input("AFR (HH:MM:SS)", value=gv("AFR"))
+                nsq  = st.text_input("Service Quality (%)", value=gv("Service Quality"))
+            
+            sc_col, rc_col = st.columns(2)
+            with sc_col: do_save  = st.form_submit_button("💾 Save Override", use_container_width=True)
+            with rc_col: do_clear = st.form_submit_button("🔄 Clear Override", use_container_width=True)
+
+        if do_save:
+            new_ov = {}
+            def parse_int(v):
+                try: return int(float(v))
+                except: return None
+            def parse_str(v):
+                return str(v).strip() if str(v).strip() else None
+
+            if parse_int(nout) is not None: new_ov["Out Requests"] = parse_int(nout)
+            if parse_int(njh) is not None: new_ov["JHAH Requests"] = parse_int(njh)
+            if parse_int(nrfb) is not None: new_ov["Reporting & Feedback"] = parse_int(nrfb)
+            if parse_int(nem) is not None: new_ov["Email Counts"] = parse_int(nem)
+            if parse_str(nafr): new_ov["AFR"] = parse_str(nafr)
+            if parse_str(nsq): new_ov["Service Quality"] = parse_str(nsq)
+
+            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+            
+            if new_ov:
+                overrides()[PERIOD_KEY][sel_agent] = new_ov
+            else:
+                if sel_agent in overrides().get(PERIOD_KEY, {}):
+                    overrides()[PERIOD_KEY].pop(sel_agent)
+                    
+            _save_store()
+            st.success(f"✅ Override parameters saved specifically for period **{d_from} to {d_to}**.")
+            st.rerun()
+
+        if do_clear:
+            if PERIOD_KEY in overrides() and sel_agent in overrides()[PERIOD_KEY]:
+                overrides()[PERIOD_KEY].pop(sel_agent)
+                _save_store()
+                st.success(f"🔄 Cleared overrides for period **{d_from} to {d_to}**.")
+                st.rerun()
+            else:
+                st.warning("No active overrides found to clear for this period.")
+
+        active_ovs = overrides().get(PERIOD_KEY, {})
+        disp_ovs = {k: v for k, v in active_ovs.items() if k not in ["GLOBAL_TARGET", "GLOBAL_JHAH", "GLOBAL_SUPPORT"]}
+        if disp_ovs:
+            st.write("")
+            with st.expander("🗂️ Active Metric Overrides (This Period)"):
+                st.json(disp_ovs)
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
