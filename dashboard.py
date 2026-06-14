@@ -79,7 +79,8 @@ def _load_store() -> dict:
                 "agent_name": "Yahia Ali Shafei",
             }
         },
-        "requests":  []
+        "requests":  [],
+        "overrides": {},
     }
     
     if _DATA_FILE.exists():
@@ -90,6 +91,8 @@ def _load_store() -> dict:
                     default_store["users"][k] = v
             if "requests" in loaded:
                 default_store["requests"] = loaded["requests"]
+            if "overrides" in loaded:
+                default_store["overrides"] = loaded["overrides"]
         except Exception:
             pass
             
@@ -362,6 +365,7 @@ if "view_request_form" not in st.session_state:
 # ── Helpers لإدارة العمليات التشغيلية ───────────────────────────────────────────────
 def users()     -> dict: return st.session_state.store["users"]
 def requests()  -> list: return st.session_state.store["requests"]
+def overrides() -> dict: return st.session_state.store["overrides"]
 def me()        -> str:  return st.session_state.username
 def is_admin()  -> bool: return st.session_state.role == "admin"
 def cur_user()  -> dict: return users().get(me(), {})
@@ -1019,6 +1023,9 @@ if st.session_state.page == "settings":
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
+period_ovs = overrides().get(PERIOD_KEY, {})
+global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
+
 caption_text = (
     f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
     if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
@@ -1029,7 +1036,10 @@ st.caption(caption_text)
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
 # ══════════════════════════════════════════════════════════════════════════════════
-tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
+if is_admin():
+    tab1, tab2, tab3 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs", "✏️ Manual Overrides"])
+else:
+    tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
 
 # ── TAB 1 — Operational Insights ──────────────────────────────────────────────────
 with tab1:
@@ -1102,8 +1112,8 @@ with tab1:
     r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests (Manual)", f"{global_jhah:,}", "card-store", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests (Manual)", f"{global_support:,}", "card-frt", neutral=True), unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests (Sheet)", f"{global_jhah:,}", "card-store", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests (Sheet)", f"{global_support:,}", "card-frt", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1716,7 +1726,7 @@ with tab2:
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes 
+    # KPI Changes (Percentage vs Percentage for completion/issue rates)
     chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
     chg_kpi_ok = calc_change(kpi_ok_pct, prev_kpi_ok_pct)  
     chg_kpi_iss = calc_change(kpi_iss_pct, prev_kpi_iss_pct)  
@@ -1765,9 +1775,6 @@ with tab2:
             stats["_AFR_val"] = grp["Response Take (min)"].mean()
         else:
             stats["_AFR_val"] = 0
-
-        stats["_c_ok_sum"]            = grp["_c_ok"].sum()
-        stats["_c_all_sum"]           = grp["_c_all"].sum()
         
         sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
     else:
@@ -1777,8 +1784,6 @@ with tab2:
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
         sc["_AFR_val"] = 0
-        sc["_c_ok_sum"] = 0
-        sc["_c_all_sum"] = 0
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
@@ -1839,9 +1844,7 @@ with tab2:
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
-    c_all = sc["_c_all_sum"].fillna(0).replace(0, 1)
-    c_ok = sc["_c_ok_sum"].fillna(0)
-    sc["Service Quality"] = (c_ok / c_all * 100).round(1).astype(str) + "%"
+    sc["Service Quality"] = "100.0%"
 
     # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab)
     for i, row in sc.iterrows():
@@ -1857,8 +1860,8 @@ with tab2:
                 try: sc.at[i, "Out Requests"] = int(float(sheet_data["Support Req"]))
                 except: pass
                 
-            if sheet_data["Quality"]:
-                q_str = sheet_data["Quality"]
+            if str(sheet_data["Quality"]).strip():
+                q_str = str(sheet_data["Quality"]).strip()
                 if "%" not in q_str:
                     try: q_str = f"{float(q_str):.1f}%"
                     except: pass
@@ -1901,8 +1904,11 @@ with tab2:
     else:
         sc["Rank"] = []
 
-    tavg_cpd = sc["Cases/Day"].mean()
-    sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
+    if global_target > 0:
+        sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
+    else:
+        tavg_cpd = sc["Cases/Day"].mean()
+        sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
     team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
@@ -1939,7 +1945,7 @@ with tab2:
         "Service Quality": f"{avg_qual:.1f}%"
     }
 
-    sc.drop(columns=["_Service_Time_val", "_AFR_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
+    sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
 
     sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
@@ -2116,6 +2122,21 @@ Team Leader"""
                 f'🌐 Open Draft in Gmail</a>', 
                 unsafe_allow_html=True
             )
+
+# ── TAB 3 — Manual Overrides (ADMIN ONLY) ─────────────────────────────────────────
+if is_admin():
+    with tab3:
+        st.markdown("### 🎯 Global Settings (This Period)")
+        with st.form("global_target_form"):
+            c_g1, c_g2, c_g3 = st.columns(3)
+            with c_g1: new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
+            
+            if st.form_submit_button("💾 Save Global Parameters", use_container_width=True):
+                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+                overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target
+                _save_store()
+                st.success("✅ Global parameters saved successfully!")
+                st.rerun()
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
