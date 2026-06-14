@@ -270,16 +270,25 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     background: linear-gradient(135deg, #065f46 0%, #047857 100%) !important; 
     border: 2px solid #064e3b !important; 
     color: #ffffff !important; 
+}
+.card-dark-green .kpi-label { 
+    color: #d1fae5 !important; 
+}
+
+.card-dark-green-small { 
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%) !important; 
+    border: 2px solid #064e3b !important; 
+    color: #ffffff !important; 
     min-height: 90px !important;
     padding: 0.8rem 0.5rem !important;
     border-radius: 14px !important;
 }
-.card-dark-green .kpi-label { 
+.card-dark-green-small .kpi-label { 
     color: #d1fae5 !important; 
     font-size: 0.75rem !important;
     margin-bottom: 0.2rem !important;
 }
-.card-dark-green .kpi-value { 
+.card-dark-green-small .kpi-value { 
     font-size: 1.45rem !important; 
 }
 
@@ -1146,7 +1155,7 @@ with tab1:
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.2, 1.2, 1.2, 0.9, 0.9])
     
-    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-dark-green", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
@@ -1155,8 +1164,8 @@ with tab1:
     r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-dark-green", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-dark-green", neutral=True), unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-dark-green-small", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-dark-green-small", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1778,7 +1787,7 @@ with tab2:
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-total", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
+    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-dark-green", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
     k2.markdown(kpi_colored("Avg Tickets / Day",  f"{kpi_curr_avg_per_day:.1f}", "card-actions", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
     k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
     k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.7;'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
