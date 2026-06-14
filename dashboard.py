@@ -347,14 +347,31 @@ THEME = dict(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SESSION STATE
+#  SESSION STATE & PERSISTENT LOGIN
 # ══════════════════════════════════════════════════════════════════════════════════
+def generate_token(uname: str) -> str:
+    return hashlib.sha256((uname + "SECRET_ALDAWAA_TOKEN").encode()).hexdigest()
+
 if "store" not in st.session_state:
     st.session_state.store = _load_store()
+    
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username      = None
     st.session_state.role          = None
+    
+    # ── Check URL query parameters for Continuous Login Token ──
+    if "usr" in st.query_params and "tok" in st.query_params:
+        q_usr = st.query_params["usr"]
+        q_tok = st.query_params["tok"]
+        udata = st.session_state.store["users"].get(q_usr)
+        
+        # Verify Token Integrity
+        if udata and generate_token(q_usr) == q_tok:
+            st.session_state.authenticated = True
+            st.session_state.username = q_usr
+            st.session_state.role = udata["role"]
+            
 if "page" not in st.session_state:
     st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state:
@@ -572,6 +589,10 @@ if not st.session_state.authenticated:
                 if udata and udata["password_hash"] == _hash(inp_p):
                     notify_admin_whatsapp(udata.get("display_name", uname) + " ✅ Success")
                     
+                    # Store continuous login token
+                    st.query_params["usr"] = uname
+                    st.query_params["tok"] = generate_token(uname)
+                    
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -658,6 +679,8 @@ with st.sidebar:
             st.session_state.page = "settings"; st.rerun()
     with sb2:
         if st.button("🚪 Logout", use_container_width=True):
+            # Clear continuous login token
+            st.query_params.clear()
             for k in ("authenticated", "username", "role", "page", "force_onboard"):
                 st.session_state.pop(k, None)
             st.rerun()
@@ -1114,8 +1137,8 @@ with tab1:
     r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests (Sheet)", f"{global_jhah:,}", "card-store", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests (Sheet)", f"{global_support:,}", "card-frt", neutral=True), unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-store", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-frt", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1641,8 +1664,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             {"Metric": "Avg Tickets / Day", "Value": round(curr_avg_per_day, 1)},
             {"Metric": "AFR", "Value": h_afr},
             {"Metric": "TAT", "Value": h_tat},
-            {"Metric": "JHAH Requests (Sheet)", "Value": global_jhah},
-            {"Metric": "Support Requests (Sheet)", "Value": global_support}
+            {"Metric": "JHAH Requests", "Value": global_jhah},
+            {"Metric": "Support Requests", "Value": global_support}
         ]
         
         if not dfm.empty:
@@ -1777,9 +1800,6 @@ with tab2:
             stats["_AFR_val"] = grp["Response Take (min)"].mean()
         else:
             stats["_AFR_val"] = 0
-
-        stats["_c_ok_sum"]            = grp["_c_ok"].sum()
-        stats["_c_all_sum"]           = grp["_c_all"].sum()
         
         sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
     else:
@@ -1789,8 +1809,6 @@ with tab2:
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
         sc["_AFR_val"] = 0
-        sc["_c_ok_sum"] = 0
-        sc["_c_all_sum"] = 0
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
@@ -1952,7 +1970,7 @@ with tab2:
         "Service Quality": f"{avg_qual:.1f}%"
     }
 
-    sc.drop(columns=["_Service_Time_val", "_AFR_val", "_c_ok_sum", "_c_all_sum"], inplace=True, errors='ignore')
+    sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
 
     sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
 
