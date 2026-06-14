@@ -265,6 +265,24 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 .card-store     { background: #fffbeb; border: 2px solid #fde047; color: #b45309; }
 .card-actions   { background: #eff6ff; border: 2px solid #93c5fd; color: #1e3a8a; }
 
+/* ══ NEW SMALL DARK GREEN CARD ══════════════════════════════════════ */
+.card-dark-green { 
+    background: linear-gradient(135deg, #065f46 0%, #047857 100%) !important; 
+    border: 2px solid #064e3b !important; 
+    color: #ffffff !important; 
+    min-height: 90px !important;
+    padding: 0.8rem 0.5rem !important;
+    border-radius: 14px !important;
+}
+.card-dark-green .kpi-label { 
+    color: #d1fae5 !important; 
+    font-size: 0.75rem !important;
+    margin-bottom: 0.2rem !important;
+}
+.card-dark-green .kpi-value { 
+    font-size: 1.45rem !important; 
+}
+
 /* ══ AUTHENTICATION MODULE SCREEN RESKIN ═════════════════════════════ */
 .login-wrap {
     max-width:460px; margin:5rem auto 0; padding:2.8rem 2.5rem 1.5rem;
@@ -1126,7 +1144,7 @@ with tab1:
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.2, 1.2, 1.2, 0.9, 0.9])
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-total", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1135,10 +1153,10 @@ with tab1:
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.7;'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("AFR (Average First Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-aht", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-store", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-frt", neutral=True), unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-dark-green", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-dark-green", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1800,6 +1818,9 @@ with tab2:
             stats["_AFR_val"] = grp["Response Take (min)"].mean()
         else:
             stats["_AFR_val"] = 0
+
+        stats["_c_ok_sum"]            = grp["_c_ok"].sum()
+        stats["_c_all_sum"]           = grp["_c_all"].sum()
         
         sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
     else:
@@ -1809,6 +1830,8 @@ with tab2:
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
         sc["_AFR_val"] = 0
+        sc["_c_ok_sum"] = 0
+        sc["_c_all_sum"] = 0
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
