@@ -1099,8 +1099,8 @@ period_ovs = overrides().get(PERIOD_KEY, {})
 global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
 
 caption_text = (
-    f"🔍 Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
-    if d_from == d_to else f"🔍 Search Period: {d_from} to {d_to}"
+    f"Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
+    if d_from == d_to else f"Search Period: {d_from} to {d_to}"
 )
 st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
@@ -1204,6 +1204,7 @@ with tab1:
 
         bar_labels  = list(req_pct.index)
         bar_values  = list(req_pct.values)
+        bar_counts  = [int(x) for x in req_counts.values] 
         bar_colors  = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
 
         SB_COLORS = {
@@ -1257,7 +1258,7 @@ with tab1:
 
         import json as _json
         sb_payloads_json = _json.dumps(sb_payloads)
-        bar_data_json    = _json.dumps({"labels": bar_labels, "values": bar_values, "colors": bar_colors})
+        bar_data_json    = _json.dumps({"labels": bar_labels, "values": bar_values, "counts": bar_counts, "colors": bar_colors})
         
         component_height = max(650, len(bar_labels) * 55 + 100)
 
@@ -1345,7 +1346,8 @@ const barTrace = {{
   orientation: "h",
   x: BAR_DATA.values,
   y: BAR_DATA.labels,
-  text: BAR_DATA.values.map(v => v.toFixed(1) + "%"),
+  customdata: BAR_DATA.counts,
+  text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"),
   textposition: "inside",
   insidetextanchor: "middle",
   textfont: {{ color: "#ffffff", size: 13, weight: "bold" }},
@@ -1354,7 +1356,7 @@ const barTrace = {{
     opacity: BAR_DATA.colors.map(() => 1),
     line: {{ color: 'rgba(0,0,0,0.4)', width: 1.5 }}
   }},
-  hovertemplate: "<b>%{{y}}</b><br>%{{x:.1f}}%<extra></extra>",
+  hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>",
 }};
 
 const barLayout = {{
