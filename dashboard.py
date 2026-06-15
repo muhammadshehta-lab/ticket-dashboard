@@ -811,8 +811,6 @@ with st.sidebar:
         st.warning("Empty source records."); st.stop()
 
     # ── DYNAMIC DEFAULT DATE CALCULATOR (LAST ENDED MONTH) ──
-    st.markdown("### 🔍 Global Filters")
-    
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
     if not raw_dates.empty:
         max_uploaded_date = raw_dates.max()
@@ -844,6 +842,7 @@ with st.sidebar:
     PERIOD_KEY = f"{d_from}_{d_to}"
     
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
+    sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.divider()
@@ -916,6 +915,10 @@ df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"]
 if sel_hic:    
     df = df[df["HIC"].isin(sel_hic)]
     df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
+
+if sel_req_type:
+    df = df[df["Request Type"].isin(sel_req_type)]
+    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS PANEL
