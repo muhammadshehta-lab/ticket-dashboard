@@ -1170,7 +1170,7 @@ with tab1:
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-dark-green", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1708,8 +1708,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             {"Metric": "Avg Tickets / Day", "Value": round(curr_avg_per_day, 1)},
             {"Metric": "AFR", "Value": h_afr},
             {"Metric": "TAT", "Value": h_tat},
-            {"Metric": "JHAH Requests (Sheet)", "Value": global_jhah},
-            {"Metric": "Support Requests (Sheet)", "Value": global_support}
+            {"Metric": "JHAH Requests", "Value": global_jhah},
+            {"Metric": "Support Requests", "Value": global_support}
         ]
         
         if not dfm.empty:
