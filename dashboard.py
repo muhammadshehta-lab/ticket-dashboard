@@ -117,13 +117,13 @@ def notify_admin_whatsapp(logged_in_user):
         pass
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  CSS  — PUFF BACKGROUND THEME & BOLD/LARGE TYPOGRAPHY BLOCK
+#  CSS  — PROFESSIONAL CORPORATE THEME
 # ══════════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ══ GLOBAL APP CANVAS ADJUSTMENT (PUFF THEME) ══════════════════════ */
+/* ══ GLOBAL APP CANVAS ADJUSTMENT ══════════════════════ */
 .stApp {
-    background: radial-gradient(ellipse at 20% 10%, #f7f1e1 0%, #f4ebd0 40%, #ebdcb9 100%) !important;
+    background: #f1f5f9 !important; /* Cool, clean Slate Gray */
     color: #0f172a !important;
 }
 
@@ -133,101 +133,102 @@ st.markdown("""
     font-weight: 600 !important;
 }
 
-/* ══ HEADER ELEMENT TYPOGRAPHY (LARGE & BOLD 900) ═══════════════════ */
+/* ══ HEADER ELEMENT TYPOGRAPHY ═══════════════════ */
 h1 { font-size: 2.5rem !important; font-weight: 900 !important; color: #0f172a !important; }
-h2 { font-size: 2.15rem !important; font-weight: 900 !important; color: #0f172a !important; margin-top: 1rem !important; }
-h3 { font-size: 1.65rem !important; font-weight: 900 !important; color: #0f172a !important; }
-h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a !important; }
+h2 { font-size: 2.15rem !important; font-weight: 900 !important; color: #1e293b !important; margin-top: 1rem !important; }
+h3 { font-size: 1.65rem !important; font-weight: 800 !important; color: #1e293b !important; }
+h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 !important; }
 
 .stMarkdown p { 
-    color: #1e293b !important; 
+    color: #334155 !important; 
     font-size: 1.1rem !important; 
     font-weight: 600 !important; 
 }
 
 /* ══ SIDEBAR RESKIN ══════════════════════════════════════════════════ */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #f1e6c7 0%, #ebdcb9 100%) !important;
-    border-right: 2px solid #cbd5e1 !important;
+    background: #ffffff !important;
+    border-right: 1px solid #e2e8f0 !important;
 }
 [data-testid="stSidebar"] * { 
-    color: #0f172a !important; 
+    color: #1e293b !important; 
     font-weight: 700 !important;
 }
 [data-testid="stSidebar"] label p {
     font-size: 1.15rem !important;
     font-weight: 800 !important;
+    color: #0f172a !important;
 }
 [data-testid="stSidebar"] .stButton button {
-    background: linear-gradient(135deg, #ffffff, #f4ebd0) !important;
-    border: 2px solid #bba370 !important;
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
     color: #0f172a !important;
-    border-radius: 10px !important;
-    font-weight: 800 !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
     font-size: 1.05rem !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 [data-testid="stSidebar"] .stButton button:hover {
-    background: linear-gradient(135deg, #ebdcb9, #dcb98a) !important;
-    border-color: #0f172a !important;
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
 }
 
 /* ══ TABS NAVIGATION TYPOGRAPHY Scaling ═════════════════════════════ */
 [data-testid="stTabs"] [data-baseweb="tab"] {
     background: transparent; 
-    color: #475569 !important; 
-    font-weight: 800 !important;
-    font-size: 1.2rem !important;
+    color: #64748b !important; 
+    font-weight: 700 !important;
+    font-size: 1.15rem !important;
     padding-bottom: 8px !important;
 }
 [data-testid="stTabs"] [aria-selected="true"] {
-    color: #1d4ed8 !important; 
-    border-bottom: 3px solid #1d4ed8 !important;
+    color: #2563eb !important; 
+    border-bottom: 3px solid #2563eb !important;
 }
 
 /* Form Input Layout Contrast Optimization */
 .stTextInput input, .stNumberInput input, .stSelectbox select, .stDateInput input {
     background: #ffffff !important; 
-    border: 2px solid #bba370 !important;
+    border: 1px solid #cbd5e1 !important;
     color: #0f172a !important; 
-    border-radius: 10px !important;
-    font-weight: 700 !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
     font-size: 1.05rem !important;
 }
 .stTextInput input:focus, .stNumberInput input:focus {
-    border-color: #1d4ed8 !important;
-    box-shadow: 0 0 0 3px rgba(29,78,216,0.2) !important;
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
 }
 
 .stButton > button {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-    border: 2px solid #1e40af !important; 
+    background: #2563eb !important;
+    border: 1px solid #1d4ed8 !important; 
     color: #ffffff !important;
-    border-radius: 10px !important; 
-    font-weight: 800 !important;
+    border-radius: 8px !important; 
+    font-weight: 700 !important;
     font-size: 1.1rem !important;
     padding: 0.5rem 1.5rem !important;
-    box-shadow: 0 4px 6px rgba(29,78,216,0.2);
+    box-shadow: 0 2px 4px rgba(37,99,235,0.2);
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
-    border-color: #0f172a !important; 
+    background: #1d4ed8 !important;
+    border-color: #1e40af !important; 
     transform: translateY(-1px);
-    box-shadow: 0 6px 15px rgba(29,78,216,0.35);
+    box-shadow: 0 4px 6px rgba(37,99,235,0.3);
 }
 
 .stAlert { 
-    border-radius: 12px !important; 
+    border-radius: 8px !important; 
     background-color: #ffffff !important; 
     color: #1e40af !important; 
-    border: 2px solid #93c5fd !important;
-    font-weight: 700 !important;
+    border: 1px solid #bfdbfe !important;
+    font-weight: 600 !important;
 }
 
-/* ══ HIGH-CONTRAST BOLD KPI CARDS ═══════════════════════════════════ */
+/* ══ HIGH-CONTRAST BOLD KPI CARDS (CORPORATE THEME) ═════════════════ */
 .kpi-container {
     position: relative; 
-    border-radius: 18px; 
+    border-radius: 12px; 
     padding: 1.4rem 1.1rem; 
     text-align: center;
     min-height: 124px; 
@@ -235,51 +236,48 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     flex-direction: column;
     justify-content: center; 
     margin-bottom: 1rem;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.06);
-    border-width: 2px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+    border-width: 1px !important;
+    border-style: solid !important;
+    background: #ffffff;
 }
 .kpi-container:hover { 
-    transform: translateY(-3px); 
-    box-shadow: 0 12px 20px rgba(0,0,0,0.1); 
+    transform: translateY(-2px); 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05); 
 }
 .kpi-label {
-    font-size: .85rem !important; 
-    letter-spacing: .08em; 
+    font-size: .8rem !important; 
+    letter-spacing: .05em; 
     text-transform: uppercase;
     margin-bottom: .5rem; 
-    font-weight: 800 !important; 
-    color: #334155 !important;
+    font-weight: 700 !important; 
+    color: #64748b !important;
 }
 .kpi-value { 
-    font-size: 1.95rem !important; 
-    font-weight: 900 !important; 
+    font-size: 1.9rem !important; 
+    font-weight: 800 !important; 
     letter-spacing: -.02em; 
+    color: #0f172a !important;
 }
 
-.card-total     { background: #e0f2fe; border: 2px solid #7dd3fc; color: #0369a1; }
-.card-completed { background: #dcfce7; border: 2px solid #86efac; color: #166534; }
-.card-issue     { background: #fee2e2; border: 2px solid #fca5a5; color: #991b1b; }
-.card-frt       { background: #fce7f3; border: 2px solid #f9a8d4; color: #9d174d; }
-.card-aht       { background: #f3e8ff; border: 2px solid #d8b4fe; color: #6b21a8; }
-.card-tat       { background: #ecfeff; border: 2px solid #67e8f9; color: #155e75; }
-.card-store     { background: #fffbeb; border: 2px solid #fde047; color: #b45309; }
-.card-actions   { background: #eff6ff; border: 2px solid #93c5fd; color: #1e3a8a; }
+/* Card Themes */
+.card-primary { border-color: #cbd5e1 !important; border-top: 4px solid #2563eb !important; }
+.card-neutral { border-color: #e2e8f0 !important; border-top: 4px solid #94a3b8 !important; }
 
-/* ══ NEW BRIGHT GREEN CARD ══════════════════════════════════════ */
-.card-bright-green { 
-    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important; 
-    border: 2px solid #064e3b !important; 
-    color: #ffffff !important; 
-}
-.card-bright-green .kpi-label { 
-    color: #d1fae5 !important; 
-}
+/* Keep Semantic Colors for Success/Danger */
+.card-success { background: #f0fdf4 !important; border-color: #bbf7d0 !important; border-top: 4px solid #16a34a !important; }
+.card-success .kpi-label { color: #166534 !important; }
+.card-success .kpi-value { color: #14532d !important; }
+
+.card-danger { background: #fef2f2 !important; border-color: #fecaca !important; border-top: 4px solid #dc2626 !important; }
+.card-danger .kpi-label { color: #991b1b !important; }
+.card-danger .kpi-value { color: #7f1d1d !important; }
 
 /* ══ MODIFIER FOR SMALLER KPI CARDS ═════════════════════════════════ */
 .card-small {
     min-height: 90px !important;
     padding: 0.8rem 0.5rem !important;
-    border-radius: 14px !important;
+    border-radius: 10px !important;
 }
 .card-small .kpi-label { 
     font-size: 0.72rem !important;
@@ -293,26 +291,23 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 .login-wrap {
     max-width:460px; margin:5rem auto 0; padding:2.8rem 2.5rem 1.5rem;
     background: #ffffff;
-    border:2px solid #bba370; border-radius:22px;
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+    border:1px solid #cbd5e1; border-radius:16px;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
 }
 .login-title {
-    font-size: 2rem !important; font-weight: 900 !important; text-align: center; margin-bottom: .4rem;
-    background: linear-gradient(90deg, #1d4ed8, #2563eb, #047857);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-size: 2rem !important; font-weight: 800 !important; text-align: center; margin-bottom: .4rem;
+    color: #1e293b;
 }
-.login-sub { font-size: 1rem !important; text-align: center; color: #475569; margin-bottom: 2rem; font-weight: 700 !important; }
+.login-sub { font-size: 1rem !important; text-align: center; color: #64748b; margin-bottom: 2rem; font-weight: 600 !important; }
 
 /* ══ SYSTEM BADGES & NOTIFICATIONS ════════════════════════════════════ */
-.badge { display:inline-block; font-size:.72rem !important; border-radius:7px; padding:3px 11px; margin-left:6px; font-weight:900; letter-spacing:.08em; }
-.badge-admin  { background:#dbeafe; border:2px solid #3b82f6; color:#1d4ed8; }
-.badge-expert { background:#dcfce7; border:2px solid #22c55e; color:#166534; }
+.badge { display:inline-block; font-size:.72rem !important; border-radius:6px; padding:3px 11px; margin-left:6px; font-weight:800; letter-spacing:.05em; }
+.badge-admin  { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+.badge-expert { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
 
-.req-pending  { background:#fef3c7; border:2px solid #f59e0b; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#78350f; font-size:.95rem; font-weight:700; }
-.req-approved { background:#dcfce7; border:2px solid #22c55e; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#166534; font-size:.95rem; font-weight:700; }
-.req-rejected { background:#fee2e2; border:2px solid #ef4444; border-radius:12px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#991b1b; font-size:.95rem; font-weight:700; }
+.req-pending  { background:#fffbeb; border:1px solid #fde047; border-radius:8px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#92400e; font-size:.95rem; font-weight:600; }
 
-.section-card { background:#ffffff; border:2px solid #cbd5e1; border-radius:16px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
+.section-card { background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 
 /* ══ FULL-WIDTH CUSTOM HTML TABLE STYLING FOR SCORECARD ═════════════ */
 .scorecard-container {
@@ -320,8 +315,9 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     overflow-x: auto;
     margin-top: 1rem;
     margin-bottom: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    border: 1px solid #e2e8f0;
 }
 .scorecard-container table {
     width: 100%;
@@ -331,32 +327,30 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
     table-layout: auto;
 }
 .scorecard-container th {
-    background-color: #1e40af !important; /* Deep Professional Blue */
-    color: #ffffff !important;            /* White Text */
-    font-weight: 900 !important;          /* Extra Bold */
-    font-size: 0.95rem !important;        /* Slightly reduced for better fit */
-    text-align: center !important;        /* Centered Header */
-    padding: 8px 5px !important;          /* Reduced padding */
-    white-space: normal !important;       /* Allow wrapping to save horizontal space */
-    border: 1px solid #cbd5e1;
+    background-color: #f8fafc !important; 
+    color: #334155 !important;            
+    font-weight: 800 !important;          
+    font-size: 0.9rem !important;        
+    text-align: center !important;        
+    padding: 10px 8px !important;          
+    white-space: normal !important;       
+    border-bottom: 2px solid #cbd5e1;
     line-height: 1.2;
-    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 .scorecard-container td {
-    text-align: center !important;        /* Centered Data */
-    padding: 8px 5px !important;          /* Reduced padding */
-    font-size: 0.95rem !important;        /* Slightly reduced for better fit */
-    border: 1px solid #e2e8f0;
-    white-space: nowrap;                  /* Keep numbers on a single line */
-    vertical-align: middle;
+    text-align: center !important;        
+    padding: 10px 8px !important;          
+    font-size: 0.95rem !important;        
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+    white-space: nowrap;                  
 }
-/* Ensure the Expert column remains visibly strong */
 .scorecard-container td:first-child {
-    font-weight: 900 !important;
-    color: #0f172a !important;
+    font-weight: 700 !important;
     text-align: left !important;
-    padding-left: 10px !important;
-    white-space: nowrap;                  /* Keep names on a single line */
+    padding-left: 12px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -365,8 +359,8 @@ h4 { font-size: 1.35rem !important; font-weight: 900 !important; color: #0f172a 
 THEME = dict(
     template="plotly_white",
     paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(247,241,225,0.6)",
-    font_color="#0f172a",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font_color="#1e293b",
     margin=dict(l=10, r=10, t=55, b=10)
 )
 
@@ -472,16 +466,16 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
         else:
             if change > 0:
                 arrow = "▲"
-                color = "#ef4444" if inverse else "#10b981" 
+                color = "#dc2626" if inverse else "#16a34a" 
             elif change < 0:
                 arrow = "▼"
-                color = "#10b981" if inverse else "#ef4444" 
+                color = "#16a34a" if inverse else "#dc2626" 
             else:
                 arrow = "−"
                 color = "#94a3b8" 
         
-        bg_color = color + "20" 
-        change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 800; color: {color}; background-color: {bg_color}; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">{arrow} {abs(change):.1f}%</div>'
+        bg_color = color + "15" # Very transparent background
+        change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: {color}; background-color: {bg_color};">{arrow} {abs(change):.1f}%</div>'
         
     return (f'<div class="kpi-container {cls}">'
             f'<div class="kpi-label">{label}</div>'
@@ -1081,12 +1075,7 @@ if st.session_state.page == "settings":
 period_ovs = overrides().get(PERIOD_KEY, {})
 global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
 
-caption_text = (
-    f"Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
-    if d_from == d_to else f"Search Period: {d_from} to {d_to}"
-)
 st.markdown("## 💊 In-Store Requests Matrix")
-st.caption(caption_text)
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
@@ -1158,17 +1147,17 @@ with tab1:
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
     
-    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-bright-green", chg_total, neutral=True),     unsafe_allow_html=True)
-    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
-    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-actions", chg_actions, neutral=True),  unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.7;'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-aht card-small", chg_afr, inverse=True),       unsafe_allow_html=True)
-    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-bright-green card-small", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-bright-green card-small", neutral=True), unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-neutral card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-neutral card-small", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-neutral card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1182,8 +1171,7 @@ with tab1:
         dfm_work["Response Tier"] = dfm_work["Response Take (min)"].apply(assign_time_tier)
         dfm_work["Service Tier"]  = dfm_work["Request Take (min)"].apply(assign_time_tier)
 
-        bar_palette = ["#0d9488", "#c026d3", "#d97706", "#4338ca", "#475569",
-                       "#0284c7", "#65a30d", "#e11d48", "#7e22ce", "#ea580c"]
+        bar_palette = ["#1e40af", "#3b82f6", "#0ea5e9", "#0284c7", "#0d9488", "#14b8a6", "#475569", "#64748b", "#8b5cf6", "#a855f7"]
 
         bar_labels  = list(req_pct.index)
         bar_values  = list(req_pct.values)
@@ -1192,12 +1180,12 @@ with tab1:
 
         SB_COLORS = {
             "Response Time":      "#3b82f6",
-            "Service Resolution": "#10b981",
-            "Under 15 Mins":      "#2ea44f",
-            "15-30 Mins":         "#2188ff",
-            "30-45 Mins":         "#bc8cff",
-            "45-60 Mins":         "#f9c513",
-            "Over 1 Hour":        "#ea4a5a",
+            "Service Resolution": "#0ea5e9",
+            "Under 15 Mins":      "#22c55e",
+            "15-30 Mins":         "#3b82f6",
+            "30-45 Mins":         "#8b5cf6",
+            "45-60 Mins":         "#f59e0b",
+            "Over 1 Hour":        "#ef4444",
         }
 
         sb_payloads = {}   
@@ -1224,18 +1212,18 @@ with tab1:
                 rt_total = int(rd.sum())
                 lbl.append("Response Time");      par.append("");               val.append(rt_total); col.append(SB_COLORS["Response Time"])
                 for tier, cnt in rd.items():
-                    lbl.append(tier); par.append("Response Time"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cccccc"))
+                    lbl.append(tier); par.append("Response Time"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
 
                 sr_total = int(sd.sum())
                 lbl.append("Service Resolution"); par.append("");               val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
                 for tier, cnt in sd.items():
-                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cccccc"))
+                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
             else:
                 sd = sub.groupby("Service Tier").size()
                 sr_total = int(sd.sum())
                 lbl.append("Service Resolution"); par.append("");               val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
                 for tier, cnt in sd.items():
-                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cccccc"))
+                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
 
             sb_payloads[rt] = {"labels": lbl, "parents": par, "values": val, "colors": col}
 
@@ -1262,11 +1250,11 @@ with tab1:
     align-items: stretch;
   }}
   .chart-card {{
-    background: linear-gradient(145deg, #fdfbf7, #ebe1c5);
-    border-radius: 20px;
+    background: #ffffff;
+    border-radius: 12px;
     padding: 20px;
-    box-shadow: 8px 8px 16px rgba(187, 163, 112, 0.4), -8px -8px 16px rgba(255, 255, 255, 0.8);
-    border: 1px solid #f4ebd0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+    border: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
   }}
@@ -1278,20 +1266,20 @@ with tab1:
   }}
   #sb-title {{
     font-size: 1.25rem;
-    font-weight: 900;
-    color: #0f172a;
+    font-weight: 800;
+    color: #1e293b;
     margin-bottom: 6px;
     min-height: 40px;
     line-height: 1.3;
   }}
   #sb-title span {{
-    color: #3b82f6;
+    color: #2563eb;
     font-size: 1.05rem;
   }}
   #bar-title {{
     font-size: 1.05rem;
-    font-weight: 800;
-    color: #0f172a;
+    font-weight: 700;
+    color: #1e293b;
     margin-bottom: 4px;
   }}
   #bar-hint {{
@@ -1337,7 +1325,7 @@ const barTrace = {{
   marker: {{ 
     color: BAR_DATA.colors, 
     opacity: BAR_DATA.colors.map(() => 1),
-    line: {{ color: 'rgba(0,0,0,0.4)', width: 1.5 }}
+    line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }}
   }},
   hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>",
 }};
@@ -1348,13 +1336,13 @@ const barLayout = {{
   xaxis: {{ visible: false }}, 
   yaxis: {{
     autorange: "reversed",
-    tickfont: {{ size: 12, color: "#0f172a", weight: "bold" }},
+    tickfont: {{ size: 12, color: "#334155", weight: "bold" }},
     fixedrange: true,
     automargin: true,
   }},
   plot_bgcolor:  "rgba(0,0,0,0)",
   paper_bgcolor: "rgba(0,0,0,0)",
-  font: {{ color: "#0f172a" }},
+  font: {{ color: "#1e293b" }},
   autosize: true,
 }};
 
@@ -1388,7 +1376,7 @@ const sbLayout = {{
   margin:        {{ t: 10, b: 10, l: 10, r: 10 }},
   paper_bgcolor: "rgba(0,0,0,0)",
   plot_bgcolor:  "rgba(0,0,0,0)",
-  font:          {{ color: "#0f172a" }},
+  font:          {{ color: "#1e293b" }},
   autosize:      true,
 }};
 
@@ -1482,13 +1470,13 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         hrs["Hour Label"] = hl
         
         fig_r = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#58a6ff", width=2)), secondary_y=False)
-        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#f0883e", width=3, shape="spline")), secondary_y=True)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2)), secondary_y=False)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#10b981", width=3, shape="spline")), secondary_y=True)
         fig_r.update_layout(
             template="plotly_white",
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(247,241,225,0.6)",
-            font_color="#0f172a",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#1e293b",
             margin=dict(l=10, r=10, t=55, b=10),
             height=550, 
             hovermode="x unified",
@@ -1502,10 +1490,10 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
         
         st.markdown("""
-        <div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem;">
+        <div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem; color: #475569;">
             <strong>Agent Workload Indicator (Tickets per Agent):</strong><br>
             <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span>
-            <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#fbbf24; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span>
+            <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#eab308; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span>
             <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span>
             <span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span>
             <span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span>
@@ -1573,17 +1561,13 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
         
         DAY_COLORS = {
-            "Saturday": "#dc2626", # Red
-            "Sunday": "#2563eb",   # Blue
-            "Monday": "#16a34a",   # Green
-            "Tuesday": "#d97706",  # Orange
-            "Wednesday": "#9333ea",# Purple
-            "Thursday": "#0891b2", # Teal
-            "Friday": "#475569"    # Slate
+            "Saturday": "#64748b", "Sunday": "#1e40af", "Monday": "#2563eb",
+            "Tuesday": "#3b82f6", "Wednesday": "#0ea5e9", "Thursday": "#0284c7",
+            "Friday": "#475569"
         }
         
         daily_vol["Date Label"] = daily_vol.apply(
-            lambda r: f"{r['Date DT'].strftime('%b %d')}<br><span style='color:{DAY_COLORS.get(r['Day Name'], '#0f172a')}'><b>({r['Day Name']})</b></span>", 
+            lambda r: f"{r['Date DT'].strftime('%b %d')}<br><span style='color:{DAY_COLORS.get(r['Day Name'], '#1e293b')}'><b>({r['Day Name']})</b></span>", 
             axis=1
         )
         
@@ -1593,7 +1577,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             daily_vol["Tickets per Agent"] > 60,
             daily_vol["Tickets per Agent"] > 55
         ]
-        choices = ["#991b1b", "#ef4444", "#f97316", "#fbbf24"]
+        choices = ["#991b1b", "#ef4444", "#f97316", "#eab308"]
         daily_vol["Color"] = np.select(conditions, choices, default="#3b82f6") 
         
         fig_d = make_subplots(specs=[[{"secondary_y": True}]])
@@ -1616,8 +1600,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             mode="lines+markers+text",
             text=daily_vol["Tickets per Agent"],
             textposition="top center",
-            line=dict(color="#ef4444", width=3, shape="spline"),
-            marker=dict(size=8, color="#ef4444"),
+            line=dict(color="#475569", width=3, shape="spline"),
+            marker=dict(size=8, color="#1e293b"),
             hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>",
             customdata=daily_vol["Active_Agents"]
         ), secondary_y=True)
@@ -1625,8 +1609,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         fig_d.update_layout(
             template="plotly_white",
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(247,241,225,0.6)",
-            font_color="#0f172a",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#1e293b",
             margin=dict(l=10, r=10, t=55, b=10),
             height=480, 
             xaxis_title="", 
@@ -1660,7 +1644,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                 x="HIC",
                 y="Volume",
                 text="Volume",
-                color="HIC", 
+                color_discrete_sequence=["#2563eb"], 
                 labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"}
             )
             fig_hic.update_traces(
@@ -1670,8 +1654,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             fig_hic.update_layout(
                 template="plotly_white",
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(247,241,225,0.6)",
-                font_color="#0f172a",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#1e293b",
                 margin=dict(l=10, r=10, t=55, b=10),
                 height=500,
                 xaxis_title="",
@@ -1792,12 +1776,12 @@ with tab2:
     chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-bright-green", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Avg Tickets / Day",  f"{kpi_curr_avg_per_day:.1f}", "card-actions", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({kpi_ok_pct:.1f}%)</span>",      "card-completed", chg_kpi_ok), unsafe_allow_html=True)
-    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.7;'>({kpi_iss_pct:.1f}%)</span>",     "card-issue", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-    k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-aht", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
-    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-tat", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
+    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
+    k2.markdown(kpi_colored("Avg Tickets / Day",  f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
+    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+    k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
 
     st.write(""); st.divider()
 
@@ -1945,11 +1929,11 @@ with tab2:
     sum_sick = int(pd.to_numeric(kpi_r_df["Sick Leaves"], errors='coerce').fillna(0).sum())
 
     rk1, rk2, rk3, rk4, rk5 = st.columns(5)
-    rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-store"), unsafe_allow_html=True)
-    rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-actions"), unsafe_allow_html=True)
-    rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-completed"), unsafe_allow_html=True)
-    rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-issue"), unsafe_allow_html=True)
-    rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-frt"), unsafe_allow_html=True)
+    rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-neutral"), unsafe_allow_html=True)
+    rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-neutral"), unsafe_allow_html=True)
+    rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-neutral"), unsafe_allow_html=True)
+    rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-neutral"), unsafe_allow_html=True)
+    rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-neutral"), unsafe_allow_html=True)
     st.write("")
     
     st.markdown("### 📊 Expert Performance Scorecard Dashboard")
@@ -2145,7 +2129,7 @@ Best regards,
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
             st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
             
-            st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:2px solid #cbd5e1; font-size:1.1rem; color:#1e293b;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
             
             email_body_plain = f"""Dear {clean_name},
 
@@ -2180,7 +2164,7 @@ Team Leader"""
             st.write("")
             gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
             st.markdown(
-                f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#ea4335; color:white; text-decoration:none; border-radius:8px; font-weight:900; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(234, 67, 53, 0.3);">'
+                f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">'
                 f'🌐 Open Draft in Gmail</a>', 
                 unsafe_allow_html=True
             )
