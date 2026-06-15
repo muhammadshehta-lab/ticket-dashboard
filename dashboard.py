@@ -1170,7 +1170,7 @@ with tab1:
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-dark-green", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-store", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1178,7 +1178,7 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.7;'>({ok_pct:.1f}%)</span>",    "card-completed", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.7;'>({issue_pct:.1f}%)</span>", "card-issue", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-actions card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-aht card-small", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-tat card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-dark-green-small", neutral=True), unsafe_allow_html=True)
