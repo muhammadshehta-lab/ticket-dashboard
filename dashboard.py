@@ -700,7 +700,7 @@ with st.sidebar:
                     json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             else:
                 st.error("❌ Secrets file layout unconfigured.")
-                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             
             client = gspread.authorize(creds)
             sheet = client.open("AlDawaa Tickets Data")
@@ -708,6 +708,7 @@ with st.sidebar:
             all_dfs = []
             roster_df = pd.DataFrame() 
             out_req_df = pd.DataFrame()
+            df_quality = pd.DataFrame()
             
             for ws in sheet.worksheets():
                 title = ws.title.strip()
@@ -719,6 +720,9 @@ with st.sidebar:
                     continue
                 elif title == "Out Requests":
                     out_req_df = pd.DataFrame(data)
+                    continue
+                elif title == "Quality Issues":
+                    df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                     continue
                 
                 dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
@@ -742,7 +746,7 @@ with st.sidebar:
                 all_dfs.append(dft)
             
             if not all_dfs: 
-                return pd.DataFrame(), roster_df, out_req_df
+                return pd.DataFrame(), roster_df, out_req_df, df_quality
                 
             df = pd.concat(all_dfs, ignore_index=True, sort=False)
             df.replace("", np.nan, inplace=True)
@@ -776,13 +780,13 @@ with st.sidebar:
             df["Is Email"] = (
                 df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
                 
-            return df, roster_df, out_req_df
+            return df, roster_df, out_req_df, df_quality
             
         except Exception as e:
             st.error(f"❌ Connection Error: {e}")
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    df_raw, df_roster, df_out_req = load_data()
+    df_raw, df_roster, df_out_req, df_quality = load_data()
     
     if df_raw.empty:
         st.warning("Empty source records."); st.stop()
@@ -867,12 +871,10 @@ if not df_out_req.empty and len(df_out_req) > 2:
             
             norm_name = normalize_expert_name(exp_name).lower()
             
-            q_val = str(df_out_req.iloc[i, col_idx]).strip() if col_idx < len(df_out_req.columns) else ""
             j_val = str(df_out_req.iloc[i, col_idx+1]).strip() if col_idx+1 < len(df_out_req.columns) else ""
             s_val = str(df_out_req.iloc[i, col_idx+2]).strip() if col_idx+2 < len(df_out_req.columns) else ""
             
             out_req_dict[norm_name] = {
-                "Quality": q_val,
                 "JHAH": j_val,
                 "Support Req": s_val
             }
@@ -896,6 +898,28 @@ if sel_hic:
 if sel_req_type:
     df = df[df["Request Type"].isin(sel_req_type)]
     df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  PARSE QUALITY ISSUES SHEET (NEW LOGIC)
+# ══════════════════════════════════════════════════════════════════════════════════
+expert_quality_deductions = {}
+if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
+    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
+    q_mask = (df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)
+    df_q_filtered = df_quality[q_mask].copy()
+    
+    def get_deduction(sev):
+        s = str(sev).strip().lower()
+        if s == 'critical': return 2.0
+        elif s == 'major': return 1.0
+        elif s == 'minor': return 0.5
+        return 0.0
+        
+    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
+    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
+    
+    deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
+    expert_quality_deductions = deductions
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS PANEL
@@ -1075,7 +1099,12 @@ if st.session_state.page == "settings":
 period_ovs = overrides().get(PERIOD_KEY, {})
 global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
 
+caption_text = (
+    f"Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})"
+    if d_from == d_to else f"Search Period: {d_from} to {d_to}"
+)
 st.markdown("## 💊 In-Store Requests Matrix")
+st.caption(caption_text)
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  TABS NAVIGATION ARCHITECTURE
@@ -1145,7 +1174,7 @@ with tab1:
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1890,28 +1919,26 @@ with tab2:
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
-    sc["Service Quality"] = "100.0%"
+    sc["Service Quality"] = 100.0
 
-    # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab)
+    # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab & Quality Issues)
     for i, row in sc.iterrows():
         exp_key = str(row["Expert"]).strip().lower()
+        
+        # Out Requests Override
         if exp_key in out_req_dict:
             sheet_data = out_req_dict[exp_key]
-            
             if sheet_data["JHAH"]:
                 try: sc.at[i, "JHAH Requests"] = int(float(sheet_data["JHAH"]))
                 except: pass
-            
             if sheet_data["Support Req"]:
                 try: sc.at[i, "Out Requests"] = int(float(sheet_data["Support Req"]))
                 except: pass
-                
-            if str(sheet_data["Quality"]).strip():
-                q_str = str(sheet_data["Quality"]).strip()
-                if "%" not in q_str:
-                    try: q_str = f"{float(q_str):.1f}%"
-                    except: pass
-                sc.at[i, "Service Quality"] = q_str
+        
+        # Quality Deduction
+        deduction = expert_quality_deductions.get(exp_key, 0.0)
+        final_quality = 100.0 - deduction
+        sc.at[i, "Service Quality"] = f"{final_quality:.1f}%"
 
     # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
     st.markdown("### 📅 Schedule & Leaves Summary")
