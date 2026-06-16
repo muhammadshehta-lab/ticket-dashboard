@@ -577,13 +577,22 @@ EXCLUSION_LIST = [
 ]
 
 def normalize_expert_name(name):
+    # Split by hyphen in case it is "ID-Name" format (e.g. "50107-Ahmed El-Kholy")
+    if pd.notna(name) and '-' in str(name):
+        parts = str(name).split('-', 1)
+        if len(parts) > 1:
+            name = parts[1].strip()
+    
     n_lower = str(name).lower().strip()
     if n_lower in AGENT_ALIASES:
         return AGENT_ALIASES[n_lower]
+    
+    # Check if the remaining part is an ID
     id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
     if name in id_to_name:
         return id_to_name[name]
-    return name
+        
+    return str(name).strip()
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE & FIRST-TIME LOGIN ONBOARDING
@@ -903,6 +912,8 @@ if sel_req_type:
 #  PARSE QUALITY ISSUES SHEET (NEW LOGIC)
 # ══════════════════════════════════════════════════════════════════════════════════
 expert_quality_deductions = {}
+df_q_filtered = pd.DataFrame()
+
 if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
     df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
     q_mask = (df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)
@@ -917,6 +928,7 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
         
     df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
     df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
+    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
     
     deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
     expert_quality_deductions = deductions
@@ -1174,7 +1186,7 @@ with tab1:
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
     
     r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1182,11 +1194,11 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
-    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-neutral card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-neutral card-small", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-neutral card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -2082,6 +2094,29 @@ with tab2:
 
     html_table = styled_df.hide(axis="index").to_html()
     st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
+    
+    # ── 🔍 QUALITY ISSUES LOG ──
+    st.divider()
+    st.markdown("### 🔍 Quality Issues Log (Current Period)")
+    
+    if not df_q_filtered.empty:
+        if not is_admin() and aname:
+            q_view = df_q_filtered[df_q_filtered['Display_Expert'] == aname].copy()
+        else:
+            q_view = df_q_filtered.copy()
+            if sel_agents_t2:
+                q_view = q_view[q_view['Display_Expert'].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
+        
+        if q_view.empty:
+            st.success("🎉 No quality issues recorded for the selected expert(s) in this period! Keep up the great work.")
+        else:
+            disp_q = q_view[['Date', 'Display_Expert', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy()
+            disp_q.rename(columns={'Display_Expert': 'Expert Name', 'Deduction': 'Deduction (%)'}, inplace=True)
+            disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
+            
+            st.dataframe(disp_q, use_container_width=True, hide_index=True)
+    else:
+        st.info("No quality issues logged in the system for this specific period.")
     
     if is_admin():
         st.divider()
