@@ -2110,11 +2110,25 @@ with tab2:
         if q_view.empty:
             st.success("🎉 No quality issues recorded for the selected expert(s) in this period! Keep up the great work.")
         else:
-            disp_q = q_view[['Date', 'Display_Expert', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy()
-            disp_q.rename(columns={'Display_Expert': 'Expert Name', 'Deduction': 'Deduction (%)'}, inplace=True)
+            disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy()
+            disp_q.rename(columns={'Deduction': 'Deduction (%)'}, inplace=True)
             disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
             
-            st.dataframe(disp_q, use_container_width=True, hide_index=True)
+            def style_quality_issues(row):
+                sev = str(row['Severity']).strip().lower()
+                if sev == 'critical':
+                    return ['background-color: #fef2f2; color: #991b1b; font-weight: 700'] * len(row)
+                elif sev == 'major':
+                    return ['background-color: #fff7ed; color: #c2410c; font-weight: 700'] * len(row)
+                elif sev == 'minor':
+                    return ['background-color: #fefce8; color: #a16207; font-weight: 700'] * len(row)
+                return [''] * len(row)
+            
+            styled_q = disp_q.style.apply(style_quality_issues, axis=1)
+            styled_q = styled_q.set_properties(**{'text-align': 'center'})
+            
+            html_q_table = styled_q.hide(axis="index").to_html()
+            st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
     else:
         st.info("No quality issues logged in the system for this specific period.")
     
