@@ -1182,11 +1182,11 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-neutral card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-neutral card-small", chg_afr, inverse=True),       unsafe_allow_html=True)
-    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-neutral card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts = pd.Series(dtype=int)
@@ -1919,7 +1919,7 @@ with tab2:
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
-    sc["Service Quality"] = 100.0
+    sc["Service Quality"] = "100.0%"
 
     # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab & Quality Issues)
     for i, row in sc.iterrows():
