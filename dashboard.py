@@ -1931,26 +1931,26 @@ with tab2:
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
-    sc["Service Quality"] = "100.0%"
+    # ── Vectorized Overrides & Quality Deductions Mapping ──
+    def apply_jhah(row):
+        k = str(row["Expert"]).strip().lower()
+        v = out_req_dict.get(k, {}).get("JHAH", "")
+        try: return int(float(v)) if v else row["JHAH Requests"]
+        except: return row["JHAH Requests"]
+        
+    def apply_support(row):
+        k = str(row["Expert"]).strip().lower()
+        v = out_req_dict.get(k, {}).get("Support Req", "")
+        try: return int(float(v)) if v else row["Out Requests"]
+        except: return row["Out Requests"]
 
-    # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab & Quality Issues)
-    for i, row in sc.iterrows():
-        exp_key = str(row["Expert"]).strip().lower()
-        
-        # Out Requests Override
-        if exp_key in out_req_dict:
-            sheet_data = out_req_dict[exp_key]
-            if sheet_data["JHAH"]:
-                try: sc.at[i, "JHAH Requests"] = int(float(sheet_data["JHAH"]))
-                except: pass
-            if sheet_data["Support Req"]:
-                try: sc.at[i, "Out Requests"] = int(float(sheet_data["Support Req"]))
-                except: pass
-        
-        # Quality Deduction
-        deduction = expert_quality_deductions.get(exp_key, 0.0)
-        final_quality = 100.0 - deduction
-        sc.at[i, "Service Quality"] = f"{final_quality:.1f}%"
+    sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
+    sc["Out Requests"] = sc.apply(apply_support, axis=1)
+    
+    # Vectorized Direct Quality Update (Solves the 0 Tickets reset bug)
+    sc["Service Quality"] = sc["Expert"].apply(
+        lambda x: f"{100.0 - expert_quality_deductions.get(str(x).strip().lower(), 0.0):.1f}%"
+    )
 
     # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
     st.markdown("### 📅 Schedule & Leaves Summary")
@@ -2110,6 +2110,7 @@ with tab2:
         if q_view.empty:
             st.success("🎉 No quality issues recorded for the selected expert(s) in this period! Keep up the great work.")
         else:
+            # Revert to displaying the original full Expert Name from the Sheet
             disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy()
             disp_q.rename(columns={'Deduction': 'Deduction (%)'}, inplace=True)
             disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
