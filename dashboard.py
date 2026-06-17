@@ -1247,32 +1247,38 @@ with tab1:
                 use_response = False
 
             if sub.empty:
-                sb_payloads[rt] = {"labels": [], "parents": [], "values": [], "colors": []}
+                sb_payloads[rt] = {"ids": [], "labels": [], "parents": [], "values": [], "colors": []}
                 continue
 
-            lbl, par, val, col = [], [], [], []
+            ids, lbl, par, val, col = [], [], [], [], []
 
             if use_response:
                 rd = sub.groupby("Response Tier").size()
                 sd = sub.groupby("Service Tier").size()
 
                 rt_total = int(rd.sum())
-                lbl.append("Response Time");      par.append("");               val.append(rt_total); col.append(SB_COLORS["Response Time"])
-                for tier, cnt in rd.items():
-                    lbl.append(tier); par.append("Response Time"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
+                if rt_total > 0:
+                    ids.append("Response Time"); lbl.append("Response Time"); par.append(""); val.append(rt_total); col.append(SB_COLORS["Response Time"])
+                    for tier, cnt in rd.items():
+                        if cnt > 0:
+                            ids.append(f"RT_{tier}"); lbl.append(tier); par.append("Response Time"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
 
                 sr_total = int(sd.sum())
-                lbl.append("Service Resolution"); par.append("");               val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
-                for tier, cnt in sd.items():
-                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
+                if sr_total > 0:
+                    ids.append("Service Resolution"); lbl.append("Service Resolution"); par.append(""); val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
+                    for tier, cnt in sd.items():
+                        if cnt > 0:
+                            ids.append(f"SR_{tier}"); lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
             else:
                 sd = sub.groupby("Service Tier").size()
                 sr_total = int(sd.sum())
-                lbl.append("Service Resolution"); par.append("");               val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
-                for tier, cnt in sd.items():
-                    lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
+                if sr_total > 0:
+                    ids.append("Service Resolution"); lbl.append("Service Resolution"); par.append(""); val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
+                    for tier, cnt in sd.items():
+                        if cnt > 0:
+                            ids.append(f"SR_{tier}"); lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
 
-            sb_payloads[rt] = {"labels": lbl, "parents": par, "values": val, "colors": col}
+            sb_payloads[rt] = {"ids": ids, "labels": lbl, "parents": par, "values": val, "colors": col}
 
         import json as _json
         sb_payloads_json = _json.dumps(sb_payloads)
@@ -1406,6 +1412,7 @@ function buildTrace(rt) {{
   );
   return {{
     type:         "sunburst",
+    ids:          d.ids,
     labels:       d.labels,
     parents:      d.parents,
     values:       d.values,
@@ -1873,7 +1880,7 @@ with tab2:
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
     sc["JHAH Requests"] = 0
-    sc["Out Requests"] = 0  
+    sc["Support Requests"] = 0  
     
     roster_counts = {}
     if not df_roster.empty:
@@ -1942,12 +1949,12 @@ with tab2:
         except: return 0
 
     sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
-    sc["Out Requests"] = sc.apply(apply_support, axis=1)
+    sc["Support Requests"] = sc.apply(apply_support, axis=1)
     
     # ── SMART FILTERING: Exclude inactive experts (0 Working Days AND 0 Cases) ──
     total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
                          pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
-                         pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
+                         pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
                          
     wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
     
@@ -1958,7 +1965,7 @@ with tab2:
     # Recalculate totals and Cases/Day for the FILTERED dataframe
     total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
                   pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
-                  pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
+                  pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
                   
     wdays = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)
     sc["Cases/Day"] = (total_cases / wdays).round(1)
@@ -2002,7 +2009,6 @@ with tab2:
         qual_inc = 600 * qual
         
         # 3. Missing Parameters Auto-Full (Max 1900)
-        # Avg Service Time (500) + Error (500) + Adherence (300) + Casual (200) + Exam (400)
         auto_bonus = 500 + 500 + 300 + 200 + 400
         
         total_inc = count_inc + qual_inc + auto_bonus
@@ -2014,7 +2020,7 @@ with tab2:
     team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
-    team_out = round(pd.to_numeric(sc["Out Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
+    team_out = round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
     # Filter out empty records before team mean for AFR/TAT
@@ -2034,7 +2040,7 @@ with tab2:
         "Working Days": team_wd, 
         "Tickets Count": team_tc,
         "JHAH Requests": team_jhah, 
-        "Out Requests": team_out,
+        "Support Requests": team_out,
         "Cases/Day": team_cpd,
         "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
@@ -2061,7 +2067,7 @@ with tab2:
         except:
             return str(x)
 
-    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
+    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
     for c in cols_clean:
         if c in sc_final.columns:
             sc_final[c] = sc_final[c].apply(format_clean_num)
@@ -2110,15 +2116,13 @@ with tab2:
             if exp != "🏆 Team AVG":
                 inc_val = str(row["Prospected Incentive"])
                 if inc_val != "4,000 EGP":
-                    # Deduction Happened -> Highlight Red/Orange
                     styles[inc_idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;'
                 else:
-                    # Full Bonus Achieved -> Highlight Green
                     styles[inc_idx] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
                     
         return styles
 
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
@@ -2227,8 +2231,8 @@ with tab2:
             achiev_val = safe_float(agent_row["% Achievement from Target"])
             qual_val = safe_float(agent_row["Service Quality"])
             
-            agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Out Requests'])
-            team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Out Requests'])
+            agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Support Requests'])
+            team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Support Requests'])
             
             if achiev_val >= 100:
                 perf_word = "outstanding"
