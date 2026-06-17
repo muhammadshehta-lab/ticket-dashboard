@@ -1932,26 +1932,26 @@ with tab2:
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
     
-    sc["Service Quality"] = "100.0%"
+    # ── Vectorized Overrides & Quality Deductions Mapping ──
+    def apply_jhah(row):
+        k = str(row["Expert"]).strip().lower()
+        v = out_req_dict.get(k, {}).get("JHAH", "")
+        try: return int(float(v)) if v else row["JHAH Requests"]
+        except: return row["JHAH Requests"]
+        
+    def apply_support(row):
+        k = str(row["Expert"]).strip().lower()
+        v = out_req_dict.get(k, {}).get("Support Req", "")
+        try: return int(float(v)) if v else row["Out Requests"]
+        except: return row["Out Requests"]
 
-    # APPLY GOOGLE SHEET OVERRIDES (Out Requests Tab & Quality Issues)
-    for i, row in sc.iterrows():
-        exp_key = str(row["Expert"]).strip().lower()
-        
-        # Out Requests Override
-        if exp_key in out_req_dict:
-            sheet_data = out_req_dict[exp_key]
-            if sheet_data["JHAH"]:
-                try: sc.at[i, "JHAH Requests"] = int(float(sheet_data["JHAH"]))
-                except: pass
-            if sheet_data["Support Req"]:
-                try: sc.at[i, "Out Requests"] = int(float(sheet_data["Support Req"]))
-                except: pass
-        
-        # Quality Deduction
-        deduction = expert_quality_deductions.get(exp_key, 0.0)
-        final_quality = 100.0 - float(deduction)
-        sc.at[i, "Service Quality"] = f"{final_quality:.1f}%"
+    sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
+    sc["Out Requests"] = sc.apply(apply_support, axis=1)
+    
+    # Vectorized Direct Quality Update
+    sc["Service Quality"] = sc["Expert"].apply(
+        lambda x: f"{100.0 - expert_quality_deductions.get(str(x).strip().lower(), 0.0):.1f}%"
+    )
 
     # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
     st.markdown("### 📅 Schedule & Leaves Summary")
@@ -2115,15 +2115,30 @@ with tab2:
             disp_q.rename(columns={'Deduction': 'Deduction (%)'}, inplace=True)
             disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
             
+            # Map Emojis for Visual Clarity
+            def map_severity(s):
+                sl = str(s).strip().lower()
+                if sl == 'critical': return '🔴 Critical'
+                if sl == 'major': return '🟠 Major'
+                if sl == 'minor': return '🟡 Minor'
+                return s
+            disp_q['Severity'] = disp_q['Severity'].apply(map_severity)
+            
             def style_quality_issues(row):
-                sev = str(row['Severity']).strip().lower()
-                if sev == 'critical':
-                    return ['background-color: #fef2f2; color: #991b1b; font-weight: 700'] * len(row)
-                elif sev == 'major':
-                    return ['background-color: #fff7ed; color: #c2410c; font-weight: 700'] * len(row)
-                elif sev == 'minor':
-                    return ['background-color: #fefce8; color: #a16207; font-weight: 700'] * len(row)
-                return [''] * len(row)
+                sev = str(row['Severity']).lower()
+                # Clean white background with professional dark text by default
+                styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
+                
+                for i, col in enumerate(row.index):
+                    # Highlight only the critical columns (Severity and Deduction)
+                    if col in ['Severity', 'Deduction (%)']:
+                        if 'critical' in sev:
+                            styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;'
+                        elif 'major' in sev:
+                            styles[i] = 'background-color: #ffffff; color: #ea580c; font-weight: 900;'
+                        elif 'minor' in sev:
+                            styles[i] = 'background-color: #ffffff; color: #ca8a04; font-weight: 900;'
+                return styles
             
             styled_q = disp_q.style.apply(style_quality_issues, axis=1)
             styled_q = styled_q.set_properties(**{'text-align': 'center'})
