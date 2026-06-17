@@ -1234,6 +1234,9 @@ with tab1:
             "45-60 Mins":         "#f59e0b",
             "Over 1 Hour":        "#ef4444",
         }
+        
+        # Fixed explicit order for sunburst chart slices
+        tier_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
 
         sb_payloads = {}   
         all_rt_keys = ["All Types"] + bar_labels
@@ -1259,14 +1262,18 @@ with tab1:
                 rt_total = int(rd.sum())
                 if rt_total > 0:
                     ids.append("Response Time"); lbl.append("Response Time"); par.append(""); val.append(rt_total); col.append(SB_COLORS["Response Time"])
-                    for tier, cnt in rd.items():
+                    # Use predefined tier_order to force chronological sorting
+                    for tier in tier_order:
+                        cnt = rd.get(tier, 0)
                         if cnt > 0:
                             ids.append(f"RT_{tier}"); lbl.append(tier); par.append("Response Time"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
 
                 sr_total = int(sd.sum())
                 if sr_total > 0:
                     ids.append("Service Resolution"); lbl.append("Service Resolution"); par.append(""); val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
-                    for tier, cnt in sd.items():
+                    # Use predefined tier_order to force chronological sorting
+                    for tier in tier_order:
+                        cnt = sd.get(tier, 0)
                         if cnt > 0:
                             ids.append(f"SR_{tier}"); lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
             else:
@@ -1274,7 +1281,9 @@ with tab1:
                 sr_total = int(sd.sum())
                 if sr_total > 0:
                     ids.append("Service Resolution"); lbl.append("Service Resolution"); par.append(""); val.append(sr_total); col.append(SB_COLORS["Service Resolution"])
-                    for tier, cnt in sd.items():
+                    # Use predefined tier_order to force chronological sorting
+                    for tier in tier_order:
+                        cnt = sd.get(tier, 0)
                         if cnt > 0:
                             ids.append(f"SR_{tier}"); lbl.append(tier); par.append("Service Resolution"); val.append(int(cnt)); col.append(SB_COLORS.get(tier, "#cbd5e1"))
 
@@ -1417,6 +1426,7 @@ function buildTrace(rt) {{
     parents:      d.parents,
     values:       d.values,
     branchvalues: "total", 
+    sort:         false, // <-- THIS FIXES THE SORTING TO FOLLOW CHRONOLOGICAL ORDER
     marker:       {{ colors: d.colors }},
     texttemplate: texttemplate,
     textinfo:     "none",
