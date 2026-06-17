@@ -577,10 +577,6 @@ EXCLUSION_LIST = [
 ]
 
 def normalize_expert_name(name):
-    """
-    Cleans up expert names. Safely removes ID prefixes like '50107-' 
-    without accidentally splitting Arabic hyphenated names like 'El-Sayed'.
-    """
     if pd.notna(name):
         name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
     
@@ -1984,7 +1980,7 @@ with tab2:
 
     # ── PROSPECTED INCENTIVE CALCULATION ──
     def calc_incentive(row):
-        # Target Incentive
+        # 1. Target Incentive (Max 1500)
         try:
             achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
         except:
@@ -1996,14 +1992,19 @@ with tab2:
         elif achiev >= 0.90: count_inc = 1200
         elif achiev >= 0.85: count_inc = 1050
         
-        # Quality Incentive
+        # 2. Quality Incentive (Max 600)
         try:
             qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
         except:
             qual = 0.0
             
         qual_inc = 600 * qual
-        total_inc = count_inc + qual_inc
+        
+        # 3. Missing Parameters Auto-Full (Max 1900)
+        # Avg Service Time (500) + Error (500) + Adherence (300) + Casual (200) + Exam (400)
+        auto_bonus = 500 + 500 + 300 + 200 + 400
+        
+        total_inc = count_inc + qual_inc + auto_bonus
         return f"{total_inc:,.0f} EGP"
         
     sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
