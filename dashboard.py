@@ -861,7 +861,7 @@ global_jhah = 0
 global_support = 0
 
 if not df_out_req.empty:
-    if "Date" in df_out_req.columns and "Expert Name" in df_out_req.columns:
+    if "Date" in df_out_req.columns:
         # Parse Dates
         df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
         
@@ -869,28 +869,36 @@ if not df_out_req.empty:
         mask = (df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)
         df_out_filtered = df_out_req[mask].copy()
         
-        # Normalize Expert Name to match system
-        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].apply(normalize_expert_name).str.lower()
+        # 1. إجمالي الحالات للـ Operational Insights (بما فيها الحالات بدون اسم)
+        if "Source" in df_out_filtered.columns:
+            global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+        else:
+            global_jhah = 0
+        global_support = len(df_out_filtered) - global_jhah
         
-        # Group by Expert and calculate counts
-        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
-            total_count = len(grp)
+        # 2. حسابات الأفراد لجدول الـ Team Performance
+        if "Expert Name" in df_out_filtered.columns:
+            df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
             
-            # Check Source column: Anything containing 'jhah' is JHAH, the rest is Support
-            if "Source" in grp.columns:
-                jhah_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-            else:
-                jhah_count = 0
+            for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
+                # تجاهل الحالات بدون اسم عشان متأثرش على إحصائيات الخبراء في الجدول
+                if not exp_name or exp_name == "nan":
+                    continue 
+                    
+                total_count = len(grp)
                 
-            support_count = total_count - jhah_count
-            
-            out_req_dict[exp_name] = {
-                "JHAH": jhah_count,
-                "Support Req": support_count
-            }
-            
-            global_jhah += jhah_count
-            global_support += support_count
+                # Check Source column: Anything containing 'jhah' is JHAH, the rest is Support
+                if "Source" in grp.columns:
+                    jhah_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+                else:
+                    jhah_count = 0
+                    
+                support_count = total_count - jhah_count
+                
+                out_req_dict[exp_name] = {
+                    "JHAH": jhah_count,
+                    "Support Req": support_count
+                }
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -1841,8 +1849,6 @@ with tab2:
         grp = df_sc.groupby("Assigned By")
         stats = pd.DataFrame(index=grp.groups.keys())
         stats["Tickets Count"]        = grp["Request ID"].count()
-        stats["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
-        stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
         if "Request Take (min)" in df_sc.columns:
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
@@ -1860,16 +1866,13 @@ with tab2:
         sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
     else:
         sc["Tickets Count"] = 0
-        sc["JHAH Requests"] = 0
-        sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
         sc["_AFR_val"] = 0
         sc["_c_ok_sum"] = 0
         sc["_c_all_sum"] = 0
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
-    sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
-    sc["Email Counts"] = sc["Email Counts"].fillna(0).astype(int)
+    sc["JHAH Requests"] = 0
     sc["Out Requests"] = 0  
     
     roster_counts = {}
@@ -1928,22 +1931,28 @@ with tab2:
     # ── Vectorized Overrides & Quality Deductions Mapping ──
     def apply_jhah(row):
         k = str(row["Expert"]).strip().lower()
-        v = out_req_dict.get(k, {}).get("JHAH", "")
-        try: return int(float(v)) if v else row["JHAH Requests"]
-        except: return row["JHAH Requests"]
+        v = out_req_dict.get(k, {}).get("JHAH", 0)
+        try: return int(float(v)) if v else 0
+        except: return 0
         
     def apply_support(row):
         k = str(row["Expert"]).strip().lower()
-        v = out_req_dict.get(k, {}).get("Support Req", "")
-        try: return int(float(v)) if v else row["Out Requests"]
-        except: return row["Out Requests"]
+        v = out_req_dict.get(k, {}).get("Support Req", 0)
+        try: return int(float(v)) if v else 0
+        except: return 0
 
     sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
     sc["Out Requests"] = sc.apply(apply_support, axis=1)
     
-    # ── SMART FILTERING: Exclude inactive experts (0 Working Days) ──
+    # ── SMART FILTERING: Exclude inactive experts (0 Working Days AND 0 Cases) ──
+    total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
+                         pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
+                         pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
+                         
     wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
-    active_mask = (wdays_filter > 0)
+    
+    # Keep row if they worked at least 1 day OR if they handled at least 1 case (e.g. on an off day)
+    active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
     sc = sc[active_mask].copy()
 
     # Recalculate totals and Cases/Day for the FILTERED dataframe
@@ -2009,7 +2018,7 @@ with tab2:
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
     # Filter out empty records before team mean for AFR/TAT
-    df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"])]
+    df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
     team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
     team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
 
@@ -2027,7 +2036,6 @@ with tab2:
         "JHAH Requests": team_jhah, 
         "Out Requests": team_out,
         "Cases/Day": team_cpd,
-        "Email Counts": round(pd.to_numeric(sc["Email Counts"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
@@ -2053,7 +2061,7 @@ with tab2:
         except:
             return str(x)
 
-    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
+    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
     for c in cols_clean:
         if c in sc_final.columns:
             sc_final[c] = sc_final[c].apply(format_clean_num)
@@ -2110,7 +2118,7 @@ with tab2:
                     
         return styles
 
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
