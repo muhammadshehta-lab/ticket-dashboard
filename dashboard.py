@@ -577,10 +577,6 @@ EXCLUSION_LIST = [
 ]
 
 def normalize_expert_name(name):
-    """
-    Cleans up expert names. Safely removes ID prefixes like '50107-' 
-    without accidentally splitting Arabic hyphenated names like 'El-Sayed'.
-    """
     if pd.notna(name):
         name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
     
@@ -2021,7 +2017,7 @@ with tab2:
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
     # Filter out empty records before team mean for AFR/TAT
-    df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
+    df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"])]
     team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
     team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
 
