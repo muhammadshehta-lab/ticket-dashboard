@@ -582,7 +582,6 @@ def normalize_expert_name(name):
     without accidentally splitting Arabic hyphenated names like 'El-Sayed'.
     """
     if pd.notna(name):
-        # 🧠 Smart Regex: Removes ONLY digit prefixes with hyphens (e.g. "50107-" or "50107 - ")
         name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
     
     n_lower = str(name).lower().strip()
@@ -1931,7 +1930,7 @@ with tab2:
 
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
-    
+
     # ── Vectorized Overrides & Quality Deductions Mapping ──
     def apply_jhah(row):
         k = str(row["Expert"]).strip().lower()
@@ -1948,36 +1947,18 @@ with tab2:
     sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
     sc["Out Requests"] = sc.apply(apply_support, axis=1)
     
-    # Vectorized Direct Quality Update
-    sc["Service Quality"] = sc["Expert"].apply(
-        lambda x: f"{100.0 - expert_quality_deductions.get(str(x).strip().lower(), 0.0):.1f}%"
-    )
-
-    # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
-    st.markdown("### 📅 Schedule & Leaves Summary")
-    if not is_admin() and aname in sc["Expert"].values:
-        kpi_r_df = sc[sc["Expert"] == aname]
-    else:
-        kpi_r_df = sc
-        if sel_agents_t2:
-            kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
-
-    sum_wd   = int(pd.to_numeric(kpi_r_df["Working Days"], errors='coerce').fillna(0).sum())
-    sum_off  = int(pd.to_numeric(kpi_r_df["Off Days"], errors='coerce').fillna(0).sum())
-    sum_ann  = int(pd.to_numeric(kpi_r_df["Annual Leaves"], errors='coerce').fillna(0).sum())
-    sum_cas  = int(pd.to_numeric(kpi_r_df["Casual Leaves"], errors='coerce').fillna(0).sum())
-    sum_sick = int(pd.to_numeric(kpi_r_df["Sick Leaves"], errors='coerce').fillna(0).sum())
-
-    rk1, rk2, rk3, rk4, rk5 = st.columns(5)
-    rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-neutral"), unsafe_allow_html=True)
-    rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-neutral"), unsafe_allow_html=True)
-    rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-neutral"), unsafe_allow_html=True)
-    rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-neutral"), unsafe_allow_html=True)
-    rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-neutral"), unsafe_allow_html=True)
-    st.write("")
+    # ── SMART FILTERING: Exclude inactive experts (0 Working Days AND 0 Cases) ──
+    total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
+                         pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
+                         pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
+                         
+    wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
     
-    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
+    # Keep row if they worked at least 1 day OR if they handled at least 1 case (e.g. on an off day)
+    active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
+    sc = sc[active_mask].copy()
 
+    # Recalculate totals and Cases/Day for the FILTERED dataframe
     total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
                   pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
                   pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
@@ -1996,14 +1977,48 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
+    # Quality Update
+    sc["Service Quality"] = sc["Expert"].apply(
+        lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%"
+    )
+
+    # ── PROSPECTED INCENTIVE CALCULATION ──
+    def calc_incentive(row):
+        # Target Incentive
+        try:
+            achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
+        except:
+            achiev = 0.0
+            
+        count_inc = 0
+        if achiev >= 0.97: count_inc = 1500
+        elif achiev >= 0.95: count_inc = 1350
+        elif achiev >= 0.90: count_inc = 1200
+        elif achiev >= 0.85: count_inc = 1050
+        
+        # Quality Incentive
+        try:
+            qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
+        except:
+            qual = 0.0
+            
+        qual_inc = 600 * qual
+        total_inc = count_inc + qual_inc
+        return f"{total_inc:,.0f} EGP"
+        
+    sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
+
+    # ── TEAM AVERAGE CALCULATION ──
     team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_out = round(pd.to_numeric(sc["Out Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
-    team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
-    team_afr = fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0)
+    # Filter out empty records before team mean for AFR/TAT
+    df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
+    team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
+    team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
 
     def parse_pct(p):
         try: return float(str(p).replace("%", ""))
@@ -2028,7 +2043,8 @@ with tab2:
         "% Achievement from Target": "100.0%", 
         "AFR": team_afr,
         "Service Time": team_st, 
-        "Service Quality": f"{avg_qual:.1f}%"
+        "Service Quality": f"{avg_qual:.1f}%",
+        "Prospected Incentive": "-"
     }
 
     sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
@@ -2086,7 +2102,7 @@ with tab2:
             return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
         return [''] * len(row)
 
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
@@ -2094,6 +2110,31 @@ with tab2:
     styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
 
     html_table = styled_df.hide(axis="index").to_html()
+    
+    # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
+    st.markdown("### 📅 Schedule & Leaves Summary")
+    if not is_admin() and aname in sc["Expert"].values:
+        kpi_r_df = sc[sc["Expert"] == aname]
+    else:
+        kpi_r_df = sc
+        if sel_agents_t2:
+            kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
+
+    sum_wd   = int(pd.to_numeric(kpi_r_df["Working Days"], errors='coerce').fillna(0).sum())
+    sum_off  = int(pd.to_numeric(kpi_r_df["Off Days"], errors='coerce').fillna(0).sum())
+    sum_ann  = int(pd.to_numeric(kpi_r_df["Annual Leaves"], errors='coerce').fillna(0).sum())
+    sum_cas  = int(pd.to_numeric(kpi_r_df["Casual Leaves"], errors='coerce').fillna(0).sum())
+    sum_sick = int(pd.to_numeric(kpi_r_df["Sick Leaves"], errors='coerce').fillna(0).sum())
+
+    rk1, rk2, rk3, rk4, rk5 = st.columns(5)
+    rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-neutral"), unsafe_allow_html=True)
+    rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-neutral"), unsafe_allow_html=True)
+    rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-neutral"), unsafe_allow_html=True)
+    rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-neutral"), unsafe_allow_html=True)
+    rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-neutral"), unsafe_allow_html=True)
+    st.write("")
+    
+    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
     st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
     
     # ── 🔍 QUALITY ISSUES LOG ──
@@ -2115,7 +2156,6 @@ with tab2:
             disp_q.rename(columns={'Deduction': 'Deduction (%)'}, inplace=True)
             disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
             
-            # Map Emojis for Visual Clarity
             def map_severity(s):
                 sl = str(s).strip().lower()
                 if sl == 'critical': return '🔴 Critical'
@@ -2126,11 +2166,9 @@ with tab2:
             
             def style_quality_issues(row):
                 sev = str(row['Severity']).lower()
-                # Clean white background with professional dark text by default
                 styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
                 
                 for i, col in enumerate(row.index):
-                    # Highlight only the critical columns (Severity and Deduction)
                     if col in ['Severity', 'Deduction (%)']:
                         if 'critical' in sev:
                             styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;'
@@ -2204,10 +2242,10 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 
 ### 📊 Your Performance Scorecard:
 
-| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} |
+| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Expected Incentive |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** | **{agent_row['Prospected Incentive']}** |
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} | - |
 
 **🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
@@ -2230,12 +2268,12 @@ I hope this email finds you well.
 As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
 
 📊 Your Performance Scorecard:
-------------------------------------------------------------------------------------------
-Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time
-------------------------------------------------------------------------------------------
-Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time'])}
-------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------
+Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time | Incentive
+---------------------------------------------------------------------------------------------------------
+Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time']):<12} | {str(agent_row['Prospected Incentive'])}
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time']):<12} | -
+---------------------------------------------------------------------------------------------------------
 
 🎯 Targets & Quality:
 {target_msg.replace('**', '')}
