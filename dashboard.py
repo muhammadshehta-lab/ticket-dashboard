@@ -577,6 +577,10 @@ EXCLUSION_LIST = [
 ]
 
 def normalize_expert_name(name):
+    """
+    Cleans up expert names. Safely removes ID prefixes like '50107-' 
+    without accidentally splitting Arabic hyphenated names like 'El-Sayed'.
+    """
     if pd.notna(name):
         name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
     
@@ -2045,7 +2049,7 @@ with tab2:
         "AFR": team_afr,
         "Service Time": team_st, 
         "Service Quality": f"{avg_qual:.1f}%",
-        "Prospected Incentive": "-"
+        "Prospected Incentive": "4,000 EGP"
     }
 
     sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
@@ -2091,17 +2095,33 @@ with tab2:
 
     def style_performers(row):
         exp = row["Expert"]
+        styles = [''] * len(row)
+        
+        # 1. Base Row Colors (Medals & Highlights)
         if exp == "🏆 Team AVG":
-            return ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+            styles = ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
         elif exp == gold_disp:
-            return ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+            styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
         elif exp == silver_disp:
-            return ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+            styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
         elif exp == bronze_disp:
-            return ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+            styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
         elif exp == aname and not is_admin():
-            return ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
-        return [''] * len(row)
+            styles = ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+            
+        # 2. Visual Alert for Deduction in Prospected Incentive Column
+        if "Prospected Incentive" in row.index:
+            inc_idx = row.index.get_loc("Prospected Incentive")
+            if exp != "🏆 Team AVG":
+                inc_val = str(row["Prospected Incentive"])
+                if inc_val != "4,000 EGP":
+                    # Deduction Happened -> Highlight Red/Orange
+                    styles[inc_idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;'
+                else:
+                    # Full Bonus Achieved -> Highlight Green
+                    styles[inc_idx] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
+                    
+        return styles
 
     column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
     display_df = display_df[column_order]
@@ -2246,7 +2266,7 @@ As we review the performance for the period from **{d_from}** to **{d_to}**, I w
 | Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Expected Incentive |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** | **{agent_row['Prospected Incentive']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} | - |
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} | 4,000 EGP |
 
 **🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
@@ -2273,7 +2293,7 @@ As we review the performance for the period from {d_from} to {d_to}, I wanted to
 Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time | Incentive
 ---------------------------------------------------------------------------------------------------------
 Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time']):<12} | {str(agent_row['Prospected Incentive'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time']):<12} | -
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time']):<12} | 4,000 EGP
 ---------------------------------------------------------------------------------------------------------
 
 🎯 Targets & Quality:
