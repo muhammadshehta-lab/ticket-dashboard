@@ -1835,7 +1835,6 @@ with tab2:
         
         rtl = df_sc["Request Type"].astype(str).str.lower()
         df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
-        df_sc["_rfb"]   = rtl.str.contains("report|feedback", na=False)
         df_sc["_c_ok"]  = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
         df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
 
@@ -1843,7 +1842,6 @@ with tab2:
         stats = pd.DataFrame(index=grp.groups.keys())
         stats["Tickets Count"]        = grp["Request ID"].count()
         stats["JHAH Requests"]        = grp["_jhah"].sum().astype(int)
-        stats["Reporting & Feedback"] = grp["_rfb"].sum().astype(int)
         stats["Email Counts"]         = grp["Is Email"].sum().astype(int)
         
         if "Request Take (min)" in df_sc.columns:
@@ -1863,7 +1861,6 @@ with tab2:
     else:
         sc["Tickets Count"] = 0
         sc["JHAH Requests"] = 0
-        sc["Reporting & Feedback"] = 0
         sc["Email Counts"] = 0
         sc["_Service_Time_val"] = 0
         sc["_AFR_val"] = 0
@@ -1872,7 +1869,6 @@ with tab2:
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
     sc["JHAH Requests"] = sc["JHAH Requests"].fillna(0).astype(int)
-    sc["Reporting & Feedback"] = sc["Reporting & Feedback"].fillna(0).astype(int)
     sc["Email Counts"] = sc["Email Counts"].fillna(0).astype(int)
     sc["Out Requests"] = 0  
     
@@ -1945,15 +1941,9 @@ with tab2:
     sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
     sc["Out Requests"] = sc.apply(apply_support, axis=1)
     
-    # ── SMART FILTERING: Exclude inactive experts (0 Working Days AND 0 Cases) ──
-    total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
-                         pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
-                         pd.to_numeric(sc["Out Requests"], errors='coerce').fillna(0)
-                         
+    # ── SMART FILTERING: Exclude inactive experts (0 Working Days) ──
     wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
-    
-    # Keep row if they worked at least 1 day OR if they handled at least 1 case (e.g. on an off day)
-    active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
+    active_mask = (wdays_filter > 0)
     sc = sc[active_mask].copy()
 
     # Recalculate totals and Cases/Day for the FILTERED dataframe
@@ -2037,7 +2027,6 @@ with tab2:
         "JHAH Requests": team_jhah, 
         "Out Requests": team_out,
         "Cases/Day": team_cpd,
-        "Reporting & Feedback": round(pd.to_numeric(sc["Reporting & Feedback"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Email Counts": round(pd.to_numeric(sc["Email Counts"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0,
         "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
@@ -2064,7 +2053,7 @@ with tab2:
         except:
             return str(x)
 
-    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
+    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Email Counts", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
     for c in cols_clean:
         if c in sc_final.columns:
             sc_final[c] = sc_final[c].apply(format_clean_num)
@@ -2121,7 +2110,7 @@ with tab2:
                     
         return styles
 
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Reporting & Feedback", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
+    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Out Requests", "Cases/Day", "Email Counts", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
     display_df = display_df[column_order]
 
     styled_df = display_df.style.apply(style_performers, axis=1)
