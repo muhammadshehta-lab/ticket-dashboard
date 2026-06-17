@@ -724,7 +724,7 @@ with st.sidebar:
                     roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                     continue
                 elif title == "Out Requests":
-                    out_req_df = pd.DataFrame(data)
+                    out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                     continue
                 elif title == "Quality Issues":
                     df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
@@ -854,41 +854,43 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  PARSE OUT REQUESTS SHEET FOR THE SELECTED DATE RANGE
+#  PARSE OUT REQUESTS SHEET FOR THE SELECTED DATE RANGE (NEW LOGIC)
 # ══════════════════════════════════════════════════════════════════════════════════
 out_req_dict = {}
 global_jhah = 0
 global_support = 0
 
-if not df_out_req.empty and len(df_out_req) > 2:
-    row0 = df_out_req.iloc[0].values
-    target_mo = d_to.strftime("%m-%Y")
-    col_idx = -1
-    for i, val in enumerate(row0):
-        if str(val).strip() == target_mo:
-            col_idx = i
-            break
-    
-    if col_idx != -1:
-        for i in range(2, len(df_out_req)):
-            exp_name = str(df_out_req.iloc[i, 1]).strip()
-            if not exp_name: continue
+if not df_out_req.empty:
+    if "Date" in df_out_req.columns and "Expert Name" in df_out_req.columns:
+        # Parse Dates
+        df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
+        
+        # Filter by selected date range
+        mask = (df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)
+        df_out_filtered = df_out_req[mask].copy()
+        
+        # Normalize Expert Name to match system
+        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].apply(normalize_expert_name).str.lower()
+        
+        # Group by Expert and calculate counts
+        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
+            total_count = len(grp)
             
-            norm_name = normalize_expert_name(exp_name).lower()
+            # Check Source column: Anything containing 'jhah' is JHAH, the rest is Support
+            if "Source" in grp.columns:
+                jhah_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+            else:
+                jhah_count = 0
+                
+            support_count = total_count - jhah_count
             
-            j_val = str(df_out_req.iloc[i, col_idx+1]).strip() if col_idx+1 < len(df_out_req.columns) else ""
-            s_val = str(df_out_req.iloc[i, col_idx+2]).strip() if col_idx+2 < len(df_out_req.columns) else ""
-            
-            out_req_dict[norm_name] = {
-                "JHAH": j_val,
-                "Support Req": s_val
+            out_req_dict[exp_name] = {
+                "JHAH": jhah_count,
+                "Support Req": support_count
             }
             
-            # Safe aggregate for global overview
-            try: global_jhah += int(float(j_val)) if j_val else 0
-            except: pass
-            try: global_support += int(float(s_val)) if s_val else 0
-            except: pass
+            global_jhah += jhah_count
+            global_support += support_count
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -905,7 +907,7 @@ if sel_req_type:
     df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  PARSE QUALITY ISSUES SHEET (NEW LOGIC)
+#  PARSE QUALITY ISSUES SHEET
 # ══════════════════════════════════════════════════════════════════════════════════
 expert_quality_deductions = {}
 df_q_filtered = pd.DataFrame()
