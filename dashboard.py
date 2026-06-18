@@ -8,6 +8,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json, hashlib, time, pathlib, urllib.parse, re, requests
 from datetime import timedelta
+import smtplib
+from email.message import EmailMessage
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
@@ -105,7 +107,7 @@ def _hash(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  WHATSAPP ADMIN NOTIFICATION
+#  NOTIFICATIONS (WHATSAPP & EMAIL)
 # ══════════════════════════════════════════════════════════════════════════════════
 def notify_admin_whatsapp(logged_in_user):
     """Sends a WhatsApp message to the admin when a user logs in securely."""
@@ -118,6 +120,48 @@ def notify_admin_whatsapp(logged_in_user):
             requests.get(url, timeout=3)
     except Exception as e:
         pass
+
+def send_approval_email(to_email, name, uid):
+    """Sends an automated approval email with login credentials."""
+    try:
+        if "smtp" in st.secrets and "email" in st.secrets["smtp"] and "password" in st.secrets["smtp"]:
+            sender_email = st.secrets["smtp"]["email"]
+            sender_password = st.secrets["smtp"]["password"]
+            
+            msg = EmailMessage()
+            msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
+            msg['From'] = f"Dashboard Admin <{sender_email}>"
+            msg['To'] = to_email
+            
+            # 👇 قم بتعديل هذا الرابط برابط الداشبورد الخاص بك
+            dashboard_url = "https://aldawaa-requests.streamlit.app" 
+            
+            body = f"""مرحباً {name}،
+
+تمت الموافقة على طلبك للانضمام إلى لوحة تحكم (AlDawaa In-Store Requests Dashboard).
+
+بيانات الدخول الخاصة بك:
+- اسم المستخدم / ID: {uid}
+- كلمة المرور المؤقتة: {uid}
+
+(سيُطلب منك تعيين كلمة مرور جديدة سرية عند تسجيل الدخول لأول مرة).
+
+يمكنك الدخول من خلال الرابط التالي:
+{dashboard_url}
+
+بالتوفيق،
+فريق الإدارة
+"""
+            msg.set_content(body)
+            
+            with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.send_message(msg)
+            return True
+        return False
+    except Exception as e:
+        return False
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  CSS  — PROFESSIONAL CORPORATE THEME
@@ -665,22 +709,22 @@ if not st.session_state.authenticated:
             st.markdown("### 📝 Request Account Creation")
             req_name = st.text_input("Full Name *", placeholder="e.g. Ahmed Ali")
             req_id = st.text_input("Username / ID *", placeholder="e.g. 50123")
-            req_email = st.text_input("Email (Optional)", placeholder="e.g. ahmed@example.com")
+            req_email = st.text_input("Email *", placeholder="e.g. ahmed@example.com") # الإيميل بقى إلزامي
             
             if st.button("📤 Submit Access Request", use_container_width=True):
-                if req_name.strip() and req_id.strip():
+                if req_name.strip() and req_id.strip() and req_email.strip():
                     uid = req_id.strip().lower()
                     if uid in users():
                         st.error("❌ This Username/ID is already registered.")
                     else:
                         payload = json.dumps({"name": req_name.strip(), "id": uid, "email": req_email.strip()})
                         push_request(uid, "new_account", payload)
-                        st.success(f"✅ Request sent! Waiting for admin approval. Your ID ({uid}) will be your default password upon approval.")
-                        time.sleep(2)
+                        st.success(f"✅ Request sent! Waiting for admin approval. You will receive an email upon approval.")
+                        time.sleep(2.5)
                         st.session_state.view_request_form = False
                         st.rerun()
                 else:
-                    st.error("❌ Name and ID fields are required.")
+                    st.error("❌ Name, ID, and Email fields are all required.")
             
             if st.button("← Back to Login", use_container_width=True):
                 st.session_state.view_request_form = False
@@ -1092,32 +1136,26 @@ if st.session_state.page == "settings":
                                         ws = client.open("AlDawaa Tickets Data").worksheet("Users")
                                         # Write row: Username | Password | Role | Display_Name | Agent_Name | Email
                                         ws.append_row([p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'], p_data.get('email', '')])
-                                        st.success(f"Approved and added to Google Sheets!")
-                                    else:
-                                        st.warning("Approved locally, but Google Sheets credentials not found.")
                                 except Exception as e:
-                                    st.warning(f"Approved locally, but failed to append to Google Sheets: {e}")
+                                    pass # Ignore Sheets error gracefully to ensure email logic continues
+
+                                # 3. Send automated approval email
+                                user_email = p_data.get('email', '').strip()
+                                if user_email:
+                                    email_sent = send_approval_email(user_email, p_data['name'], p_data['id'])
+                                    if email_sent:
+                                        st.success("✅ Account approved, added to Sheets, and Email sent successfully!")
+                                    else:
+                                        st.warning("✅ Account approved, but Email failed (Check your SMTP Settings in secrets).")
+                                else:
+                                    st.success("✅ Account approved! (No valid email was provided)")
                                 
-                                time.sleep(1.5)
+                                time.sleep(2.5)
                                 st.rerun()
                         with rc3:
                             if st.button("❌ Deny", key=f"rej_na_{req['id']}", use_container_width=True):
                                 reject_request(req["id"]); st.warning("Request rejected."); time.sleep(1); st.rerun()
                     
-                    elif req["type"] == "visitor_access": # Legacy fallback
-                        st.markdown(f"""
-                        <div class='req-pending'>
-                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🔑 <b>VISITOR REQUEST</b> &nbsp;|&nbsp;
-                            Full Name: <b>{req['requester']}</b> wants an active account.
-                        </div>""", unsafe_allow_html=True)
-                        rc1, rc2, rc3 = st.columns([3, 1, 1])
-                        with rc2:
-                            if st.button("✅ Approve Access", key=f"apr_vis_{req['id']}", use_container_width=True):
-                                approve_request(req["id"])
-                                st.success(f"Approved account for visitor: {req['requester']}."); st.rerun()
-                        with rc3:
-                            if st.button("❌ Deny Access", key=f"rej_vis_{req['id']}", use_container_width=True):
-                                reject_request(req["id"]); st.warning("Access request rejected."); st.rerun()
                     else:
                         udata_r   = users().get(req["requester"], {})
                         udisp     = udata_r.get("display_name", req["requester"])
