@@ -1972,23 +1972,22 @@ if is_admin() or st.session_state.role == "expert":
         st.markdown("### 👥 Team Performance and KPIs")
         
         sel_agents_t2 = st.multiselect("Filter by Expert Name", sorted(df_raw["Assigned By"].dropna().unique()), key="t2_agents")
-    
-        df_t2 = df.copy()
-        df_t2_prev = df_prev_all.copy()
-    
-        if sel_agents_t2:
-            df_t2 = df_t2[df_t2["Assigned By"].isin(sel_agents_t2)]
-            df_t2_prev = df_t2_prev[df_t2_prev["Assigned By"].isin(sel_agents_t2)]
-    
+        
         aname = my_agent_name()
-        if not is_admin() and aname:
-            df_kpi = df_t2[df_t2["Assigned By"] == aname].copy()
-            df_kpi_prev = df_t2_prev[df_t2_prev["Assigned By"] == aname].copy()
-        else:
-            df_kpi = df_t2.copy()
-            df_kpi_prev = df_t2_prev.copy()
-    
-        # Current KPI Metrics (Base)
+        is_exp = (st.session_state.role == "expert" and aname)
+        
+        # 1. Filtered KPI DataFrames for Top Cards
+        df_kpi = df.copy()
+        df_kpi_prev = df_prev_all.copy()
+        
+        if is_exp:
+            df_kpi = df_kpi[df_kpi["Assigned By"] == aname]
+            df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"] == aname]
+        elif sel_agents_t2:
+            df_kpi = df_kpi[df_kpi["Assigned By"].isin(sel_agents_t2)]
+            df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"].isin(sel_agents_t2)]
+            
+        # Top KPI Metrics (Base)
         total_kpi = len(df_kpi)
         kpi_ss  = df_kpi["Status"].astype(str).str.strip()
         kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
@@ -2000,8 +1999,7 @@ if is_admin() or st.session_state.role == "expert":
         
         kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
         kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
-    
-        # Previous KPI Metrics (Base)
+        
         prev_kpi_total = len(df_kpi_prev)
         kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
         prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
@@ -2012,15 +2010,12 @@ if is_admin() or st.session_state.role == "expert":
         
         prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
         prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
-    
-        # ══════════════════════════════════════════════════════════════════════════════════
-        #  GENERATE SCORECARD TO CALCULATE EXACT "REQUESTS / WORKING DAYS"
-        # ══════════════════════════════════════════════════════════════════════════════════
+
+        # 2. FULL Scorecard Generation (Unfiltered by selection, to preserve Rank)
         OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
-        df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
-    
-        sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
+        df_sc = df[df["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
         
+        sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
         if not df_sc.empty:
             expert_map = {x.lower(): x for x in OFFICIAL_EXPERTS}
             df_sc["Assigned By"] = df_sc["Assigned By"].astype(str).str.strip().str.lower().map(expert_map)
@@ -2029,7 +2024,7 @@ if is_admin() or st.session_state.role == "expert":
             df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
             df_sc["_c_ok"]  = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
             df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
-    
+            
             grp = df_sc.groupby("Assigned By")
             stats = pd.DataFrame(index=grp.groups.keys())
             stats["Tickets Count"]        = grp["Request ID"].count()
@@ -2045,18 +2040,18 @@ if is_admin() or st.session_state.role == "expert":
             sc["_AFR_val"] = 0
             sc["_c_ok_sum"] = 0
             sc["_c_all_sum"] = 0
-    
+            
         sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
-    
+        
         sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
         sc["Off Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("off", 0))
         sc["Annual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("ann", 0))
         sc["Casual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("cas", 0))
         sc["Sick Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("sick", 0))
-    
+        
         sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
         sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
-    
+        
         def apply_jhah(row):
             k = str(row["Expert"]).strip().lower()
             v = out_req_dict.get(k, {}).get("JHAH", 0)
@@ -2068,7 +2063,7 @@ if is_admin() or st.session_state.role == "expert":
             v = out_req_dict.get(k, {}).get("Support Req", 0)
             try: return int(float(v)) if v else 0
             except: return 0
-    
+
         sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
         sc["Support Requests"] = sc.apply(apply_support, axis=1)
         
@@ -2080,32 +2075,33 @@ if is_admin() or st.session_state.role == "expert":
         
         active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
         sc = sc[active_mask].copy()
-    
+        
         total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
                       pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
                       pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
                       
         wdays = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)
         sc["Cases/Day"] = (total_cases / wdays).round(1)
-    
+        
+        # THIS RANKING WILL NOW BE PRESERVED BECAUSE sc CONTAINS ALL AGENTS
         if not sc.empty:
             sc.insert(1, "Rank", sc["Cases/Day"].rank(method="min", ascending=False).astype(int).astype(str))
         else:
             sc["Rank"] = []
-    
+            
         if global_target > 0:
             sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
         else:
             tavg_cpd = sc["Cases/Day"].mean()
             sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
-    
+            
         sc["Service Quality"] = sc["Expert"].apply(
             lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%"
         )
-    
-        # Team average calculation (for display mostly now)
+        
+        # Calculate dynamic Team Average AFR right before calculating incentives
         team_avg_afr = sc["_AFR_val"].mean() if not sc.empty else 0
-    
+        
         def calc_incentive(row):
             try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
             except: achiev = 0.0
@@ -2129,9 +2125,9 @@ if is_admin() or st.session_state.role == "expert":
             return f"{total_inc:,.0f} EGP"
             
         sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
-    
-        # ── CALCULATE ACCURATE "AVG REQUESTS / DAY" FOR THE TOP KPI CARDS ──
-        if not is_admin() and aname in sc["Expert"].values:
+
+        # 3. Dynamic "Avg Requests / Day" calculation based on FILTERED Scope for TOP CARDS
+        if is_exp:
             kpi_scope_df = sc[sc["Expert"] == aname]
             scope_agents = [aname]
         else:
@@ -2141,15 +2137,15 @@ if is_admin() or st.session_state.role == "expert":
                 scope_agents = sel_agents_t2
             else:
                 scope_agents = OFFICIAL_EXPERTS
-    
+
         sum_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
         sum_tickets = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum()
         sum_jhah = pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum()
         sum_support = pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
         total_reqs = sum_tickets + sum_jhah + sum_support
         kpi_curr_avg_per_day = total_reqs / sum_wd if sum_wd > 0 else 0
-    
-        # Calculate exact Previous "Avg Requests / Day"
+
+        # Calculate exact Previous "Avg Requests / Day" for scope
         prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
         scope_agents_lower = [a.lower() for a in scope_agents]
         prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin(scope_agents_lower)] if scope_agents_lower else df_kpi_prev
@@ -2158,15 +2154,15 @@ if is_admin() or st.session_state.role == "expert":
         prev_sum_supp = sum(prev_out_req_dict.get(exp.lower(), {}).get("Support Req", 0) for exp in scope_agents)
         prev_total_reqs = prev_sum_tickets + prev_sum_jhah + prev_sum_supp
         prev_kpi_avg_per_day = prev_total_reqs / prev_sum_wd if prev_sum_wd > 0 else 0
-    
+
         chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
         chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct  
         chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct  
         chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
         chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
         chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
-    
-        # ── RENDER TOP KPI CARDS ──
+
+        # 4. Render Top KPI Cards
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
         k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
@@ -2174,26 +2170,26 @@ if is_admin() or st.session_state.role == "expert":
         k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
         k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
         k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
-    
+
         st.write(""); st.divider()
-    
-        # ── CONTINUE SCORECARD RENDERING ──
+
+        # 5. Team Averages & Scorecard Finalization
         team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
         team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
         team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
         team_out = round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
         team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
-    
-        df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
-        team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
-        team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
-    
+
+        # FIXED AFR & TAT for Team: using `df_sc` directly
+        team_st = fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0)
+        team_afr = fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0)
+
         def parse_pct(p):
             try: return float(str(p).replace("%", ""))
             except: return 0.0
             
-        avg_qual = sc["Service Quality"].apply(parse_pct).mean()
-    
+        avg_qual = sc["Service Quality"].apply(parse_pct).mean() if not sc.empty else 0
+
         team_row = {
             "Expert": "🏆 Team AVG", 
             "Rank": "-",
@@ -2212,23 +2208,13 @@ if is_admin() or st.session_state.role == "expert":
             "Service Quality": f"{avg_qual:.1f}%",
             "Prospected Incentive": "3,100 EGP"
         }
-    
+
         sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
-    
-        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
-    
-        def format_clean_num(x):
-            if x == "-": return "-"
-            try:
-                f = float(x)
-                if f.is_integer(): return str(int(f))
-                return str(round(f, 1))
-            except: return str(x)
-    
-        cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
-        for c in cols_clean:
-            if c in sc_final.columns: sc_final[c] = sc_final[c].apply(format_clean_num)
-    
+        
+        # Add Team row at the top
+        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True)
+        
+        # Extract Full Rank before filtering for display
         rank_df = sc.copy()
         rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
         top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
@@ -2236,12 +2222,34 @@ if is_admin() or st.session_state.role == "expert":
         gold_exp   = top_experts[0] if len(top_experts) > 0 else None
         silver_exp = top_experts[1] if len(top_experts) > 1 else None
         bronze_exp = top_experts[2] if len(top_experts) > 2 else None
-    
-        display_df = sc_final.copy()
+
         gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
         silver_disp = f"🥈 {silver_exp}" if silver_exp else None
         bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
-    
+
+        # FILTER DISPLAY SCORECARD based on selection / role
+        if is_exp:
+            display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])].copy()
+        else:
+            if sel_agents_t2:
+                display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)].copy()
+            else:
+                display_df = sc_final.copy()
+                
+        # Clean numeric cols
+        cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
+        def format_clean_num(x):
+            if x == "-": return "-"
+            try:
+                f = float(x)
+                if f.is_integer(): return str(int(f))
+                return str(round(f, 1))
+            except: return str(x)
+            
+        for c in cols_clean:
+            if c in display_df.columns: display_df[c] = display_df[c].apply(format_clean_num)
+
+        # Apply Medals
         def add_medals_row(val):
             if val == gold_exp: return gold_disp
             if val == silver_exp: return silver_disp
@@ -2249,7 +2257,8 @@ if is_admin() or st.session_state.role == "expert":
             return val
             
         display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
-    
+
+        # Styling
         def style_performers(row):
             exp = row["Expert"]
             styles = [''] * len(row)
@@ -2268,14 +2277,14 @@ if is_admin() or st.session_state.role == "expert":
                     else:
                         styles[inc_idx] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
             return styles
-    
+
         column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
         display_df = display_df[column_order]
-    
+
         styled_df = display_df.style.apply(style_performers, axis=1)
         styled_df = styled_df.set_properties(**{'text-align': 'center'})
         styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
-    
+
         html_table = styled_df.hide(axis="index").to_html()
         
         st.markdown("### 📅 Schedule & Leaves Summary")
