@@ -24,57 +24,54 @@ st.set_page_config(
 # ══════════════════════════════════════════════════════════════════════════════════
 _DATA_FILE = pathlib.Path(__file__).parent / ".dashboard_data.json"
 
-def _hash(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
-
 def _load_store() -> dict:
     default_store = {
         "users": {
             "admin": {
                 "display_name": "Mohammed Shehta",
-                "password_hash": _hash("admin123"),
+                "password_hash": hashlib.sha256("admin123".encode()).hexdigest(),
                 "role": "admin",
                 "agent_name": None,
             },
             "50107": {
                 "display_name": "Ahmed El-Kholy",
-                "password_hash": _hash("50107"),
+                "password_hash": hashlib.sha256("50107".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Ahmed El-Kholy",
             },
             "50399": {
                 "display_name": "Ahmed Kadry",
-                "password_hash": _hash("50399"),
+                "password_hash": hashlib.sha256("50399".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Ahmed Kadry",
             },
             "50187": {
                 "display_name": "Amr El-Sayed",
-                "password_hash": _hash("50187"),
+                "password_hash": hashlib.sha256("50187".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Amr El-Sayed",
             },
             "50461": {
                 "display_name": "Eslam Ramadan",
-                "password_hash": _hash("50461"),
+                "password_hash": hashlib.sha256("50461".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Eslam Ramadan",
             },
             "50274": {
                 "display_name": "Mohamed Abdelmageed",
-                "password_hash": _hash("50274"),
+                "password_hash": hashlib.sha256("50274".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Mohamed Abdelmageed",
             },
             "50476": {
                 "display_name": "Mohamed Khalifa",
-                "password_hash": _hash("50476"),
+                "password_hash": hashlib.sha256("50476".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Mohamed Khalifa",
             },
             "50114": {
                 "display_name": "Yahia Ali Shafei",
-                "password_hash": _hash("50114"),
+                "password_hash": hashlib.sha256("50114".encode()).hexdigest(),
                 "role": "expert",
                 "agent_name": "Yahia Ali Shafei",
             }
@@ -103,6 +100,9 @@ def _load_store() -> dict:
 
 def _save_store():
     _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
+
+def _hash(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  WHATSAPP ADMIN NOTIFICATION
@@ -368,10 +368,14 @@ THEME = dict(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SESSION STATE & PERSISTENT LOGIN
+#  SESSION STATE & SECURE PERSISTENT LOGIN (WITH EXPIRY)
 # ══════════════════════════════════════════════════════════════════════════════════
-def generate_token(uname: str) -> str:
-    return hashlib.sha256((uname + "SECRET_ALDAWAA_TOKEN").encode()).hexdigest()
+SESSION_DURATION_HOURS = 12  # حدد مدة انتهاء جلسة الدخول بالساعات
+
+def generate_signed_token(uname: str, exp_timestamp: str) -> str:
+    """يولد رمز مشفر يحتوي على اسم المستخدم ووقت انتهاء الجلسة لمنع التلاعب."""
+    payload = f"{uname}|{exp_timestamp}|SECRET_ALDAWAA_TOKEN"
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 if "store" not in st.session_state:
     st.session_state.store = _load_store()
@@ -382,16 +386,26 @@ if "authenticated" not in st.session_state:
     st.session_state.role          = None
     
     # ── Check URL query parameters for Continuous Login Token ──
-    if "usr" in st.query_params and "tok" in st.query_params:
+    if "usr" in st.query_params and "tok" in st.query_params and "exp" in st.query_params:
         q_usr = st.query_params["usr"]
         q_tok = st.query_params["tok"]
+        q_exp = st.query_params["exp"]
+        
         udata = st.session_state.store["users"].get(q_usr)
         
-        # Verify Token Integrity
-        if udata and generate_token(q_usr) == q_tok:
+        # Verify Token Integrity and Expiration Time
+        try:
+            is_expired = int(time.time()) > int(q_exp)
+        except ValueError:
+            is_expired = True
+
+        if udata and not is_expired and generate_signed_token(q_usr, q_exp) == q_tok:
             st.session_state.authenticated = True
             st.session_state.username = q_usr
             st.session_state.role = udata["role"]
+        else:
+            # If invalid or expired, clear the URL to force re-login
+            st.query_params.clear()
             
 if "page" not in st.session_state:
     st.session_state.page = "dashboard"
@@ -628,9 +642,13 @@ if not st.session_state.authenticated:
                     st.session_state.store["login_logs"] = st.session_state.store["login_logs"][-200:]
                     _save_store()
                     
-                    # Store continuous login token
+                    # Calculate expiry timestamp
+                    exp_time = str(int(time.time()) + (SESSION_DURATION_HOURS * 3600))
+                    
+                    # Store continuous login token securely with Expiry
                     st.query_params["usr"] = uname
-                    st.query_params["tok"] = generate_token(uname)
+                    st.query_params["exp"] = exp_time
+                    st.query_params["tok"] = generate_signed_token(uname, exp_time)
                     
                     if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
                         st.session_state.username = uname
