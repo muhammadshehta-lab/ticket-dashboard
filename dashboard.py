@@ -130,27 +130,26 @@ def send_approval_email(to_email, name, uid):
             
             msg = EmailMessage()
             msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
-            msg['From'] = f"Dashboard Admin <{sender_email}>"
+            msg['From'] = f"Mohammed Shehta <{sender_email}>"
             msg['To'] = to_email
             
-            # 👇 قم بتعديل هذا الرابط برابط الداشبورد الخاص بك
             dashboard_url = "https://aldawaa-requests.streamlit.app" 
             
-            body = f"""مرحباً {name}،
+            body = f"""Dear {name},
 
-تمت الموافقة على طلبك للانضمام إلى لوحة تحكم (AlDawaa In-Store Requests Dashboard).
+Your request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.
 
-بيانات الدخول الخاصة بك:
-- اسم المستخدم / ID: {uid}
-- كلمة المرور المؤقتة: {uid}
+Here are your login credentials:
+- Username / ID: {uid}
+- Temporary Password: {uid}
 
-(سيُطلب منك تعيين كلمة مرور جديدة سرية عند تسجيل الدخول لأول مرة).
+(Note: You will be required to set a new, secure password upon your first login).
 
-يمكنك الدخول من خلال الرابط التالي:
+You can access the dashboard via the link below:
 {dashboard_url}
 
-بالتوفيق،
-فريق الإدارة
+Best regards,
+Mohammed Shehta
 """
             msg.set_content(body)
             
@@ -709,7 +708,7 @@ if not st.session_state.authenticated:
             st.markdown("### 📝 Request Account Creation")
             req_name = st.text_input("Full Name *", placeholder="e.g. Ahmed Ali")
             req_id = st.text_input("Username / ID *", placeholder="e.g. 50123")
-            req_email = st.text_input("Email *", placeholder="e.g. ahmed@example.com") # الإيميل بقى إلزامي
+            req_email = st.text_input("Email *", placeholder="e.g. ahmed@example.com") 
             
             if st.button("📤 Submit Access Request", use_container_width=True):
                 if req_name.strip() and req_id.strip() and req_email.strip():
