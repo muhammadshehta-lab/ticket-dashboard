@@ -2103,7 +2103,7 @@ if is_admin() or st.session_state.role == "expert":
             lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%"
         )
     
-        # Calculate dynamic Team Average AFR right before calculating incentives
+        # Team average calculation (for display mostly now)
         team_avg_afr = sc["_AFR_val"].mean() if not sc.empty else 0
     
         def calc_incentive(row):
@@ -2121,21 +2121,11 @@ if is_admin() or st.session_state.role == "expert":
             try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
             except: qual = 0.0
             qual_inc = 600 * qual
-            
-            # 3. Avg Response Time Incentive (500 if better than or equal to team average)
-            try:
-                row_afr = float(row["_AFR_val"])
-                if row_afr <= team_avg_afr and row_afr > 0:
-                    response_inc = 500
-                else:
-                    response_inc = 0
-            except:
-                response_inc = 0
                 
-            # 4. Fixed Base Bonus (500 EGP to complete the total up to 3,100 EGP)
-            base_bonus = 500
+            # 3. Fixed Base Bonus (1000 EGP to complete the total up to 3,100 EGP)
+            base_bonus = 1000
             
-            total_inc = count_inc + qual_inc + response_inc + base_bonus
+            total_inc = count_inc + qual_inc + base_bonus
             return f"{total_inc:,.0f} EGP"
             
         sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
