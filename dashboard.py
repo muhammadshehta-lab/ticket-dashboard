@@ -370,7 +370,7 @@ THEME = dict(
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SESSION STATE & SECURE PERSISTENT LOGIN (WITH EXPIRY)
 # ══════════════════════════════════════════════════════════════════════════════════
-SESSION_DURATION_HOURS = 9  # حدد مدة انتهاء جلسة الدخول بالساعات
+SESSION_DURATION_HOURS = 12  
 
 def generate_signed_token(uname: str, exp_timestamp: str) -> str:
     """يولد رمز مشفر يحتوي على اسم المستخدم ووقت انتهاء الجلسة لمنع التلاعب."""
@@ -888,51 +888,90 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  PARSE OUT REQUESTS SHEET FOR THE SELECTED DATE RANGE (NEW LOGIC)
+#  HELPER FUNCTION: CALCULATE ROSTER WORKING DAYS FOR ANY PERIOD
+# ══════════════════════════════════════════════════════════════════════════════════
+def get_roster_stats(roster_df, start_date, end_date):
+    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
+    if roster_df.empty: return counts
+    
+    valid_cols = []
+    for col in roster_df.columns:
+        col_str = str(col).strip()
+        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
+        if match:
+            try:
+                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                if start_date <= col_date <= end_date:
+                    valid_cols.append(col)
+            except: pass
+
+    df_r_str = roster_df.astype(str)
+    for exp in OFFICIAL_EXPERTS:
+        exp_id = EXPERT_ID_MAP.get(exp, "")
+        if exp_id:
+            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+            exp_rows = df_r_str[mask]
+            if not exp_rows.empty and valid_cols:
+                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
+                if safe_cols:
+                    vals = exp_rows[safe_cols].values.flatten()
+                    vals_lower = [str(v).strip().lower() for v in vals]
+                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
+                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
+                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
+                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
+    return counts
+
+curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
+prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  PARSE OUT REQUESTS SHEET FOR BOTH PERIODS
 # ══════════════════════════════════════════════════════════════════════════════════
 out_req_dict = {}
 global_jhah = 0
 global_support = 0
 
-if not df_out_req.empty:
-    if "Date" in df_out_req.columns:
-        # Parse Dates
-        df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
-        
-        # Filter by selected date range
-        mask = (df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)
-        df_out_filtered = df_out_req[mask].copy()
-        
-        # 1. إجمالي الحالات للـ Operational Insights (بما فيها الحالات بدون اسم)
-        if "Source" in df_out_filtered.columns:
-            global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-        else:
-            global_jhah = 0
-        global_support = len(df_out_filtered) - global_jhah
-        
-        # 2. حسابات الأفراد لجدول الـ Team Performance
-        if "Expert Name" in df_out_filtered.columns:
-            df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-            
-            for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
-                # تجاهل الحالات بدون اسم عشان متأثرش على إحصائيات الخبراء في الجدول
-                if not exp_name or exp_name == "nan":
-                    continue 
-                    
-                total_count = len(grp)
-                
-                # Check Source column: Anything containing 'jhah' is JHAH, the rest is Support
-                if "Source" in grp.columns:
-                    jhah_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-                else:
-                    jhah_count = 0
-                    
-                support_count = total_count - jhah_count
-                
-                out_req_dict[exp_name] = {
-                    "JHAH": jhah_count,
-                    "Support Req": support_count
-                }
+prev_out_req_dict = {}
+prev_global_jhah = 0
+prev_global_support = 0
+
+if not df_out_req.empty and "Date" in df_out_req.columns:
+    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
+    
+    # 1. Current Period parsing
+    mask = (df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)
+    df_out_filtered = df_out_req[mask].copy()
+    if "Source" in df_out_filtered.columns:
+        global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    global_support = len(df_out_filtered) - global_jhah
+    
+    if "Expert Name" in df_out_filtered.columns:
+        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            t_count = len(grp)
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            s_count = t_count - j_count
+            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": s_count}
+
+    # 2. Previous Period parsing (For accurate trends)
+    mask_prev = (df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)
+    df_out_prev = df_out_req[mask_prev].copy()
+    if "Source" in df_out_prev.columns:
+        prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    prev_global_support = len(df_out_prev) - prev_global_jhah
+
+    if "Expert Name" in df_out_prev.columns:
+        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            t_count = len(grp)
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            s_count = t_count - j_count
+            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": s_count}
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  APPLYING SIDEBAR FILTERS TO MAIN DATAFRAMES
@@ -1214,7 +1253,8 @@ with tab1:
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
     
-    curr_avg_per_day = total / delta_days if delta_days > 0 else 0
+    total_requests = total + global_jhah + global_support
+    curr_avg_per_day = total_requests / delta_days if delta_days > 0 else 0
     
     # Previous Metrics
     prev_total = len(dfm_prev)
@@ -1230,7 +1270,8 @@ with tab1:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
     
-    prev_avg_per_day = prev_total / delta_days if delta_days > 0 else 0
+    prev_total_requests = prev_total + prev_global_jhah + prev_global_support
+    prev_avg_per_day = prev_total_requests / delta_days if delta_days > 0 else 0
 
     # Calculate Percentage Point Trend Changes (Absolute Differences for %)
     chg_total = calc_change(total, prev_total)
@@ -1251,7 +1292,7 @@ with tab1:
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     
-    r2c1.markdown(kpi_colored("Avg Tickets / Day",  f"{curr_avg_per_day:.1f}", "card-neutral card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c1.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("AFR (Avg Response)", h_afr, "card-neutral card-small", chg_afr, inverse=True),       unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("Avg Service (TAT)", h_tat,        "card-neutral card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c4.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
@@ -1792,7 +1833,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             {"Metric": "Total Actions", "Value": status_actions_sum},
             {"Metric": "Closed Completed", "Value": ok},
             {"Metric": "Closed with Issue", "Value": issue},
-            {"Metric": "Avg Tickets / Day", "Value": round(curr_avg_per_day, 1)},
+            {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)},
             {"Metric": "AFR", "Value": h_afr},
             {"Metric": "TAT", "Value": h_tat},
             {"Metric": "JHAH Requests", "Value": global_jhah},
@@ -1851,7 +1892,7 @@ with tab2:
         df_kpi = df_t2.copy()
         df_kpi_prev = df_t2_prev.copy()
 
-    # Current KPI Metrics
+    # Current KPI Metrics (Base)
     total_kpi = len(df_kpi)
     kpi_ss  = df_kpi["Status"].astype(str).str.strip()
     kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
@@ -1859,47 +1900,26 @@ with tab2:
     
     kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
     kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
-    
     h_kpi_afr = fmt_m(kpi_curr_afr_val)
-    
-    kpi_curr_avg_per_day = total_kpi / delta_days if delta_days > 0 else 0
     
     kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
     kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
 
-    # Previous KPI Metrics
+    # Previous KPI Metrics (Base)
     prev_kpi_total = len(df_kpi_prev)
     kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
     prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # Safe check for columns existence
     prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
     prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    
-    prev_kpi_avg_per_day = prev_kpi_total / delta_days if delta_days > 0 else 0
     
     prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
     prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
 
-    # KPI Changes (Percentage Point Absolute Difference for Completion/Issue Rates)
-    chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
-    chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct  
-    chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct  
-    chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
-    chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
-    chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
-
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Avg Tickets / Day",  f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
-    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-    k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
-    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
-
-    st.write(""); st.divider()
-
+    # ══════════════════════════════════════════════════════════════════════════════════
+    #  GENERATE SCORECARD TO CALCULATE EXACT "REQUESTS / WORKING DAYS"
+    # ══════════════════════════════════════════════════════════════════════════════════
     OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
     df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
 
@@ -1917,17 +1937,8 @@ with tab2:
         grp = df_sc.groupby("Assigned By")
         stats = pd.DataFrame(index=grp.groups.keys())
         stats["Tickets Count"]        = grp["Request ID"].count()
-        
-        if "Request Take (min)" in df_sc.columns:
-            stats["_Service_Time_val"] = grp["Request Take (min)"].mean()
-        else:
-            stats["_Service_Time_val"] = 0
-            
-        if "Response Take (min)" in df_sc.columns:
-            stats["_AFR_val"] = grp["Response Take (min)"].mean()
-        else:
-            stats["_AFR_val"] = 0
-
+        stats["_Service_Time_val"]    = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
+        stats["_AFR_val"]             = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
         stats["_c_ok_sum"]            = grp["_c_ok"].sum()
         stats["_c_all_sum"]           = grp["_c_all"].sum()
         
@@ -1940,63 +1951,16 @@ with tab2:
         sc["_c_all_sum"] = 0
 
     sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
-    sc["JHAH Requests"] = 0
-    sc["Support Requests"] = 0  
-    
-    roster_counts = {}
-    if not df_roster.empty:
-        valid_roster_cols = []
-        for col in df_roster.columns:
-            col_str = str(col).strip()
-            clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-            match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
-            if match:
-                try:
-                    col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                    if d_from <= col_date <= d_to:
-                        valid_roster_cols.append(col)
-                except: pass
-        
-        df_r_str = df_roster.astype(str)
-        
-        for exp in OFFICIAL_EXPERTS:
-            exp_id = EXPERT_ID_MAP.get(exp, "")
-            off_c, ann_c, cas_c, sick_c, wd_c = 0, 0, 0, 0, 0
-            
-            if exp_id:
-                mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
-                exp_rows = df_r_str[mask]
-                
-                if not exp_rows.empty and valid_roster_cols:
-                    safe_cols = [c for c in valid_roster_cols if c in exp_rows.columns]
-                    if safe_cols:
-                        vals = exp_rows[safe_cols].values.flatten()
-                        vals_lower = [str(v).strip().lower() for v in vals]
-                        
-                        off_c = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                        ann_c = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
-                        max_cas = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
-                        sick_c = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
-                        wd_c  = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
-                
-            roster_counts[exp] = {
-                "Working Days": wd_c,
-                "Off Days": off_c,
-                "Annual Leaves": ann_c,
-                "Casual Leaves": max_cas,
-                "Sick Leaves": sick_c
-            }
 
-    sc["Working Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Working Days", 0))
-    sc["Off Days"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Off Days", 0))
-    sc["Annual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Annual Leaves", 0))
-    sc["Casual Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Casual Leaves", 0))
-    sc["Sick Leaves"] = sc["Expert"].apply(lambda x: roster_counts.get(x, {}).get("Sick Leaves", 0))
+    sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
+    sc["Off Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("off", 0))
+    sc["Annual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("ann", 0))
+    sc["Casual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("cas", 0))
+    sc["Sick Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("sick", 0))
 
     sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
     sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
 
-    # ── Vectorized Overrides & Quality Deductions Mapping ──
     def apply_jhah(row):
         k = str(row["Expert"]).strip().lower()
         v = out_req_dict.get(k, {}).get("JHAH", 0)
@@ -2012,18 +1976,15 @@ with tab2:
     sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
     sc["Support Requests"] = sc.apply(apply_support, axis=1)
     
-    # ── SMART FILTERING: Exclude inactive experts (0 Working Days AND 0 Cases) ──
     total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
                          pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
                          pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
                          
     wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
     
-    # Keep row if they worked at least 1 day OR if they handled at least 1 case (e.g. on an off day)
     active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
     sc = sc[active_mask].copy()
 
-    # Recalculate totals and Cases/Day for the FILTERED dataframe
     total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
                   pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
                   pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
@@ -2042,49 +2003,81 @@ with tab2:
         tavg_cpd = sc["Cases/Day"].mean()
         sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
 
-    # Quality Update
     sc["Service Quality"] = sc["Expert"].apply(
         lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%"
     )
 
-    # ── PROSPECTED INCENTIVE CALCULATION ──
     def calc_incentive(row):
-        # 1. Target Incentive (Max 1500)
-        try:
-            achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
-        except:
-            achiev = 0.0
-            
+        try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
+        except: achiev = 0.0
         count_inc = 0
         if achiev >= 0.97: count_inc = 1500
         elif achiev >= 0.95: count_inc = 1350
         elif achiev >= 0.90: count_inc = 1200
         elif achiev >= 0.85: count_inc = 1050
-        
-        # 2. Quality Incentive (Max 600)
-        try:
-            qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
-        except:
-            qual = 0.0
-            
+        try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
+        except: qual = 0.0
         qual_inc = 600 * qual
-        
-        # 3. Missing Parameters Auto-Full (Max 1900)
         auto_bonus = 500 + 500 + 300 + 200 + 400
-        
         total_inc = count_inc + qual_inc + auto_bonus
         return f"{total_inc:,.0f} EGP"
         
     sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
 
-    # ── TEAM AVERAGE CALCULATION ──
+    # ── CALCULATE ACCURATE "AVG REQUESTS / DAY" FOR THE TOP KPI CARDS ──
+    if not is_admin() and aname in sc["Expert"].values:
+        kpi_scope_df = sc[sc["Expert"] == aname]
+        scope_agents = [aname]
+    else:
+        kpi_scope_df = sc.copy()
+        if sel_agents_t2:
+            kpi_scope_df = kpi_scope_df[kpi_scope_df["Expert"].isin(sel_agents_t2)]
+            scope_agents = sel_agents_t2
+        else:
+            scope_agents = OFFICIAL_EXPERTS
+
+    sum_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
+    sum_tickets = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum()
+    sum_jhah = pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum()
+    sum_support = pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
+    total_reqs = sum_tickets + sum_jhah + sum_support
+    kpi_curr_avg_per_day = total_reqs / sum_wd if sum_wd > 0 else 0
+
+    # Calculate exact Previous "Avg Requests / Day"
+    prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
+    scope_agents_lower = [a.lower() for a in scope_agents]
+    prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin(scope_agents_lower)] if scope_agents_lower else df_kpi_prev
+    prev_sum_tickets = len(prev_kpi_scope_df)
+    prev_sum_jhah = sum(prev_out_req_dict.get(exp.lower(), {}).get("JHAH", 0) for exp in scope_agents)
+    prev_sum_supp = sum(prev_out_req_dict.get(exp.lower(), {}).get("Support Req", 0) for exp in scope_agents)
+    prev_total_reqs = prev_sum_tickets + prev_sum_jhah + prev_sum_supp
+    prev_kpi_avg_per_day = prev_total_reqs / prev_sum_wd if prev_sum_wd > 0 else 0
+
+    chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
+    chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct  
+    chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct  
+    chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
+    chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
+    chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+
+    # ── RENDER TOP KPI CARDS ──
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
+    k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
+    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
+    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+    k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
+
+    st.write(""); st.divider()
+
+    # ── CONTINUE SCORECARD RENDERING ──
     team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_out = round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
     team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
 
-    # Filter out empty records before team mean for AFR/TAT
     df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
     team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
     team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
@@ -2122,16 +2115,13 @@ with tab2:
         if x == "-": return "-"
         try:
             f = float(x)
-            if f.is_integer():
-                return str(int(f))
+            if f.is_integer(): return str(int(f))
             return str(round(f, 1))
-        except:
-            return str(x)
+        except: return str(x)
 
     cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
     for c in cols_clean:
-        if c in sc_final.columns:
-            sc_final[c] = sc_final[c].apply(format_clean_num)
+        if c in sc_final.columns: sc_final[c] = sc_final[c].apply(format_clean_num)
 
     rank_df = sc.copy()
     rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
@@ -2142,7 +2132,6 @@ with tab2:
     bronze_exp = top_experts[2] if len(top_experts) > 2 else None
 
     display_df = sc_final.copy()
-    
     gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
     silver_disp = f"🥈 {silver_exp}" if silver_exp else None
     bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
@@ -2158,20 +2147,12 @@ with tab2:
     def style_performers(row):
         exp = row["Expert"]
         styles = [''] * len(row)
-        
-        # 1. Base Row Colors (Medals & Highlights)
-        if exp == "🏆 Team AVG":
-            styles = ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
-        elif exp == gold_disp:
-            styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
-        elif exp == silver_disp:
-            styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
-        elif exp == bronze_disp:
-            styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
-        elif exp == aname and not is_admin():
-            styles = ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+        if exp == "🏆 Team AVG": styles = ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+        elif exp == gold_disp: styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+        elif exp == silver_disp: styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+        elif exp == bronze_disp: styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+        elif exp == aname and not is_admin(): styles = ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
             
-        # 2. Visual Alert for Deduction in Prospected Incentive Column
         if "Prospected Incentive" in row.index:
             inc_idx = row.index.get_loc("Prospected Incentive")
             if exp != "🏆 Team AVG":
@@ -2180,7 +2161,6 @@ with tab2:
                     styles[inc_idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;'
                 else:
                     styles[inc_idx] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
-                    
         return styles
 
     column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
@@ -2192,20 +2172,12 @@ with tab2:
 
     html_table = styled_df.hide(axis="index").to_html()
     
-    # ── ROSTER KPI CARDS FOR THE CURRENT VIEW ──
     st.markdown("### 📅 Schedule & Leaves Summary")
-    if not is_admin() and aname in sc["Expert"].values:
-        kpi_r_df = sc[sc["Expert"] == aname]
-    else:
-        kpi_r_df = sc
-        if sel_agents_t2:
-            kpi_r_df = sc[sc["Expert"].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
-
-    sum_wd   = int(pd.to_numeric(kpi_r_df["Working Days"], errors='coerce').fillna(0).sum())
-    sum_off  = int(pd.to_numeric(kpi_r_df["Off Days"], errors='coerce').fillna(0).sum())
-    sum_ann  = int(pd.to_numeric(kpi_r_df["Annual Leaves"], errors='coerce').fillna(0).sum())
-    sum_cas  = int(pd.to_numeric(kpi_r_df["Casual Leaves"], errors='coerce').fillna(0).sum())
-    sum_sick = int(pd.to_numeric(kpi_r_df["Sick Leaves"], errors='coerce').fillna(0).sum())
+    sum_wd   = int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum())
+    sum_off  = int(pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum())
+    sum_ann  = int(pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum())
+    sum_cas  = int(pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum())
+    sum_sick = int(pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum())
 
     rk1, rk2, rk3, rk4, rk5 = st.columns(5)
     rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-neutral"), unsafe_allow_html=True)
@@ -2218,7 +2190,6 @@ with tab2:
     st.markdown("### 📊 Expert Performance Scorecard Dashboard")
     st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
     
-    # ── 🔍 QUALITY ISSUES LOG ──
     st.divider()
     st.markdown("### 🔍 Quality Issues Log (Current Period)")
     
@@ -2248,20 +2219,15 @@ with tab2:
             def style_quality_issues(row):
                 sev = str(row['Severity']).lower()
                 styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
-                
                 for i, col in enumerate(row.index):
                     if col in ['Severity', 'Deduction (%)']:
-                        if 'critical' in sev:
-                            styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;'
-                        elif 'major' in sev:
-                            styles[i] = 'background-color: #ffffff; color: #ea580c; font-weight: 900;'
-                        elif 'minor' in sev:
-                            styles[i] = 'background-color: #ffffff; color: #ca8a04; font-weight: 900;'
+                        if 'critical' in sev: styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;'
+                        elif 'major' in sev: styles[i] = 'background-color: #ffffff; color: #ea580c; font-weight: 900;'
+                        elif 'minor' in sev: styles[i] = 'background-color: #ffffff; color: #ca8a04; font-weight: 900;'
                 return styles
             
             styled_q = disp_q.style.apply(style_quality_issues, axis=1)
             styled_q = styled_q.set_properties(**{'text-align': 'center'})
-            
             html_q_table = styled_q.hide(axis="index").to_html()
             st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
     else:
@@ -2295,22 +2261,13 @@ with tab2:
             agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Support Requests'])
             team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Support Requests'])
             
-            if achiev_val >= 100:
-                perf_word = "outstanding"
-                target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
-            elif achiev_val >= 80:
-                perf_word = "solid"
-                target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
-            else:
-                perf_word = "developing"
-                target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
+            if achiev_val >= 100: perf_word = "outstanding"; target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
+            elif achiev_val >= 80: perf_word = "solid"; target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
+            else: perf_word = "developing"; target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
             
-            if qual_val >= 95:
-                qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
-            elif qual_val >= 85:
-                qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
-            else:
-                qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
+            if qual_val >= 95: qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
+            elif qual_val >= 85: qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
+            else: qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
             
             clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
             
@@ -2336,10 +2293,8 @@ Thank you for your hard work and dedication to our success. Should you need any 
 Best regards,  
 **Mohammed Shehta** Team Leader
 """
-            
             st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
             st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
-            
             st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
             
             email_body_plain = f"""Dear {clean_name},
