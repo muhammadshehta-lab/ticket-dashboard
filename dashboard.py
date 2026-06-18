@@ -350,6 +350,7 @@ h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 
 .badge { display:inline-block; font-size:.72rem !important; border-radius:6px; padding:3px 11px; margin-left:6px; font-weight:800; letter-spacing:.05em; }
 .badge-admin  { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
 .badge-expert { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.badge-supervisor { background:#fefce8; border:1px solid #fef08a; color:#a16207; }
 
 .req-pending  { background:#fffbeb; border:1px solid #fde047; border-radius:8px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#92400e; font-size:.95rem; font-weight:600; }
 
@@ -685,7 +686,7 @@ if not st.session_state.authenticated:
                     st.query_params["exp"] = exp_time
                     st.query_params["tok"] = generate_signed_token(uname, exp_time)
                     
-                    if inp_u.strip() == inp_p.strip() and udata["role"] == "expert":
+                    if inp_u.strip() == inp_p.strip() and udata["role"] != "admin":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
                         st.session_state.authenticated = True
@@ -764,8 +765,13 @@ if st.session_state.force_onboard:
 with st.sidebar:
     st.markdown("## Approvals Team Dashboard")
 
-    badge_cls = "badge-admin" if is_admin() else "badge-expert"
-    badge_txt = "ADMIN" if is_admin() else "EXPERT"
+    if is_admin():
+        badge_cls, badge_txt = "badge-admin", "ADMIN"
+    elif st.session_state.role == "supervisor":
+        badge_cls, badge_txt = "badge-supervisor", "SUPERVISOR"
+    else:
+        badge_cls, badge_txt = "badge-expert", "EXPERT"
+        
     st.markdown(
         f"👤 **{cur_user().get('display_name', '–')}** "
         f"<span class='badge {badge_cls}'>{badge_txt}</span>",
@@ -1136,7 +1142,7 @@ if st.session_state.page == "settings":
                                         # Write row: Username | Password | Role | Display_Name | Agent_Name | Email
                                         ws.append_row([p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'], p_data.get('email', '')])
                                 except Exception as e:
-                                    pass # Ignore Sheets error gracefully to ensure email logic continues
+                                    pass 
 
                                 # 3. Send automated approval email
                                 user_email = p_data.get('email', '').strip()
@@ -1180,7 +1186,7 @@ if st.session_state.page == "settings":
                     with c1:
                         add_uname = st.text_input("Username / ID *", key="add_uname")
                         add_dname = st.text_input("Display Name *", key="add_dname")
-                        add_role = st.selectbox("Role", ["expert", "admin"], key="add_role")
+                        add_role = st.selectbox("Role", ["expert", "supervisor", "admin"], key="add_role")
                     with c2:
                         add_aname = st.text_input("Agent Key Mapping (Sheets)", key="add_aname")
                         add_pass1 = st.text_input("Password *", type="password", key="add_pass1")
@@ -1213,14 +1219,18 @@ if st.session_state.page == "settings":
             st.divider()
 
             for uname, urow in list(users().items()):
-                role_icon = "🔑" if urow["role"] == "admin" else "👤"
+                role_icon = "🔑" if urow["role"] == "admin" else ("👁️" if urow["role"] == "supervisor" else "👤")
                 with st.expander(f"{role_icon} {urow['display_name']} (@{uname})"):
                     with st.form(f"admin_edit_{uname}"):
                         eu_dn   = st.text_input("Display Username", value=urow["display_name"], key=f"dn_{uname}")
                         eu_an   = st.text_input("Agent Key Mapping (Sheets)", value=urow.get("agent_name") or "", key=f"an_{uname}")
                         eu_p1   = st.text_input("Override Password", type="password", key=f"p1_{uname}")
                         eu_p2   = st.text_input("Confirm Password", type="password", key=f"p2_{uname}")
-                        eu_role = st.selectbox("Role", ["expert","admin"], index=0 if urow["role"] != "admin" else 1, key=f"rl_{uname}")
+                        
+                        roles_list = ["expert", "supervisor", "admin"]
+                        try: current_role_idx = roles_list.index(urow["role"])
+                        except: current_role_idx = 0
+                        eu_role = st.selectbox("Role", roles_list, index=current_role_idx, key=f"rl_{uname}")
                         
                         col1, col2 = st.columns([3, 1])
                         with col1: saved = st.form_submit_button("💾 Update User Settings", use_container_width=True)
@@ -1302,8 +1312,10 @@ st.caption(caption_text)
 # ══════════════════════════════════════════════════════════════════════════════════
 if is_admin():
     tab1, tab2, tab3 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs", "✏️ Manual Overrides"])
-else:
+elif st.session_state.role == "expert":
     tab1, tab2 = st.tabs(["📈 Operational Insights", "👥 Team Performance & KPIs"])
+else: # supervisor role
+    tab1, = st.tabs(["📈 Operational Insights"])
 
 # ── TAB 1 — Operational Insights ──────────────────────────────────────────────────
 with tab1:
@@ -1955,468 +1967,489 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
 
 
 # ── TAB 2 — Team Performance and KPIs ──────────────────────────────────────────────
-with tab2:
-    st.markdown("### 👥 Team Performance and KPIs")
-    
-    sel_agents_t2 = st.multiselect("Filter by Expert Name", sorted(df_raw["Assigned By"].dropna().unique()), key="t2_agents")
-
-    df_t2 = df.copy()
-    df_t2_prev = df_prev_all.copy()
-
-    if sel_agents_t2:
-        df_t2 = df_t2[df_t2["Assigned By"].isin(sel_agents_t2)]
-        df_t2_prev = df_t2_prev[df_t2_prev["Assigned By"].isin(sel_agents_t2)]
-
-    aname = my_agent_name()
-    if not is_admin() and aname:
-        df_kpi = df_t2[df_t2["Assigned By"] == aname].copy()
-        df_kpi_prev = df_t2_prev[df_t2_prev["Assigned By"] == aname].copy()
-    else:
-        df_kpi = df_t2.copy()
-        df_kpi_prev = df_t2_prev.copy()
-
-    # Current KPI Metrics (Base)
-    total_kpi = len(df_kpi)
-    kpi_ss  = df_kpi["Status"].astype(str).str.strip()
-    kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
-    
-    kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
-    kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
-    h_kpi_afr = fmt_m(kpi_curr_afr_val)
-    
-    kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
-    kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
-
-    # Previous KPI Metrics (Base)
-    prev_kpi_total = len(df_kpi_prev)
-    kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
-    prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-    
-    prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
-    
-    prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
-    prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
-
-    # ══════════════════════════════════════════════════════════════════════════════════
-    #  GENERATE SCORECARD TO CALCULATE EXACT "REQUESTS / WORKING DAYS"
-    # ══════════════════════════════════════════════════════════════════════════════════
-    OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
-    df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
-
-    sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
-    
-    if not df_sc.empty:
-        expert_map = {x.lower(): x for x in OFFICIAL_EXPERTS}
-        df_sc["Assigned By"] = df_sc["Assigned By"].astype(str).str.strip().str.lower().map(expert_map)
+if is_admin() or st.session_state.role == "expert":
+    with tab2:
+        st.markdown("### 👥 Team Performance and KPIs")
         
-        rtl = df_sc["Request Type"].astype(str).str.lower()
-        df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
-        df_sc["_c_ok"]  = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
-        df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
-
-        grp = df_sc.groupby("Assigned By")
-        stats = pd.DataFrame(index=grp.groups.keys())
-        stats["Tickets Count"]        = grp["Request ID"].count()
-        stats["_Service_Time_val"]    = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
-        stats["_AFR_val"]             = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
-        stats["_c_ok_sum"]            = grp["_c_ok"].sum()
-        stats["_c_all_sum"]           = grp["_c_all"].sum()
-        
-        sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
-    else:
-        sc["Tickets Count"] = 0
-        sc["_Service_Time_val"] = 0
-        sc["_AFR_val"] = 0
-        sc["_c_ok_sum"] = 0
-        sc["_c_all_sum"] = 0
-
-    sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
-
-    sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
-    sc["Off Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("off", 0))
-    sc["Annual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("ann", 0))
-    sc["Casual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("cas", 0))
-    sc["Sick Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("sick", 0))
-
-    sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
-    sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
-
-    def apply_jhah(row):
-        k = str(row["Expert"]).strip().lower()
-        v = out_req_dict.get(k, {}).get("JHAH", 0)
-        try: return int(float(v)) if v else 0
-        except: return 0
-        
-    def apply_support(row):
-        k = str(row["Expert"]).strip().lower()
-        v = out_req_dict.get(k, {}).get("Support Req", 0)
-        try: return int(float(v)) if v else 0
-        except: return 0
-
-    sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
-    sc["Support Requests"] = sc.apply(apply_support, axis=1)
+        sel_agents_t2 = st.multiselect("Filter by Expert Name", sorted(df_raw["Assigned By"].dropna().unique()), key="t2_agents")
     
-    total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
-                         pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
-                         pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
-                         
-    wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
+        df_t2 = df.copy()
+        df_t2_prev = df_prev_all.copy()
     
-    active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
-    sc = sc[active_mask].copy()
-
-    total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
-                  pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
-                  pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
-                  
-    wdays = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)
-    sc["Cases/Day"] = (total_cases / wdays).round(1)
-
-    if not sc.empty:
-        sc.insert(1, "Rank", sc["Cases/Day"].rank(method="min", ascending=False).astype(int).astype(str))
-    else:
-        sc["Rank"] = []
-
-    if global_target > 0:
-        sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
-    else:
-        tavg_cpd = sc["Cases/Day"].mean()
-        sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
-
-    sc["Service Quality"] = sc["Expert"].apply(
-        lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%"
-    )
-
-    def calc_incentive(row):
-        try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
-        except: achiev = 0.0
-        count_inc = 0
-        if achiev >= 0.97: count_inc = 1500
-        elif achiev >= 0.95: count_inc = 1350
-        elif achiev >= 0.90: count_inc = 1200
-        elif achiev >= 0.85: count_inc = 1050
-        try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
-        except: qual = 0.0
-        qual_inc = 600 * qual
-        auto_bonus = 500 + 500 + 300 + 200 + 400
-        total_inc = count_inc + qual_inc + auto_bonus
-        return f"{total_inc:,.0f} EGP"
-        
-    sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
-
-    # ── CALCULATE ACCURATE "AVG REQUESTS / DAY" FOR THE TOP KPI CARDS ──
-    if not is_admin() and aname in sc["Expert"].values:
-        kpi_scope_df = sc[sc["Expert"] == aname]
-        scope_agents = [aname]
-    else:
-        kpi_scope_df = sc.copy()
         if sel_agents_t2:
-            kpi_scope_df = kpi_scope_df[kpi_scope_df["Expert"].isin(sel_agents_t2)]
-            scope_agents = sel_agents_t2
-        else:
-            scope_agents = OFFICIAL_EXPERTS
-
-    sum_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
-    sum_tickets = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum()
-    sum_jhah = pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum()
-    sum_support = pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
-    total_reqs = sum_tickets + sum_jhah + sum_support
-    kpi_curr_avg_per_day = total_reqs / sum_wd if sum_wd > 0 else 0
-
-    # Calculate exact Previous "Avg Requests / Day"
-    prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
-    scope_agents_lower = [a.lower() for a in scope_agents]
-    prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin(scope_agents_lower)] if scope_agents_lower else df_kpi_prev
-    prev_sum_tickets = len(prev_kpi_scope_df)
-    prev_sum_jhah = sum(prev_out_req_dict.get(exp.lower(), {}).get("JHAH", 0) for exp in scope_agents)
-    prev_sum_supp = sum(prev_out_req_dict.get(exp.lower(), {}).get("Support Req", 0) for exp in scope_agents)
-    prev_total_reqs = prev_sum_tickets + prev_sum_jhah + prev_sum_supp
-    prev_kpi_avg_per_day = prev_total_reqs / prev_sum_wd if prev_sum_wd > 0 else 0
-
-    chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
-    chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct  
-    chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct  
-    chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
-    chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
-    chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
-
-    # ── RENDER TOP KPI CARDS ──
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
-    k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
-    k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
-    k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-    k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
-    k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
-
-    st.write(""); st.divider()
-
-    # ── CONTINUE SCORECARD RENDERING ──
-    team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
-    team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
-    team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
-    team_out = round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
-    team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
-
-    df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
-    team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
-    team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
-
-    def parse_pct(p):
-        try: return float(str(p).replace("%", ""))
-        except: return 0.0
-        
-    avg_qual = sc["Service Quality"].apply(parse_pct).mean()
-
-    team_row = {
-        "Expert": "🏆 Team AVG", 
-        "Rank": "-",
-        "Working Days": team_wd, 
-        "Tickets Count": team_tc,
-        "JHAH Requests": team_jhah, 
-        "Support Requests": team_out,
-        "Cases/Day": team_cpd,
-        "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0,
-        "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
-        "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
-        "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
-        "% Achievement from Target": "100.0%", 
-        "AFR": team_afr,
-        "Service Time": team_st, 
-        "Service Quality": f"{avg_qual:.1f}%",
-        "Prospected Incentive": "4,000 EGP"
-    }
-
-    sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
-
-    sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
-
-    def format_clean_num(x):
-        if x == "-": return "-"
-        try:
-            f = float(x)
-            if f.is_integer(): return str(int(f))
-            return str(round(f, 1))
-        except: return str(x)
-
-    cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
-    for c in cols_clean:
-        if c in sc_final.columns: sc_final[c] = sc_final[c].apply(format_clean_num)
-
-    rank_df = sc.copy()
-    rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
-    top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
+            df_t2 = df_t2[df_t2["Assigned By"].isin(sel_agents_t2)]
+            df_t2_prev = df_t2_prev[df_t2_prev["Assigned By"].isin(sel_agents_t2)]
     
-    gold_exp   = top_experts[0] if len(top_experts) > 0 else None
-    silver_exp = top_experts[1] if len(top_experts) > 1 else None
-    bronze_exp = top_experts[2] if len(top_experts) > 2 else None
-
-    display_df = sc_final.copy()
-    gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
-    silver_disp = f"🥈 {silver_exp}" if silver_exp else None
-    bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
-
-    def add_medals_row(val):
-        if val == gold_exp: return gold_disp
-        if val == silver_exp: return silver_disp
-        if val == bronze_exp: return bronze_disp
-        return val
-        
-    display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
-
-    def style_performers(row):
-        exp = row["Expert"]
-        styles = [''] * len(row)
-        if exp == "🏆 Team AVG": styles = ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
-        elif exp == gold_disp: styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
-        elif exp == silver_disp: styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
-        elif exp == bronze_disp: styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
-        elif exp == aname and not is_admin(): styles = ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
-            
-        if "Prospected Incentive" in row.index:
-            inc_idx = row.index.get_loc("Prospected Incentive")
-            if exp != "🏆 Team AVG":
-                inc_val = str(row["Prospected Incentive"])
-                if inc_val != "4,000 EGP":
-                    styles[inc_idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;'
-                else:
-                    styles[inc_idx] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
-        return styles
-
-    column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
-    display_df = display_df[column_order]
-
-    styled_df = display_df.style.apply(style_performers, axis=1)
-    styled_df = styled_df.set_properties(**{'text-align': 'center'})
-    styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
-
-    html_table = styled_df.hide(axis="index").to_html()
-    
-    st.markdown("### 📅 Schedule & Leaves Summary")
-    sum_wd   = int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum())
-    sum_off  = int(pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum())
-    sum_ann  = int(pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum())
-    sum_cas  = int(pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum())
-    sum_sick = int(pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum())
-
-    rk1, rk2, rk3, rk4, rk5 = st.columns(5)
-    rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-neutral"), unsafe_allow_html=True)
-    rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-neutral"), unsafe_allow_html=True)
-    rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-neutral"), unsafe_allow_html=True)
-    rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-neutral"), unsafe_allow_html=True)
-    rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-neutral"), unsafe_allow_html=True)
-    st.write("")
-    
-    st.markdown("### 📊 Expert Performance Scorecard Dashboard")
-    st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
-    
-    st.divider()
-    st.markdown("### 🔍 Quality Issues Log (Current Period)")
-    
-    if not df_q_filtered.empty:
+        aname = my_agent_name()
         if not is_admin() and aname:
-            q_view = df_q_filtered[df_q_filtered['Display_Expert'] == aname].copy()
+            df_kpi = df_t2[df_t2["Assigned By"] == aname].copy()
+            df_kpi_prev = df_t2_prev[df_t2_prev["Assigned By"] == aname].copy()
         else:
-            q_view = df_q_filtered.copy()
-            if sel_agents_t2:
-                q_view = q_view[q_view['Display_Expert'].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
-        
-        if q_view.empty:
-            st.success("🎉 No quality issues recorded for the selected expert(s) in this period! Keep up the great work.")
-        else:
-            disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy()
-            disp_q.rename(columns={'Deduction': 'Deduction (%)'}, inplace=True)
-            disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
-            
-            def map_severity(s):
-                sl = str(s).strip().lower()
-                if sl == 'critical': return '🔴 Critical'
-                if sl == 'major': return '🟠 Major'
-                if sl == 'minor': return '🟡 Minor'
-                return s
-            disp_q['Severity'] = disp_q['Severity'].apply(map_severity)
-            
-            def style_quality_issues(row):
-                sev = str(row['Severity']).lower()
-                styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
-                for i, col in enumerate(row.index):
-                    if col in ['Severity', 'Deduction (%)']:
-                        if 'critical' in sev: styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;'
-                        elif 'major' in sev: styles[i] = 'background-color: #ffffff; color: #ea580c; font-weight: 900;'
-                        elif 'minor' in sev: styles[i] = 'background-color: #ffffff; color: #ca8a04; font-weight: 900;'
-                return styles
-            
-            styled_q = disp_q.style.apply(style_quality_issues, axis=1)
-            styled_q = styled_q.set_properties(**{'text-align': 'center'})
-            html_q_table = styled_q.hide(axis="index").to_html()
-            st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
-    else:
-        st.info("No quality issues logged in the system for this specific period.")
+            df_kpi = df_t2.copy()
+            df_kpi_prev = df_t2_prev.copy()
     
-    if is_admin():
-        st.divider()
-        st.markdown("#### 📥 Export Team Performance Report")
-        export_sc = display_df.copy()
-        export_sc["Expert"] = export_sc["Expert"].apply(lambda x: str(x).replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", ""))
-        csv_sc = export_sc.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(label="📥 Download Team Scorecard (CSV)", data=csv_sc, file_name=f"Team_Scorecard_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
-
-        st.divider()
-        st.markdown("#### ✉️ Performance Review Emails")
+        # Current KPI Metrics (Base)
+        total_kpi = len(df_kpi)
+        kpi_ss  = df_kpi["Status"].astype(str).str.strip()
+        kpi_ok  = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
+        kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
         
-        email_agents_list = [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x]
-        selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
+        kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+        kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+        h_kpi_afr = fmt_m(kpi_curr_afr_val)
         
-        if selected_email_agent:
-            agent_row = sc_final[sc_final["Expert"] == selected_email_agent].iloc[0]
-            team_row_disp = sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
+        kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
+        kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
+    
+        # Previous KPI Metrics (Base)
+        prev_kpi_total = len(df_kpi_prev)
+        kpi_ss_prev = df_kpi_prev["Status"].astype(str).str.strip()
+        prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+        prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+        
+        prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+        prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+        
+        prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+        prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+    
+        # ══════════════════════════════════════════════════════════════════════════════════
+        #  GENERATE SCORECARD TO CALCULATE EXACT "REQUESTS / WORKING DAYS"
+        # ══════════════════════════════════════════════════════════════════════════════════
+        OFFICIAL_EXPERTS_LOWER = [x.lower() for x in OFFICIAL_EXPERTS]
+        df_sc = df_t2[df_t2["Assigned By"].astype(str).str.strip().str.lower().isin(OFFICIAL_EXPERTS_LOWER)].copy()
+    
+        sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
+        
+        if not df_sc.empty:
+            expert_map = {x.lower(): x for x in OFFICIAL_EXPERTS}
+            df_sc["Assigned By"] = df_sc["Assigned By"].astype(str).str.strip().str.lower().map(expert_map)
             
-            def safe_float(v):
-                try: return float(str(v).replace('%','').replace(',',''))
-                except: return 0.0
+            rtl = df_sc["Request Type"].astype(str).str.lower()
+            df_sc["_jhah"]  = rtl.str.contains("jhah", na=False)
+            df_sc["_c_ok"]  = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
+            df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
+    
+            grp = df_sc.groupby("Assigned By")
+            stats = pd.DataFrame(index=grp.groups.keys())
+            stats["Tickets Count"]        = grp["Request ID"].count()
+            stats["_Service_Time_val"]    = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
+            stats["_AFR_val"]             = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
+            stats["_c_ok_sum"]            = grp["_c_ok"].sum()
+            stats["_c_all_sum"]           = grp["_c_all"].sum()
             
-            achiev_val = safe_float(agent_row["% Achievement from Target"])
-            qual_val = safe_float(agent_row["Service Quality"])
+            sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
+        else:
+            sc["Tickets Count"] = 0
+            sc["_Service_Time_val"] = 0
+            sc["_AFR_val"] = 0
+            sc["_c_ok_sum"] = 0
+            sc["_c_all_sum"] = 0
+    
+        sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
+    
+        sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
+        sc["Off Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("off", 0))
+        sc["Annual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("ann", 0))
+        sc["Casual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("cas", 0))
+        sc["Sick Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("sick", 0))
+    
+        sc["AFR"] = sc["_AFR_val"].fillna(0).apply(fmt_m)
+        sc["Service Time"] = sc["_Service_Time_val"].fillna(0).apply(fmt_m)
+    
+        def apply_jhah(row):
+            k = str(row["Expert"]).strip().lower()
+            v = out_req_dict.get(k, {}).get("JHAH", 0)
+            try: return int(float(v)) if v else 0
+            except: return 0
             
-            agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Support Requests'])
-            team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Support Requests'])
+        def apply_support(row):
+            k = str(row["Expert"]).strip().lower()
+            v = out_req_dict.get(k, {}).get("Support Req", 0)
+            try: return int(float(v)) if v else 0
+            except: return 0
+    
+        sc["JHAH Requests"] = sc.apply(apply_jhah, axis=1)
+        sc["Support Requests"] = sc.apply(apply_support, axis=1)
+        
+        total_cases_filter = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
+                             pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
+                             pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
+                             
+        wdays_filter = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0)
+        
+        active_mask = (wdays_filter > 0) | (total_cases_filter > 0)
+        sc = sc[active_mask].copy()
+    
+        total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + \
+                      pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + \
+                      pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
+                      
+        wdays = pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)
+        sc["Cases/Day"] = (total_cases / wdays).round(1)
+    
+        if not sc.empty:
+            sc.insert(1, "Rank", sc["Cases/Day"].rank(method="min", ascending=False).astype(int).astype(str))
+        else:
+            sc["Rank"] = []
+    
+        if global_target > 0:
+            sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
+        else:
+            tavg_cpd = sc["Cases/Day"].mean()
+            sc["% Achievement from Target"] = ((sc["Cases/Day"] / tavg_cpd * 100).round(1).astype(str) + "%" if tavg_cpd > 0 else "0.0%")
+    
+        sc["Service Quality"] = sc["Expert"].apply(
+            lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%"
+        )
+    
+        # Calculate dynamic Team Average AFR right before calculating incentives
+        team_avg_afr = sc["_AFR_val"].mean() if not sc.empty else 0
+    
+        def calc_incentive(row):
+            try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
+            except: achiev = 0.0
             
-            if achiev_val >= 100: perf_word = "outstanding"; target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
-            elif achiev_val >= 80: perf_word = "solid"; target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
-            else: perf_word = "developing"; target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
+            # 1. Count Incentive (1500 max)
+            count_inc = 0
+            if achiev >= 0.97: count_inc = 1500
+            elif achiev >= 0.95: count_inc = 1350
+            elif achiev >= 0.90: count_inc = 1200
+            elif achiev >= 0.85: count_inc = 1050
             
-            if qual_val >= 95: qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
-            elif qual_val >= 85: qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
-            else: qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
+            # 2. Quality Incentive (600 max)
+            try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
+            except: qual = 0.0
+            qual_inc = 600 * qual
             
-            clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
+            # 3. Avg Response Time Incentive (500 if better than or equal to team average)
+            try:
+                row_afr = float(row["_AFR_val"])
+                if row_afr <= team_avg_afr and row_afr > 0:
+                    response_inc = 500
+                else:
+                    response_inc = 0
+            except:
+                response_inc = 0
+                
+            # 4. Fixed Base Bonus (500 EGP to complete the total up to 3,100 EGP)
+            base_bonus = 500
             
-            markdown_email = f"""
+            total_inc = count_inc + qual_inc + response_inc + base_bonus
+            return f"{total_inc:,.0f} EGP"
+            
+        sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
+    
+        # ── CALCULATE ACCURATE "AVG REQUESTS / DAY" FOR THE TOP KPI CARDS ──
+        if not is_admin() and aname in sc["Expert"].values:
+            kpi_scope_df = sc[sc["Expert"] == aname]
+            scope_agents = [aname]
+        else:
+            kpi_scope_df = sc.copy()
+            if sel_agents_t2:
+                kpi_scope_df = kpi_scope_df[kpi_scope_df["Expert"].isin(sel_agents_t2)]
+                scope_agents = sel_agents_t2
+            else:
+                scope_agents = OFFICIAL_EXPERTS
+    
+        sum_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
+        sum_tickets = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum()
+        sum_jhah = pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum()
+        sum_support = pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
+        total_reqs = sum_tickets + sum_jhah + sum_support
+        kpi_curr_avg_per_day = total_reqs / sum_wd if sum_wd > 0 else 0
+    
+        # Calculate exact Previous "Avg Requests / Day"
+        prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
+        scope_agents_lower = [a.lower() for a in scope_agents]
+        prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin(scope_agents_lower)] if scope_agents_lower else df_kpi_prev
+        prev_sum_tickets = len(prev_kpi_scope_df)
+        prev_sum_jhah = sum(prev_out_req_dict.get(exp.lower(), {}).get("JHAH", 0) for exp in scope_agents)
+        prev_sum_supp = sum(prev_out_req_dict.get(exp.lower(), {}).get("Support Req", 0) for exp in scope_agents)
+        prev_total_reqs = prev_sum_tickets + prev_sum_jhah + prev_sum_supp
+        prev_kpi_avg_per_day = prev_total_reqs / prev_sum_wd if prev_sum_wd > 0 else 0
+    
+        chg_kpi_total = calc_change(total_kpi, prev_kpi_total)
+        chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct  
+        chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct  
+        chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
+        chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
+        chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+    
+        # ── RENDER TOP KPI CARDS ──
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.markdown(kpi_colored("Total Tickets",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
+        k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
+        k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
+        k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+        k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+        k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
+    
+        st.write(""); st.divider()
+    
+        # ── CONTINUE SCORECARD RENDERING ──
+        team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
+        team_tc = round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0
+        team_jhah = round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
+        team_out = round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0
+        team_cpd = round((team_tc + team_jhah + team_out) / (team_wd if team_wd > 0 else 1), 1)
+    
+        df_sc_active = df_sc[df_sc["Assigned By"].isin(sc["Expert"].str.lower())]
+        team_st = fmt_m(df_sc_active["Request Take (min)"].mean() if "Request Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
+        team_afr = fmt_m(df_sc_active["Response Take (min)"].mean() if "Response Take (min)" in df_sc_active.columns and not df_sc_active.empty else 0)
+    
+        def parse_pct(p):
+            try: return float(str(p).replace("%", ""))
+            except: return 0.0
+            
+        avg_qual = sc["Service Quality"].apply(parse_pct).mean()
+    
+        team_row = {
+            "Expert": "🏆 Team AVG", 
+            "Rank": "-",
+            "Working Days": team_wd, 
+            "Tickets Count": team_tc,
+            "JHAH Requests": team_jhah, 
+            "Support Requests": team_out,
+            "Cases/Day": team_cpd,
+            "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "% Achievement from Target": "100.0%", 
+            "AFR": team_afr,
+            "Service Time": team_st, 
+            "Service Quality": f"{avg_qual:.1f}%",
+            "Prospected Incentive": "3,100 EGP"
+        }
+    
+        sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
+    
+        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True) if is_admin() else pd.concat([pd.DataFrame([team_row]), sc[sc["Expert"] == aname]], ignore_index=True)
+    
+        def format_clean_num(x):
+            if x == "-": return "-"
+            try:
+                f = float(x)
+                if f.is_integer(): return str(int(f))
+                return str(round(f, 1))
+            except: return str(x)
+    
+        cols_clean = ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]
+        for c in cols_clean:
+            if c in sc_final.columns: sc_final[c] = sc_final[c].apply(format_clean_num)
+    
+        rank_df = sc.copy()
+        rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
+        top_experts = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
+        
+        gold_exp   = top_experts[0] if len(top_experts) > 0 else None
+        silver_exp = top_experts[1] if len(top_experts) > 1 else None
+        bronze_exp = top_experts[2] if len(top_experts) > 2 else None
+    
+        display_df = sc_final.copy()
+        gold_disp   = f"🥇 {gold_exp}" if gold_exp else None
+        silver_disp = f"🥈 {silver_exp}" if silver_exp else None
+        bronze_disp = f"🥉 {bronze_exp}" if bronze_exp else None
+    
+        def add_medals_row(val):
+            if val == gold_exp: return gold_disp
+            if val == silver_exp: return silver_disp
+            if val == bronze_exp: return bronze_disp
+            return val
+            
+        display_df["Expert"] = display_df["Expert"].apply(add_medals_row)
+    
+        def style_performers(row):
+            exp = row["Expert"]
+            styles = [''] * len(row)
+            if exp == "🏆 Team AVG": styles = ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+            elif exp == gold_disp: styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+            elif exp == silver_disp: styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+            elif exp == bronze_disp: styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+            elif exp == aname and not is_admin(): styles = ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+                
+            if "Prospected Incentive" in row.index:
+                inc_idx = row.index.get_loc("Prospected Incentive")
+                if exp != "🏆 Team AVG":
+                    inc_val = str(row["Prospected Incentive"])
+                    if inc_val != "3,100 EGP":
+                        styles[inc_idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;'
+                    else:
+                        styles[inc_idx] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
+            return styles
+    
+        column_order = ["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]
+        display_df = display_df[column_order]
+    
+        styled_df = display_df.style.apply(style_performers, axis=1)
+        styled_df = styled_df.set_properties(**{'text-align': 'center'})
+        styled_df = styled_df.set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+    
+        html_table = styled_df.hide(axis="index").to_html()
+        
+        st.markdown("### 📅 Schedule & Leaves Summary")
+        sum_wd   = int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum())
+        sum_off  = int(pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum())
+        sum_ann  = int(pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum())
+        sum_cas  = int(pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum())
+        sum_sick = int(pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum())
+    
+        rk1, rk2, rk3, rk4, rk5 = st.columns(5)
+        rk1.markdown(kpi_colored("Working Days (Shifts)", f"{sum_wd}", "card-neutral"), unsafe_allow_html=True)
+        rk2.markdown(kpi_colored("Off Days", f"{sum_off}", "card-neutral"), unsafe_allow_html=True)
+        rk3.markdown(kpi_colored("Annual Leaves", f"{sum_ann}", "card-neutral"), unsafe_allow_html=True)
+        rk4.markdown(kpi_colored("Casual Leaves", f"{sum_cas}", "card-neutral"), unsafe_allow_html=True)
+        rk5.markdown(kpi_colored("Sick Leaves", f"{sum_sick}", "card-neutral"), unsafe_allow_html=True)
+        st.write("")
+        
+        st.markdown("### 📊 Expert Performance Scorecard Dashboard")
+        st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
+        
+        st.divider()
+        st.markdown("### 🔍 Quality Issues Log (Current Period)")
+        
+        if not df_q_filtered.empty:
+            if not is_admin() and aname:
+                q_view = df_q_filtered[df_q_filtered['Display_Expert'] == aname].copy()
+            else:
+                q_view = df_q_filtered.copy()
+                if sel_agents_t2:
+                    q_view = q_view[q_view['Display_Expert'].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])]
+            
+            if q_view.empty:
+                st.success("🎉 No quality issues recorded for the selected expert(s) in this period! Keep up the great work.")
+            else:
+                disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy()
+                disp_q.rename(columns={'Deduction': 'Deduction (%)'}, inplace=True)
+                disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
+                
+                def map_severity(s):
+                    sl = str(s).strip().lower()
+                    if sl == 'critical': return '🔴 Critical'
+                    if sl == 'major': return '🟠 Major'
+                    if sl == 'minor': return '🟡 Minor'
+                    return s
+                disp_q['Severity'] = disp_q['Severity'].apply(map_severity)
+                
+                def style_quality_issues(row):
+                    sev = str(row['Severity']).lower()
+                    styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
+                    for i, col in enumerate(row.index):
+                        if col in ['Severity', 'Deduction (%)']:
+                            if 'critical' in sev: styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;'
+                            elif 'major' in sev: styles[i] = 'background-color: #ffffff; color: #ea580c; font-weight: 900;'
+                            elif 'minor' in sev: styles[i] = 'background-color: #ffffff; color: #ca8a04; font-weight: 900;'
+                    return styles
+                
+                styled_q = disp_q.style.apply(style_quality_issues, axis=1)
+                styled_q = styled_q.set_properties(**{'text-align': 'center'})
+                html_q_table = styled_q.hide(axis="index").to_html()
+                st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
+        else:
+            st.info("No quality issues logged in the system for this specific period.")
+        
+        if is_admin():
+            st.divider()
+            st.markdown("#### 📥 Export Team Performance Report")
+            export_sc = display_df.copy()
+            export_sc["Expert"] = export_sc["Expert"].apply(lambda x: str(x).replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", ""))
+            csv_sc = export_sc.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="📥 Download Team Scorecard (CSV)", data=csv_sc, file_name=f"Team_Scorecard_{d_from}_to_{d_to}.csv", mime="text/csv", use_container_width=True)
+    
+            st.divider()
+            st.markdown("#### ✉️ Performance Review Emails")
+            
+            email_agents_list = [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x]
+            selected_email_agent = st.selectbox("Select Agent for Email Draft", email_agents_list)
+            
+            if selected_email_agent:
+                agent_row = sc_final[sc_final["Expert"] == selected_email_agent].iloc[0]
+                team_row_disp = sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
+                
+                def safe_float(v):
+                    try: return float(str(v).replace('%','').replace(',',''))
+                    except: return 0.0
+                
+                achiev_val = safe_float(agent_row["% Achievement from Target"])
+                qual_val = safe_float(agent_row["Service Quality"])
+                
+                agent_total_cases = safe_float(agent_row['Tickets Count']) + safe_float(agent_row['JHAH Requests']) + safe_float(agent_row['Support Requests'])
+                team_total_cases = safe_float(team_row_disp['Tickets Count']) + safe_float(team_row_disp['JHAH Requests']) + safe_float(team_row_disp['Support Requests'])
+                
+                if achiev_val >= 100: perf_word = "outstanding"; target_msg = f"You successfully exceeded the daily target with a brilliant **{agent_row['% Achievement from Target']}** achievement rate!"
+                elif achiev_val >= 80: perf_word = "solid"; target_msg = f"You reached a solid **{agent_row['% Achievement from Target']}** of the daily target. Great effort, let's push for 100%!"
+                else: perf_word = "developing"; target_msg = f"You achieved **{agent_row['% Achievement from Target']}** of the daily target. We believe in your potential and are here to support you in hitting higher milestones."
+                
+                if qual_val >= 95: qual_msg = f"Your service quality is top-tier at **{agent_row['Service Quality']}**. Keep up the flawless work!"
+                elif qual_val >= 85: qual_msg = f"Your service quality is strong at **{agent_row['Service Quality']}**."
+                else: qual_msg = f"Your service quality sits at **{agent_row['Service Quality']}**. Let's focus on accuracy and quality in the upcoming period."
+                
+                clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
+                
+                markdown_email = f"""
 Dear **{clean_name}**,
-
+    
 I hope this email finds you well. 
-
+    
 As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to personally share your metrics and highlight your **{perf_word}** contributions to the team.
-
+    
 ### 📊 Your Performance Scorecard:
-
+    
 | Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Expected Incentive |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** | **{agent_row['Prospected Incentive']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} | 4,000 EGP |
-
+| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} | 3,100 EGP |
+    
 **🎯 Targets & Quality:** {target_msg}  
 {qual_msg}
-
+    
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
-
+    
 Best regards,  
 **Mohammed Shehta** Team Leader
 """
-            st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-            st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
-            st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
-            
-            email_body_plain = f"""Dear {clean_name},
-
+                st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
+                st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
+                
+                email_body_plain = f"""Dear {clean_name},
+    
 I hope this email finds you well. 
-
+    
 As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
-
+    
 📊 Your Performance Scorecard:
 ---------------------------------------------------------------------------------------------------------
 Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time | Incentive
 ---------------------------------------------------------------------------------------------------------
 Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time']):<12} | {str(agent_row['Prospected Incentive'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time']):<12} | 4,000 EGP
+Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time']):<12} | 3,100 EGP
 ---------------------------------------------------------------------------------------------------------
-
+    
 🎯 Targets & Quality:
 {target_msg.replace('**', '')}
 {qual_msg.replace('**', '')}
-
+    
 Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
-
+    
 Best regards,
 Mohammed Shehta
 Team Leader"""
-
-            with st.expander("Show Plain Text Version (For manual copy/paste)"):
-                st.text_area("Plain Text Draft", value=email_body_plain, height=300)
-            
-            subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
-            body_encoded = urllib.parse.quote(email_body_plain)
-            
-            st.write("")
-            gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
-            st.markdown(
-                f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">'
-                f'🌐 Open Draft in Gmail</a>', 
-                unsafe_allow_html=True
-            )
+    
+                with st.expander("Show Plain Text Version (For manual copy/paste)"):
+                    st.text_area("Plain Text Draft", value=email_body_plain, height=300)
+                
+                subject_encoded = urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_name}")
+                body_encoded = urllib.parse.quote(email_body_plain)
+                
+                st.write("")
+                gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={subject_encoded}&body={body_encoded}"
+                st.markdown(
+                    f'<a href="{gmail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">'
+                    f'🌐 Open Draft in Gmail</a>', 
+                    unsafe_allow_html=True
+                )
 
 # ── TAB 3 — Manual Overrides (ADMIN ONLY) ─────────────────────────────────────────
 if is_admin():
