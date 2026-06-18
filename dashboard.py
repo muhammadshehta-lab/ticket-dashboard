@@ -81,6 +81,7 @@ def _load_store() -> dict:
         },
         "requests":  [],
         "overrides": {},
+        "login_logs": [],
     }
     
     if _DATA_FILE.exists():
@@ -93,6 +94,8 @@ def _load_store() -> dict:
                 default_store["requests"] = loaded["requests"]
             if "overrides" in loaded:
                 default_store["overrides"] = loaded["overrides"]
+            if "login_logs" in loaded:
+                default_store["login_logs"] = loaded["login_logs"]
         except Exception:
             pass
             
@@ -612,6 +615,19 @@ if not st.session_state.authenticated:
                 if udata and udata["password_hash"] == _hash(inp_p):
                     notify_admin_whatsapp(udata.get("display_name", uname) + " ✅ Success")
                     
+                    # Log the successful login internally
+                    if "login_logs" not in st.session_state.store:
+                        st.session_state.store["login_logs"] = []
+                        
+                    st.session_state.store["login_logs"].append({
+                        "Timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+                        "Username": uname,
+                        "Display Name": udata.get("display_name", uname),
+                        "Role": udata["role"]
+                    })
+                    st.session_state.store["login_logs"] = st.session_state.store["login_logs"][-200:]
+                    _save_store()
+                    
                     # Store continuous login token
                     st.query_params["usr"] = uname
                     st.query_params["tok"] = generate_token(uname)
@@ -948,7 +964,7 @@ if st.session_state.page == "settings":
 
     if is_admin():
         st.markdown("## ⚙️ Admin Control Panel")
-        atab1, atab2, atab3 = st.tabs(["👤 My Profile", "🔔 Change & Access Requests", "👥 Manage Dashboard Users"])
+        atab1, atab2, atab3, atab4 = st.tabs(["👤 My Profile", "🔔 Change & Access Requests", "👥 Manage Dashboard Users", "📜 System Access Logs"])
 
         with atab1:
             st.markdown("### Update Profile Fields")
@@ -1088,6 +1104,23 @@ if st.session_state.page == "settings":
                             st.success(f"🗑️ Account for {uname} has been successfully revoked and deleted.")
                             time.sleep(1)
                             st.rerun()
+                            
+        with atab4:
+            st.markdown("### 📜 System Access Logs")
+            logs = st.session_state.store.get("login_logs", [])
+            if not logs:
+                st.info("No login logs available yet.")
+            else:
+                df_logs = pd.DataFrame(logs)
+                df_logs = df_logs.sort_values(by="Timestamp", ascending=False).reset_index(drop=True)
+                st.dataframe(df_logs, use_container_width=True)
+                
+                if st.button("🗑️ Clear Logs", type="primary"):
+                    st.session_state.store["login_logs"] = []
+                    _save_store()
+                    st.success("Logs cleared successfully!")
+                    st.rerun()
+
     else:
         st.markdown("## ⚙️ My Profile Settings")
         urow = users()[me()]
