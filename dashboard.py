@@ -447,14 +447,6 @@ def approve_request(req_id):
                 users()[u]["display_name"] = r["new_value"]
             elif r["type"] == "password":   
                 users()[u]["password_hash"] = _hash(r["new_value"])
-            elif r["type"] == "visitor_access":
-                ukey = u.strip().lower().replace(" ", "_")
-                users()[ukey] = {
-                    "display_name": u.strip(),
-                    "password_hash": _hash("123456789"),
-                    "role": "expert",
-                    "agent_name": u.strip()
-                }
             r["status"] = "approved"; _save_store(); return True
     return False
 
@@ -666,22 +658,29 @@ if not st.session_state.authenticated:
                     st.error("❌ Incorrect username or password.")
             
             st.write("")
-            if st.button("🚫 Not on the list? Request Access", use_container_width=True):
+            if st.button("🆕 Create Account / Request Access", use_container_width=True):
                 st.session_state.view_request_form = True
                 st.rerun()
         else:
-            st.markdown("### 📝 Request Admin Authorization")
-            visitor_name = st.text_input("Enter Your Full Name", placeholder="e.g. Ahmed Ali")
+            st.markdown("### 📝 Request Account Creation")
+            req_name = st.text_input("Full Name *", placeholder="e.g. Ahmed Ali")
+            req_id = st.text_input("Username / ID *", placeholder="e.g. 50123")
+            req_email = st.text_input("Email (Optional)", placeholder="e.g. ahmed@example.com")
             
             if st.button("📤 Submit Access Request", use_container_width=True):
-                if visitor_name.strip():
-                    push_request(visitor_name.strip(), "visitor_access", "123456789")
-                    st.success("✅ Request sent! Username will be your name, default password will be 123456789 upon approval.")
-                    time.sleep(2)
-                    st.session_state.view_request_form = False
-                    st.rerun()
+                if req_name.strip() and req_id.strip():
+                    uid = req_id.strip().lower()
+                    if uid in users():
+                        st.error("❌ This Username/ID is already registered.")
+                    else:
+                        payload = json.dumps({"name": req_name.strip(), "id": uid, "email": req_email.strip()})
+                        push_request(uid, "new_account", payload)
+                        st.success(f"✅ Request sent! Waiting for admin approval. Your ID ({uid}) will be your default password upon approval.")
+                        time.sleep(2)
+                        st.session_state.view_request_form = False
+                        st.rerun()
                 else:
-                    st.error("Name field cannot be left empty.")
+                    st.error("❌ Name and ID fields are required.")
             
             if st.button("← Back to Login", use_container_width=True):
                 st.session_state.view_request_form = False
@@ -1052,13 +1051,60 @@ if st.session_state.page == "settings":
             st.markdown("</div>", unsafe_allow_html=True)
 
         with atab2:
-            st.markdown("### 🔔 Change & Visitor Access Requests")
+            st.markdown("### 🔔 Change & Access Requests")
             pending = [r for r in requests() if r["status"] == "pending"]
             if not pending:
                 st.info("✅ No requests pending approval.")
             else:
                 for req in pending:
-                    if req["type"] == "visitor_access":
+                    if req["type"] == "new_account":
+                        try:
+                            p_data = json.loads(req["new_value"])
+                        except:
+                            p_data = {"name": req["requester"], "id": req["requester"], "email": ""}
+                            
+                        st.markdown(f"""
+                        <div class='req-pending'>
+                            🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 <b>NEW ACCOUNT REQUEST</b> <br>
+                            Name: <b>{p_data.get('name')}</b> &nbsp;|&nbsp; ID: <b>{p_data.get('id')}</b> &nbsp;|&nbsp; Email: <b>{p_data.get('email', 'N/A')}</b>
+                        </div>""", unsafe_allow_html=True)
+                        
+                        rc1, rc2, rc3 = st.columns([3, 1, 1])
+                        with rc2:
+                            if st.button("✅ Approve", key=f"apr_na_{req['id']}", use_container_width=True):
+                                # 1. Update Local Store
+                                users()[p_data['id']] = {
+                                    "display_name": p_data['name'],
+                                    "password_hash": _hash(p_data['id']),
+                                    "role": "expert",
+                                    "agent_name": p_data['name']
+                                }
+                                req["status"] = "approved"
+                                _save_store()
+                                
+                                # 2. Append to Google Sheets
+                                try:
+                                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                                    if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+                                        creds = Credentials.from_service_account_info(
+                                            json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+                                        client = gspread.authorize(creds)
+                                        ws = client.open("AlDawaa Tickets Data").worksheet("Users")
+                                        # Write row: Username | Password | Role | Display_Name | Agent_Name | Email
+                                        ws.append_row([p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'], p_data.get('email', '')])
+                                        st.success(f"Approved and added to Google Sheets!")
+                                    else:
+                                        st.warning("Approved locally, but Google Sheets credentials not found.")
+                                except Exception as e:
+                                    st.warning(f"Approved locally, but failed to append to Google Sheets: {e}")
+                                
+                                time.sleep(1.5)
+                                st.rerun()
+                        with rc3:
+                            if st.button("❌ Deny", key=f"rej_na_{req['id']}", use_container_width=True):
+                                reject_request(req["id"]); st.warning("Request rejected."); time.sleep(1); st.rerun()
+                    
+                    elif req["type"] == "visitor_access": # Legacy fallback
                         st.markdown(f"""
                         <div class='req-pending'>
                             🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🔑 <b>VISITOR REQUEST</b> &nbsp;|&nbsp;
