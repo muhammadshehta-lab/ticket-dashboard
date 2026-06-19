@@ -134,7 +134,6 @@ def update_sheet_profile(uname: str, profile_data: dict):
             cell = ws.find(str(uname), in_column=1)
             if cell:
                 row = cell.row
-                # Columns: 7: Photo URL, 8: Grad Year, 9: Join CC, 10: Join Team, 11: Bio
                 ws.update_cell(row, 7, str(profile_data.get('photo', '')))
                 ws.update_cell(row, 8, str(profile_data.get('grad_year', '')))
                 ws.update_cell(row, 9, str(profile_data.get('join_cc', '')))
@@ -1132,6 +1131,30 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         aname = my_agent_name()
         is_exp = (st.session_state.role == "expert" and aname)
         
+        # --- NEW: SHOW PROFILE HEADER IF 1 EXPERT SELECTED OR IF EXPERT VIEWING ---
+        target_agent_photo = aname if is_exp else (sel_agents_t2[0] if sel_agents_t2 and len(sel_agents_t2) == 1 else None)
+        if target_agent_photo:
+            p_photo = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+            p_bio, p_role = "", "⭐ EXPERT"
+            for u in users().values():
+                if u.get("agent_name") == target_agent_photo or u.get("display_name") == target_agent_photo:
+                    p_photo = u.get("photo", "") or p_photo
+                    p_bio = u.get("bio", "")
+                    p_role = "👑 ADMIN" if u.get('role') == 'admin' else ("👁️ SUPERVISOR" if u.get('role') == 'supervisor' else "⭐ EXPERT")
+                    break
+            
+            st.markdown(f'''
+            <div style="display: flex; align-items: center; background: #ffffff; padding: 1.2rem; border-radius: 12px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <img src="{p_photo}" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'" style="width: 85px; height: 85px; border-radius: 50%; object-fit: cover; border: 3px solid #2563eb; padding: 2px; margin-right: 1.5rem;">
+                <div>
+                    <h2 style="margin: 0 !important; padding: 0 !important; font-size: 1.6rem !important; color: #0f172a;">{target_agent_photo}</h2>
+                    <span style="color: #64748b; font-weight: 700; font-size: 0.95rem;">{p_role}</span>
+                    <p style="margin: 0.4rem 0 0 0 !important; color: #475569; font-style: italic; font-size: 0.95rem;">"{p_bio}"</p>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+        # -------------------------------------------------------------------------
+        
         df_kpi, df_kpi_prev = df.copy(), df_prev_all.copy()
         if is_exp: df_kpi = df_kpi[df_kpi["Assigned By"] == aname]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"] == aname]
         elif sel_agents_t2: df_kpi = df_kpi[df_kpi["Assigned By"].isin(sel_agents_t2)]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"].isin(sel_agents_t2)]
@@ -1214,7 +1237,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
         k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
         k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
-        k5.markdown(kpi_colored("AFR (Avg First Response)", h_kpi_afr, "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+        k5.markdown(kpi_colored("AFR (Avg First Response)", fmt_m(kpi_curr_afr_val), "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
         k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
         st.write(""); st.divider()
 
@@ -1325,21 +1348,16 @@ if is_admin():
 
 # ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
 if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
-    with tabs[-1]: # It will be the last tab for both Admin and Expert
+    with tabs[-1]:
         st.markdown("### 🧑‍🤝‍🧑 Approvals Team Profiles")
         st.info("💡 تعرف على زملائك في الفريق، تاريخ انضمامهم، وخبراتهم!")
         
         team_members = [u for uid, u in users().items() if u["role"] in ["expert", "admin", "supervisor"]]
-        
         cols = st.columns(3)
         for i, member in enumerate(team_members):
-            photo_url = member.get("photo", "")
-            if not photo_url: photo_url = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" 
-                
+            photo_url = member.get("photo", "") or "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" 
             r_badge = "👑 ADMIN" if member['role'] == 'admin' else ("👁️ SUPERVISOR" if member['role'] == 'supervisor' else "⭐ EXPERT")
-            grad = member.get('grad_year') or 'N/A'
-            join_cc = member.get('join_cc') or 'N/A'
-            join_team = member.get('join_team') or 'N/A'
+            grad, join_cc, join_team = member.get('grad_year') or 'N/A', member.get('join_cc') or 'N/A', member.get('join_team') or 'N/A'
             bio = member.get('bio') or 'لا توجد نبذة شخصية حتى الآن.'
             
             card_html = f"""
@@ -1347,11 +1365,9 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 <img src="{photo_url}" class="profile-img" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
                 <div class="profile-name">{member.get('display_name', 'Unknown')}</div>
                 <div class="profile-role">{r_badge}</div>
-                
                 <div class="profile-detail"><span>🎓 Graduation</span> <b>{grad}</b></div>
                 <div class="profile-detail"><span>🏢 Joined CC</span> <b>{join_cc}</b></div>
                 <div class="profile-detail"><span>🚀 Joined Team</span> <b>{join_team}</b></div>
-                
                 <div class="profile-bio">"{bio}"</div>
             </div>
             """
