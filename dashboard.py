@@ -29,93 +29,49 @@ _DATA_FILE = pathlib.Path(__file__).parent / ".dashboard_data.json"
 def _load_store() -> dict:
     default_store = {
         "users": {
-            "admin": {
-                "display_name": "Mohammed Shehta",
-                "password_hash": hashlib.sha256("admin123".encode()).hexdigest(),
-                "role": "admin",
-                "agent_name": None,
-            },
-            "50107": {
-                "display_name": "Ahmed El-Kholy",
-                "password_hash": hashlib.sha256("50107".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Ahmed El-Kholy",
-            },
-            "50399": {
-                "display_name": "Ahmed Kadry",
-                "password_hash": hashlib.sha256("50399".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Ahmed Kadry",
-            },
-            "50187": {
-                "display_name": "Amr El-Sayed",
-                "password_hash": hashlib.sha256("50187".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Amr El-Sayed",
-            },
-            "50461": {
-                "display_name": "Eslam Ramadan",
-                "password_hash": hashlib.sha256("50461".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Eslam Ramadan",
-            },
-            "50274": {
-                "display_name": "Mohamed Abdelmageed",
-                "password_hash": hashlib.sha256("50274".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Mohamed Abdelmageed",
-            },
-            "50476": {
-                "display_name": "Mohamed Khalifa",
-                "password_hash": hashlib.sha256("50476".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Mohamed Khalifa",
-            },
-            "50114": {
-                "display_name": "Yahia Ali Shafei",
-                "password_hash": hashlib.sha256("50114".encode()).hexdigest(),
-                "role": "expert",
-                "agent_name": "Yahia Ali Shafei",
-            }
+            "admin": {"display_name": "Mohammed Shehta", "password_hash": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin", "agent_name": None},
+            "50107": {"display_name": "Ahmed El-Kholy", "password_hash": hashlib.sha256("50107".encode()).hexdigest(), "role": "expert", "agent_name": "Ahmed El-Kholy"},
+            "50399": {"display_name": "Ahmed Kadry", "password_hash": hashlib.sha256("50399".encode()).hexdigest(), "role": "expert", "agent_name": "Ahmed Kadry"},
+            "50187": {"display_name": "Amr El-Sayed", "password_hash": hashlib.sha256("50187".encode()).hexdigest(), "role": "expert", "agent_name": "Amr El-Sayed"},
+            "50461": {"display_name": "Eslam Ramadan", "password_hash": hashlib.sha256("50461".encode()).hexdigest(), "role": "expert", "agent_name": "Eslam Ramadan"},
+            "50274": {"display_name": "Mohamed Abdelmageed", "password_hash": hashlib.sha256("50274".encode()).hexdigest(), "role": "expert", "agent_name": "Mohamed Abdelmageed"},
+            "50476": {"display_name": "Mohamed Khalifa", "password_hash": hashlib.sha256("50476".encode()).hexdigest(), "role": "expert", "agent_name": "Mohamed Khalifa"},
+            "50114": {"display_name": "Yahia Ali Shafei", "password_hash": hashlib.sha256("50114".encode()).hexdigest(), "role": "expert", "agent_name": "Yahia Ali Shafei"}
         },
-        "requests":  [],
-        "overrides": {},
-        "login_logs": [],
+        "requests":  [], "overrides": {}, "login_logs": [],
     }
-    
     if _DATA_FILE.exists():
         try:
             loaded = json.loads(_DATA_FILE.read_text())
             if "users" in loaded:
-                for k, v in loaded["users"].items():
-                    default_store["users"][k] = v
-            if "requests" in loaded:
-                default_store["requests"] = loaded["requests"]
-            if "overrides" in loaded:
-                default_store["overrides"] = loaded["overrides"]
-            if "login_logs" in loaded:
-                default_store["login_logs"] = loaded["login_logs"]
-        except Exception:
-            pass
-            
+                for k, v in loaded["users"].items(): default_store["users"][k] = v
+            if "requests" in loaded: default_store["requests"] = loaded["requests"]
+            if "overrides" in loaded: default_store["overrides"] = loaded["overrides"]
+            if "login_logs" in loaded: default_store["login_logs"] = loaded["login_logs"]
+        except Exception: pass
     return default_store
 
-def _save_store():
-    _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
+def _save_store(): _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
+def _hash(pw: str) -> str: return hashlib.sha256(pw.encode()).hexdigest()
 
-def _hash(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+def parse_drive_link(raw_url):
+    """Converts a standard Google Drive share link into a direct image rendering link."""
+    raw_url = str(raw_url).strip()
+    if "drive.google.com" in raw_url:
+        try:
+            file_id = re.search(r'/d/([a-zA-Z0-9_-]+)', raw_url).group(1)
+            return f"https://drive.google.com/uc?export=view&id={file_id}"
+        except: return raw_url
+    return raw_url
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  GOOGLE SHEETS SYNC HELPERS (PASSWORD & PROFILE)
 # ══════════════════════════════════════════════════════════════════════════════════
 def update_sheet_password(uname: str, new_pass: str):
-    """Updates the user's password directly in the Google Sheet (Users tab)."""
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
-            creds = Credentials.from_service_account_info(
-                json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             client = gspread.authorize(creds)
             ws = client.open("AlDawaa Tickets Data").worksheet("Users")
             cell = ws.find(str(uname), in_column=1)
@@ -123,12 +79,10 @@ def update_sheet_password(uname: str, new_pass: str):
     except Exception as e: pass
 
 def update_sheet_profile(uname: str, profile_data: dict):
-    """Updates the user's profile extra columns in the Google Sheet (Users tab)."""
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
-            creds = Credentials.from_service_account_info(
-                json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             client = gspread.authorize(creds)
             ws = client.open("AlDawaa Tickets Data").worksheet("Users")
             cell = ws.find(str(uname), in_column=1)
@@ -166,23 +120,7 @@ def send_approval_email(to_email, name, uid):
             msg['To'] = to_email
             
             dashboard_url = "https://aldawaa-requests.streamlit.app" 
-            
-            body = f"""Dear {name},
-
-Your request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.
-
-Here are your login credentials:
-- Username / ID: {uid}
-- Temporary Password: {uid}
-
-(Note: You will be required to set a new, secure password upon your first login).
-
-You can access the dashboard via the link below:
-{dashboard_url}
-
-Best regards,
-Mohammed Shehta
-"""
+            body = f"Dear {name},\n\nYour request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.\n\nHere are your login credentials:\n- Username / ID: {uid}\n- Temporary Password: {uid}\n\n(Note: You will be required to set a new, secure password upon your first login).\n\nYou can access the dashboard via the link below:\n{dashboard_url}\n\nBest regards,\nMohammed Shehta"
             msg.set_content(body)
             with smtplib.SMTP('smtp.gmail.com', 587) as server:
                 server.starttls()
@@ -197,7 +135,6 @@ Mohammed Shehta
 # ══════════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ══ GLOBAL APP CANVAS ADJUSTMENT ══════════════════════ */
 .stApp { background: #f1f5f9 !important; color: #0f172a !important; }
 .stApp, p, span, label, input, select { font-size: 1.05rem !important; font-weight: 600 !important; }
 h1 { font-size: 2.5rem !important; font-weight: 900 !important; color: #0f172a !important; }
@@ -205,19 +142,16 @@ h2 { font-size: 2.15rem !important; font-weight: 900 !important; color: #1e293b 
 h3 { font-size: 1.65rem !important; font-weight: 800 !important; color: #1e293b !important; }
 h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 !important; }
 
-/* ══ SIDEBAR & TABS RESKIN ══════════════════════════════════════════════════ */
 [data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid #e2e8f0 !important; }
 [data-testid="stSidebar"] * { color: #1e293b !important; font-weight: 700 !important; }
 [data-testid="stTabs"] [data-baseweb="tab"] { background: transparent; color: #64748b !important; font-weight: 700 !important; font-size: 1.15rem !important; padding-bottom: 8px !important; }
 [data-testid="stTabs"] [aria-selected="true"] { color: #2563eb !important; border-bottom: 3px solid #2563eb !important; }
 
-/* Form Input Layout Contrast Optimization */
 .stTextInput input, .stNumberInput input, .stSelectbox select, .stDateInput input { background: #ffffff !important; border: 1px solid #cbd5e1 !important; color: #0f172a !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 1.05rem !important; }
 .stTextInput input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important; }
 .stButton > button { background: #2563eb !important; border: 1px solid #1d4ed8 !important; color: #ffffff !important; border-radius: 8px !important; font-weight: 700 !important; font-size: 1.1rem !important; padding: 0.5rem 1.5rem !important; box-shadow: 0 2px 4px rgba(37,99,235,0.2); }
 .stButton > button:hover { background: #1d4ed8 !important; border-color: #1e40af !important; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(37,99,235,0.3); }
 
-/* ══ KPI CARDS ═════════════════════════════════════════════════════════════ */
 .kpi-container { position: relative; border-radius: 12px; padding: 1.4rem 1.1rem; text-align: center; min-height: 124px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03); border-width: 1px !important; border-style: solid !important; background: #ffffff; }
 .kpi-container:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05); }
 .kpi-label { font-size: .8rem !important; letter-spacing: .05em; text-transform: uppercase; margin-bottom: .5rem; font-weight: 700 !important; color: #64748b !important; }
@@ -230,7 +164,10 @@ h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 
 .card-small .kpi-label { font-size: 0.72rem !important; margin-bottom: 0.2rem !important; }
 .card-small .kpi-value { font-size: 1.45rem !important; }
 
-/* ══ SYSTEM BADGES & NOTIFICATIONS ════════════════════════════════════ */
+.login-wrap { max-width:460px; margin:5rem auto 0; padding:2.8rem 2.5rem 1.5rem; background: #ffffff; border:1px solid #cbd5e1; border-radius:16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+.login-title { font-size: 2rem !important; font-weight: 800 !important; text-align: center; margin-bottom: .4rem; color: #1e293b; }
+.login-sub { font-size: 1rem !important; text-align: center; color: #64748b; margin-bottom: 2rem; font-weight: 600 !important; }
+
 .badge { display:inline-block; font-size:.72rem !important; border-radius:6px; padding:3px 11px; margin-left:6px; font-weight:800; letter-spacing:.05em; }
 .badge-admin  { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
 .badge-expert { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
@@ -238,17 +175,15 @@ h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 
 .req-pending  { background:#fffbeb; border:1px solid #fde047; border-radius:8px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#92400e; font-size:.95rem; font-weight:600; }
 .section-card { background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 
-/* ══ SCORECARD TABLES ══════════════════════════════════════════════════ */
 .scorecard-container { width: 100%; overflow-x: auto; margin-top: 1rem; margin-bottom: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
 .scorecard-container table { width: 100%; border-collapse: collapse; background-color: #ffffff; font-family: inherit; table-layout: auto; }
 .scorecard-container th { background-color: #f8fafc !important; color: #334155 !important; font-weight: 800 !important; font-size: 0.9rem !important; text-align: center !important; padding: 10px 8px !important; border-bottom: 2px solid #cbd5e1; }
 .scorecard-container td { text-align: center !important; padding: 10px 8px !important; font-size: 0.95rem !important; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
 .scorecard-container td:first-child { font-weight: 700 !important; text-align: left !important; padding-left: 12px !important; }
 
-/* ══ TEAM PROFILE CARDS ════════════════════════════════════════════════ */
 .profile-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 1.5rem; transition: transform 0.2s; }
 .profile-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-color: #94a3b8; }
-.profile-img { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; border: 3px solid #2563eb; margin: 0 auto 1rem; padding: 2px; }
+.profile-img { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; object-position: top; border: 3px solid #2563eb; margin: 0 auto 1rem; padding: 2px; }
 .profile-name { font-size: 1.3rem !important; font-weight: 800 !important; color: #0f172a; margin-bottom: 2px; }
 .profile-role { font-size: 0.8rem !important; color: #64748b; margin-bottom: 1.2rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700 !important; }
 .profile-detail { font-size: 0.95rem !important; color: #334155; margin-bottom: 0.4rem; text-align: left; display:flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding-bottom:4px; font-weight: 600 !important;}
@@ -264,32 +199,20 @@ THEME = dict(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolo
 SESSION_DURATION_HOURS = 12  
 
 def generate_signed_token(uname: str, exp_timestamp: str) -> str:
-    payload = f"{uname}|{exp_timestamp}|SECRET_ALDAWAA_TOKEN"
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hashlib.sha256(f"{uname}|{exp_timestamp}|SECRET_ALDAWAA_TOKEN".encode()).hexdigest()
 
-if "store" not in st.session_state:
-    st.session_state.store = _load_store()
+if "store" not in st.session_state: st.session_state.store = _load_store()
     
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.username      = None
-    st.session_state.role          = None
-    
+    st.session_state.authenticated, st.session_state.username, st.session_state.role = False, None, None
     if "usr" in st.query_params and "tok" in st.query_params and "exp" in st.query_params:
-        q_usr = st.query_params["usr"]
-        q_tok = st.query_params["tok"]
-        q_exp = st.query_params["exp"]
+        q_usr, q_tok, q_exp = st.query_params["usr"], st.query_params["tok"], st.query_params["exp"]
         udata = st.session_state.store["users"].get(q_usr)
-        
         try: is_expired = int(time.time()) > int(q_exp)
         except ValueError: is_expired = True
-
         if udata and not is_expired and generate_signed_token(q_usr, q_exp) == q_tok:
-            st.session_state.authenticated = True
-            st.session_state.username = q_usr
-            st.session_state.role = udata["role"]
-        else:
-            st.query_params.clear()
+            st.session_state.authenticated, st.session_state.username, st.session_state.role = True, q_usr, udata["role"]
+        else: st.query_params.clear()
             
 if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
@@ -315,8 +238,7 @@ def approve_request(req_id):
             u = r["requester"]
             if r["type"] == "display_name": users()[u]["display_name"] = r["new_value"]
             elif r["type"] == "password":   
-                users()[u]["password_hash"] = _hash(r["new_value"])
-                update_sheet_password(u, r["new_value"]) 
+                users()[u]["password_hash"] = _hash(r["new_value"]); update_sheet_password(u, r["new_value"]) 
             r["status"] = "approved"; _save_store(); return True
     return False
 
@@ -397,7 +319,6 @@ if not st.session_state.authenticated:
                     st.query_params["usr"] = uname
                     st.query_params["exp"] = exp_time
                     st.query_params["tok"] = generate_signed_token(uname, exp_time)
-                    
                     if inp_u.strip() == inp_p.strip() and udata["role"] != "admin":
                         st.session_state.username = uname
                         st.session_state.force_onboard = True
@@ -414,8 +335,7 @@ if not st.session_state.authenticated:
                     st.error("❌ Incorrect username or password.")
             st.write("")
             if st.button("🆕 Create Account / Request Access", use_container_width=True):
-                st.session_state.view_request_form = True
-                st.rerun()
+                st.session_state.view_request_form = True; st.rerun()
         else:
             st.markdown("### 📝 Request Account Creation")
             req_name = st.text_input("Full Name *", placeholder="e.g. Ahmed Ali")
@@ -428,14 +348,10 @@ if not st.session_state.authenticated:
                     else:
                         payload = json.dumps({"name": req_name.strip(), "id": uid, "email": req_email.strip()})
                         push_request(uid, "new_account", payload)
-                        st.success(f"✅ Request sent! Waiting for admin approval. You will receive an email upon approval.")
-                        time.sleep(2.5)
-                        st.session_state.view_request_form = False
-                        st.rerun()
+                        st.success(f"✅ Request sent! Waiting for admin approval. You will receive an email upon approval."); time.sleep(2.5)
+                        st.session_state.view_request_form = False; st.rerun()
                 else: st.error("❌ Name, ID, and Email fields are all required.")
-            if st.button("← Back to Login", use_container_width=True):
-                st.session_state.view_request_form = False
-                st.rerun()
+            if st.button("← Back to Login", use_container_width=True): st.session_state.view_request_form = False; st.rerun()
     st.stop()
 
 if st.session_state.force_onboard:
@@ -447,21 +363,17 @@ if st.session_state.force_onboard:
         with st.form("onboard_pass_form"):
             new_ob1 = st.text_input("Set New Password", type="password")
             new_ob2 = st.text_input("Confirm New Password", type="password")
-            submit_ob = st.form_submit_button("💾 Save & Open Dashboard", use_container_width=True)
-        if submit_ob:
-            if new_ob1 != new_ob2: st.error("❌ Passwords do not match.")
-            elif len(new_ob1) < 6: st.error("❌ Password must be at least 6 characters.")
-            else:
-                uname = st.session_state.username
-                users()[uname]["password_hash"] = _hash(new_ob1)
-                _save_store()
-                update_sheet_password(uname, new_ob1) 
-                st.session_state.role = users()[uname]["role"]
-                st.session_state.force_onboard = False
-                st.session_state.page = "dashboard"
-                st.success("✅ Password configured successfully!")
-                time.sleep(1.5)
-                st.rerun()
+            if st.form_submit_button("💾 Save & Open Dashboard", use_container_width=True):
+                if new_ob1 != new_ob2: st.error("❌ Passwords do not match.")
+                elif len(new_ob1) < 6: st.error("❌ Password must be at least 6 characters.")
+                else:
+                    uname = st.session_state.username
+                    users()[uname]["password_hash"] = _hash(new_ob1)
+                    _save_store(); update_sheet_password(uname, new_ob1) 
+                    st.session_state.role = users()[uname]["role"]
+                    st.session_state.force_onboard = False
+                    st.session_state.page = "dashboard"
+                    st.success("✅ Password configured successfully!"); time.sleep(1.5); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -473,7 +385,6 @@ with st.sidebar:
     if is_admin(): badge_cls, badge_txt = "badge-admin", "ADMIN"
     elif st.session_state.role == "supervisor": badge_cls, badge_txt = "badge-supervisor", "SUPERVISOR"
     else: badge_cls, badge_txt = "badge-expert", "EXPERT"
-        
     st.markdown(f"👤 **{cur_user().get('display_name', '–')}** <span class='badge {badge_cls}'>{badge_txt}</span>", unsafe_allow_html=True)
 
     @st.cache_data(ttl=600, show_spinner="Syncing database tables…")
@@ -484,12 +395,11 @@ with st.sidebar:
                 creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             else:
                 st.error("❌ Secrets file layout unconfigured.")
-                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             
             client = gspread.authorize(creds)
             sheet = client.open("AlDawaa Tickets Data")
-            
-            all_dfs, roster_df, out_req_df, df_quality = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            all_dfs, roster_df, out_req_df, df_quality, df_users = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             for ws in sheet.worksheets():
                 title = ws.title.strip()
                 data = ws.get_all_values()
@@ -497,7 +407,9 @@ with st.sidebar:
                 if title == "Working Days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
                 elif title == "Out Requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
                 elif title == "Quality Issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-                elif title == "Users": continue # We handle Users directly inside profile/password functions
+                elif title == "Users": 
+                    df_users = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                    continue
                 
                 dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 mp = {}; seen = set()
@@ -519,10 +431,9 @@ with st.sidebar:
                 dft.rename(columns=mp, inplace=True)
                 all_dfs.append(dft)
             
-            if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality
+            if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, df_users
                 
-            df = pd.concat(all_dfs, ignore_index=True, sort=False)
-            df.replace("", np.nan, inplace=True)
+            df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
             for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "First Action Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
                 if c not in df.columns: df[c] = np.nan
             if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
@@ -535,21 +446,34 @@ with st.sidebar:
             df["Store ID"]     = df["Store ID"].fillna("Unknown").astype(str).str.strip()
             
             dp = pd.to_datetime(df["Request Date"], errors="coerce")
-            df["Request Date"] = dp
-            df["Date Only"] = dp.dt.date
-            df["Hour"] = dp.dt.hour.fillna(0).astype(int)
-            df["Day Name"] = dp.dt.day_name().fillna("Unknown")
-            
+            df["Request Date"], df["Date Only"], df["Hour"], df["Day Name"] = dp, dp.dt.date, dp.dt.hour.fillna(0).astype(int), dp.dt.day_name().fillna("Unknown")
             if "Request Take" in df.columns: df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
             if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
             df["Is Email"] = (df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
                 
-            return df, roster_df, out_req_df, df_quality
+            return df, roster_df, out_req_df, df_quality, df_users
         except Exception as e:
             st.error(f"❌ Connection Error: {e}")
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    df_raw, df_roster, df_out_req, df_quality = load_data()
+    df_raw, df_roster, df_out_req, df_quality, df_users = load_data()
+    
+    # ── SYNC USERS PROFILES FROM SHEET TO DASHBOARD ──
+    if not df_users.empty:
+        updated = False
+        for _, row in df_users.iterrows():
+            if len(row) > 0 and pd.notna(row.iloc[0]):
+                uname = str(row.iloc[0]).strip().lower()
+                if uname in st.session_state.store["users"]:
+                    u_dict = st.session_state.store["users"][uname]
+                    if len(row) > 6 and str(row.iloc[6]).strip(): u_dict["photo"] = parse_drive_link(str(row.iloc[6]))
+                    if len(row) > 7 and str(row.iloc[7]).strip(): u_dict["grad_year"] = str(row.iloc[7]).strip()
+                    if len(row) > 8 and str(row.iloc[8]).strip(): u_dict["join_cc"] = str(row.iloc[8]).strip()
+                    if len(row) > 9 and str(row.iloc[9]).strip(): u_dict["join_team"] = str(row.iloc[9]).strip()
+                    if len(row) > 10 and str(row.iloc[10]).strip(): u_dict["bio"] = str(row.iloc[10]).strip()
+                    updated = True
+        if updated: _save_store()
+
     if df_raw.empty: st.warning("Empty source records."); st.stop()
 
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
@@ -557,11 +481,9 @@ with st.sidebar:
         max_uploaded_date = raw_dates.max()
         first_of_current_upload_month = max_uploaded_date.replace(day=1)
         last_day_of_ended_month = first_of_current_upload_month - pd.Timedelta(days=1)
-        default_from = last_day_of_ended_month.replace(day=1).date()
-        default_to = last_day_of_ended_month.date()
+        default_from, default_to = last_day_of_ended_month.replace(day=1).date(), last_day_of_ended_month.date()
     else:
-        default_from = df_raw["Date Only"].dropna().min()
-        default_to = df_raw["Date Only"].dropna().max()
+        default_from, default_to = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
 
     min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
     date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
@@ -680,12 +602,11 @@ if st.session_state.page == "settings":
     if st.button("← Back to Dashboard"): st.session_state.page = "dashboard"; st.rerun()
 
     def render_profile_edit_form(urow):
-        """Reusable form block for editing one's own profile."""
         st.markdown("<div class='section-card'>", unsafe_allow_html=True)
         st.markdown("### 📋 Edit My Professional Profile")
         with st.form("expert_profile_form"):
-            p_photo = st.text_input("Photo URL (Link to your image)", value=urow.get("photo", ""))
-            st.caption("💡 Tip: Upload your photo to any image hosting site and paste the direct link here.")
+            p_photo = st.text_input("Photo URL (Google Drive Link or Direct Image Link)", value=urow.get("photo", ""))
+            st.caption("💡 يمكنك لصق رابط الصورة من Google Drive هنا مباشرة.")
             c1, c2 = st.columns(2)
             with c1: p_grad = st.text_input("🎓 Graduation Year", value=urow.get("grad_year", ""))
             with c2: p_join_cc = st.text_input("🏢 Joined Call Center (Year/Month)", value=urow.get("join_cc", ""))
@@ -694,16 +615,15 @@ if st.session_state.page == "settings":
             with c4: p_bio = st.text_input("✍️ Short Bio / Quote", value=urow.get("bio", ""))
             
             if st.form_submit_button("💾 Save Profile Data", use_container_width=True):
-                users()[me()]["photo"] = p_photo.strip()
+                p_photo_clean = parse_drive_link(p_photo)
+                users()[me()]["photo"] = p_photo_clean
                 users()[me()]["grad_year"] = p_grad.strip()
                 users()[me()]["join_cc"] = p_join_cc.strip()
                 users()[me()]["join_team"] = p_join_tm.strip()
                 users()[me()]["bio"] = p_bio.strip()
                 _save_store()
                 update_sheet_profile(me(), users()[me()])
-                st.success("✅ Profile Updated successfully!")
-                time.sleep(1)
-                st.rerun()
+                st.success("✅ Profile Updated successfully!"); time.sleep(1); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     if is_admin():
@@ -757,8 +677,7 @@ if st.session_state.page == "settings":
                                     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
                                     if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
                                         creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
-                                        client = gspread.authorize(creds)
-                                        client.open("AlDawaa Tickets Data").worksheet("Users").append_row([p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'], p_data.get('email', '')])
+                                        gspread.authorize(creds).open("AlDawaa Tickets Data").worksheet("Users").append_row([p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'], p_data.get('email', '')])
                                 except Exception as e: pass 
                                 user_email = p_data.get('email', '').strip()
                                 if user_email:
@@ -909,7 +828,7 @@ with tabs[0]:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not df_prev.empty else 0
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
@@ -1131,7 +1050,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         aname = my_agent_name()
         is_exp = (st.session_state.role == "expert" and aname)
         
-        # --- NEW: SHOW PROFILE HEADER IF 1 EXPERT SELECTED OR IF EXPERT VIEWING ---
         target_agent_photo = aname if is_exp else (sel_agents_t2[0] if sel_agents_t2 and len(sel_agents_t2) == 1 else None)
         if target_agent_photo:
             p_photo = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
@@ -1145,7 +1063,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             
             st.markdown(f'''
             <div style="display: flex; align-items: center; background: #ffffff; padding: 1.2rem; border-radius: 12px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                <img src="{p_photo}" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'" style="width: 85px; height: 85px; border-radius: 50%; object-fit: cover; border: 3px solid #2563eb; padding: 2px; margin-right: 1.5rem;">
+                <img src="{p_photo}" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'" style="width: 85px; height: 85px; border-radius: 50%; object-fit: cover; object-position: top; border: 3px solid #2563eb; padding: 2px; margin-right: 1.5rem;">
                 <div>
                     <h2 style="margin: 0 !important; padding: 0 !important; font-size: 1.6rem !important; color: #0f172a;">{target_agent_photo}</h2>
                     <span style="color: #64748b; font-weight: 700; font-size: 0.95rem;">{p_role}</span>
@@ -1153,7 +1071,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 </div>
             </div>
             ''', unsafe_allow_html=True)
-        # -------------------------------------------------------------------------
         
         df_kpi, df_kpi_prev = df.copy(), df_prev_all.copy()
         if is_exp: df_kpi = df_kpi[df_kpi["Assigned By"] == aname]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"] == aname]
