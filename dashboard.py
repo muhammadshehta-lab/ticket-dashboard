@@ -107,6 +107,27 @@ def _hash(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 # ══════════════════════════════════════════════════════════════════════════════════
+#  GOOGLE SHEETS PASSWORD SYNC HELPER
+# ══════════════════════════════════════════════════════════════════════════════════
+def update_sheet_password(uname: str, new_pass: str):
+    """Updates the user's password directly in the Google Sheet (Users tab)."""
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(
+                json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            ws = client.open("AlDawaa Tickets Data").worksheet("Users")
+            
+            # Find the user's row based on Username (Column 1)
+            cell = ws.find(str(uname), in_column=1)
+            if cell:
+                # Update Password (Column 2)
+                ws.update_cell(cell.row, 2, str(new_pass))
+    except Exception as e:
+        pass # Fails silently so it doesn't break the UI, but updates the local store
+
+# ══════════════════════════════════════════════════════════════════════════════════
 #  NOTIFICATIONS (WHATSAPP & EMAIL)
 # ══════════════════════════════════════════════════════════════════════════════════
 def notify_admin_whatsapp(logged_in_user):
@@ -491,6 +512,7 @@ def approve_request(req_id):
                 users()[u]["display_name"] = r["new_value"]
             elif r["type"] == "password":   
                 users()[u]["password_hash"] = _hash(r["new_value"])
+                update_sheet_password(u, r["new_value"]) # SYNC TO GOOGLE SHEETS
             r["status"] = "approved"; _save_store(); return True
     return False
 
@@ -750,6 +772,8 @@ if st.session_state.force_onboard:
                 uname = st.session_state.username
                 users()[uname]["password_hash"] = _hash(new_ob1)
                 _save_store()
+                update_sheet_password(uname, new_ob1) # SYNC TO GOOGLE SHEETS
+                
                 st.session_state.role = users()[uname]["role"]
                 st.session_state.force_onboard = False
                 st.session_state.page = "dashboard"
@@ -1096,7 +1120,9 @@ if st.session_state.page == "settings":
                     elif len(new_pw1) < 6:   st.error("❌ Minimum limit 6 characters.")
                     else:
                         users()[me()]["password_hash"] = _hash(new_pw1)
-                        _save_store(); st.success("✅ Administrative password saved.")
+                        _save_store()
+                        update_sheet_password(me(), new_pw1) # SYNC TO GOOGLE SHEETS
+                        st.success("✅ Administrative password saved.")
             st.markdown("</div>", unsafe_allow_html=True)
 
         with atab2:
@@ -1240,7 +1266,9 @@ if st.session_state.page == "settings":
                         if eu_dn.strip(): users()[uname]["display_name"] = eu_dn.strip()
                         users()[uname]["agent_name"] = eu_an.strip() if eu_an.strip() else None
                         users()[uname]["role"] = eu_role
-                        if eu_p1 and eu_p1 == eu_p2: users()[uname]["password_hash"] = _hash(eu_p1)
+                        if eu_p1 and eu_p1 == eu_p2: 
+                            users()[uname]["password_hash"] = _hash(eu_p1)
+                            update_sheet_password(uname, eu_p1) # SYNC TO GOOGLE SHEETS
                         _save_store(); st.success("✅ User settings updated."); st.rerun()
                         
                     if deleted:
@@ -1290,7 +1318,10 @@ if st.session_state.page == "settings":
             new_p2     = st.text_input("Confirm New Secret Password", type="password")
             if st.form_submit_button("💾 Save Changes", use_container_width=True):
                 if _hash(get_cur_pw) == urow["password_hash"] and new_p1 == new_p2 and len(new_p1) >= 6:
-                    users()[me()]["password_hash"] = _hash(new_p1); _save_store(); st.success("✅ Password updated."); st.rerun()
+                    users()[me()]["password_hash"] = _hash(new_p1)
+                    _save_store()
+                    update_sheet_password(me(), new_p1) # SYNC TO GOOGLE SHEETS
+                    st.success("✅ Password updated."); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -2386,32 +2417,6 @@ if is_admin() or st.session_state.role == "expert":
                 
                 clean_name = selected_email_agent.replace("🥇 ", "").replace("🥈 ", "").replace("🥉 ", "")
                 
-                markdown_email = f"""
-Dear **{clean_name}**,
-    
-I hope this email finds you well. 
-    
-As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to personally share your metrics and highlight your **{perf_word}** contributions to the team.
-    
-### 📊 Your Performance Scorecard:
-    
-| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Expected Incentive |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Your Score** | **{int(agent_total_cases)}** | **{agent_row['Cases/Day']}** | **{agent_row['% Achievement from Target']}** | **{agent_row['Service Quality']}** | **{agent_row['AFR']}** | **{agent_row['Service Time']}** | **{agent_row['Prospected Incentive']}** |
-| **Team Average** | {team_total_cases} | {team_row_disp['Cases/Day']} | {team_row_disp['% Achievement from Target']} | {team_row_disp['Service Quality']} | {team_row_disp['AFR']} | {team_row_disp['Service Time']} | 3,100 EGP |
-    
-**🎯 Targets & Quality:** {target_msg}  
-{qual_msg}
-    
-Thank you for your hard work and dedication to our success. Should you need any support or wish to discuss your metrics further, my door is always open.
-    
-Best regards,  
-**Mohammed Shehta** Team Leader
-"""
-                st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-                st.info("💡 **تلميح:** قم بتظليل الإيميل والجدول الموجود بالأسفل بالماوس وانسخه (Copy) ثم قم بلصقه (Paste) مباشرة في (Gmail) ليحتفظ بتنسيقه الرائع.")
-                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>\n\n{markdown_email}\n\n</div>", unsafe_allow_html=True)
-                
                 email_body_plain = f"""Dear {clean_name},
     
 I hope this email finds you well. 
@@ -2419,12 +2424,24 @@ I hope this email finds you well.
 As we review the performance for the period from {d_from} to {d_to}, I wanted to personally share your metrics and highlight your {perf_word} contributions to the team.
     
 📊 Your Performance Scorecard:
----------------------------------------------------------------------------------------------------------
-Metric         | Total Cases | Cases/Day | Achievement | Quality | AFR      | Service Time | Incentive
----------------------------------------------------------------------------------------------------------
-Your Score     | {str(int(agent_total_cases)):<11} | {str(agent_row['Cases/Day']):<9} | {str(agent_row['% Achievement from Target']):<11} | {str(agent_row['Service Quality']):<7} | {str(agent_row['AFR']):<8} | {str(agent_row['Service Time']):<12} | {str(agent_row['Prospected Incentive'])}
-Team Average   | {str(team_total_cases):<11} | {str(team_row_disp['Cases/Day']):<9} | {str(team_row_disp['% Achievement from Target']):<11} | {str(team_row_disp['Service Quality']):<7} | {str(team_row_disp['AFR']):<8} | {str(team_row_disp['Service Time']):<12} | 3,100 EGP
----------------------------------------------------------------------------------------------------------
+
+👤 YOUR SCORE:
+• Total Cases  : {int(agent_total_cases)}
+• Cases/Day    : {agent_row['Cases/Day']}
+• Achievement  : {agent_row['% Achievement from Target']}
+• Quality      : {agent_row['Service Quality']}
+• AFR          : {agent_row['AFR']}
+• Service Time : {agent_row['Service Time']}
+• Incentive    : {agent_row['Prospected Incentive']}
+
+🏆 TEAM AVERAGE:
+• Total Cases  : {int(team_total_cases)}
+• Cases/Day    : {team_row_disp['Cases/Day']}
+• Achievement  : {team_row_disp['% Achievement from Target']}
+• Quality      : {team_row_disp['Service Quality']}
+• AFR          : {team_row_disp['AFR']}
+• Service Time : {team_row_disp['Service Time']}
+• Incentive    : 3,100 EGP
     
 🎯 Targets & Quality:
 {target_msg.replace('**', '')}
