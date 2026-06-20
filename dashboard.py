@@ -1204,7 +1204,12 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             return styles
 
         display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
-        html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
+        styled_df = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+        
+        try: html_table = styled_df.hide(axis="index").to_html()
+        except: 
+            try: html_table = styled_df.hide_index().to_html()
+            except: html_table = styled_df.to_html()
         
         st.markdown("### 📅 Schedule & Leaves Summary")
         rk1, rk2, rk3, rk4, rk5 = st.columns(5)
@@ -1230,7 +1235,14 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                     for i, col in enumerate(row.index):
                         if col in ['Severity', 'Deduction (%)']: styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;' if 'critical' in sev else ('background-color: #ffffff; color: #ea580c; font-weight: 900;' if 'major' in sev else 'background-color: #ffffff; color: #ca8a04; font-weight: 900;')
                     return styles
-                st.markdown(f'<div class="scorecard-container">{disp_q.style.apply(style_q, axis=1).set_properties(**{{"text-align": "center"}}).hide(axis="index").to_html()}</div>', unsafe_allow_html=True)
+                
+                styled_q = disp_q.style.apply(style_q, axis=1).set_properties(**{"text-align": "center"})
+                try: html_q_table = styled_q.hide(axis="index").to_html()
+                except: 
+                    try: html_q_table = styled_q.hide_index().to_html()
+                    except: html_q_table = styled_q.to_html()
+                    
+                st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
         else: st.info("No quality issues logged in the system for this specific period.")
         
         if is_admin():
