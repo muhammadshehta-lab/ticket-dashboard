@@ -58,6 +58,7 @@ def _save_store(): _DATA_FILE.write_text(json.dumps(st.session_state.store, inde
 def _hash(pw: str) -> str: return hashlib.sha256(pw.encode()).hexdigest()
 
 def parse_drive_link(raw_url):
+    """Converts a standard Google Drive share link into a direct image rendering link."""
     raw_url = str(raw_url).strip()
     if "drive.google.com" in raw_url:
         try:
@@ -116,10 +117,12 @@ def send_approval_email(to_email, name, uid):
         if "smtp" in st.secrets and "email" in st.secrets["smtp"] and "password" in st.secrets["smtp"]:
             sender_email = st.secrets["smtp"]["email"]
             sender_password = st.secrets["smtp"]["password"]
+            
             msg = EmailMessage()
             msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
             msg['From'] = f"Mohammed Shehta <{sender_email}>"
             msg['To'] = to_email
+            
             dashboard_url = "https://aldawaa-requests.streamlit.app" 
             body = f"Dear {name},\n\nYour request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.\n\nHere are your login credentials:\n- Username / ID: {uid}\n- Temporary Password: {uid}\n\n(Note: You will be required to set a new, secure password upon your first login).\n\nYou can access the dashboard via the link below:\n{dashboard_url}\n\nBest regards,\nMohammed Shehta"
             msg.set_content(body)
@@ -847,7 +850,7 @@ with tabs[0]:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not df_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
@@ -1235,7 +1238,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         except: 
             try: html_table = styled_df.hide_index().to_html()
             except: html_table = styled_df.to_html()
-        
+            
         st.markdown("### 📅 Schedule & Leaves Summary")
         rk1, rk2, rk3, rk4, rk5 = st.columns(5)
         rk1.markdown(kpi_colored("Working Days (Shifts)", int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
