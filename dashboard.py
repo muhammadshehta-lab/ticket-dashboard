@@ -10,6 +10,9 @@ import json, hashlib, time, pathlib, urllib.parse, re, requests
 from datetime import timedelta
 import smtplib
 from email.message import EmailMessage
+import base64
+from io import BytesIO
+from PIL import Image
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
@@ -55,19 +58,13 @@ def _save_store(): _DATA_FILE.write_text(json.dumps(st.session_state.store, inde
 def _hash(pw: str) -> str: return hashlib.sha256(pw.encode()).hexdigest()
 
 def parse_drive_link(raw_url):
-    """Converts a standard Google Drive share link into a direct image rendering link."""
     raw_url = str(raw_url).strip()
     if "drive.google.com" in raw_url:
         try:
             match = re.search(r'/d/([a-zA-Z0-9_-]+)', raw_url)
-            if not match:
-                match = re.search(r'id=([a-zA-Z0-9_-]+)', raw_url)
-            if match:
-                file_id = match.group(1)
-                # استخدام الرابط الرسمي المصرح بيه من جوجل لعرض الصور كـ مصغرات عالية الجودة
-                return f"https://drive.google.com/thumbnail?id={file_id}&sz=w500"
-        except: 
-            return raw_url
+            if not match: match = re.search(r'id=([a-zA-Z0-9_-]+)', raw_url)
+            if match: return f"https://drive.google.com/thumbnail?id={match.group(1)}&sz=w500"
+        except: return raw_url
     return raw_url
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -119,12 +116,10 @@ def send_approval_email(to_email, name, uid):
         if "smtp" in st.secrets and "email" in st.secrets["smtp"] and "password" in st.secrets["smtp"]:
             sender_email = st.secrets["smtp"]["email"]
             sender_password = st.secrets["smtp"]["password"]
-            
             msg = EmailMessage()
             msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
             msg['From'] = f"Mohammed Shehta <{sender_email}>"
             msg['To'] = to_email
-            
             dashboard_url = "https://aldawaa-requests.streamlit.app" 
             body = f"Dear {name},\n\nYour request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.\n\nHere are your login credentials:\n- Username / ID: {uid}\n- Temporary Password: {uid}\n\n(Note: You will be required to set a new, secure password upon your first login).\n\nYou can access the dashboard via the link below:\n{dashboard_url}\n\nBest regards,\nMohammed Shehta"
             msg.set_content(body)
@@ -611,8 +606,14 @@ if st.session_state.page == "settings":
         st.markdown("<div class='section-card'>", unsafe_allow_html=True)
         st.markdown("### 📋 Edit My Professional Profile")
         with st.form("expert_profile_form"):
-            p_photo = st.text_input("Photo URL (Google Drive Link or Direct Image Link)", value=urow.get("photo", ""))
-            st.caption("💡 يمكنك لصق رابط الصورة من Google Drive هنا مباشرة.")
+            st.markdown("**📸 Profile Picture**")
+            
+            curr_photo = urow.get("photo", "")
+            disp_url = curr_photo if not curr_photo.startswith("data:image") else ""
+            
+            p_photo_file = st.file_uploader("1️⃣ Upload from Phone/Computer", type=["png", "jpg", "jpeg"])
+            p_photo_url = st.text_input("2️⃣ OR Paste Google Drive/Image Link", value=disp_url)
+            
             c1, c2 = st.columns(2)
             with c1: p_grad = st.text_input("🎓 Graduation Year", value=urow.get("grad_year", ""))
             with c2: p_join_cc = st.text_input("🏢 Joined Call Center (Year/Month)", value=urow.get("join_cc", ""))
@@ -621,8 +622,20 @@ if st.session_state.page == "settings":
             with c4: p_bio = st.text_input("✍️ Short Bio / Quote", value=urow.get("bio", ""))
             
             if st.form_submit_button("💾 Save Profile Data", use_container_width=True):
-                p_photo_clean = parse_drive_link(p_photo)
-                users()[me()]["photo"] = p_photo_clean
+                final_photo = curr_photo
+                if p_photo_file is not None:
+                    try:
+                        img = Image.open(p_photo_file).convert("RGB")
+                        img.thumbnail((250, 250)) 
+                        buffered = BytesIO()
+                        img.save(buffered, format="JPEG", quality=80)
+                        img_str = base64.b64encode(buffered.getvalue()).decode()
+                        final_photo = f"data:image/jpeg;base64,{img_str}"
+                    except: pass
+                elif p_photo_url.strip() and p_photo_url.strip() != disp_url:
+                    final_photo = parse_drive_link(p_photo_url.strip())
+                
+                users()[me()]["photo"] = final_photo
                 users()[me()]["grad_year"] = p_grad.strip()
                 users()[me()]["join_cc"] = p_join_cc.strip()
                 users()[me()]["join_team"] = p_join_tm.strip()
