@@ -847,7 +847,7 @@ with tabs[0]:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not df_prev.empty else 0
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
@@ -1140,7 +1140,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         
         total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
         sc["Cases/Day"] = (total_cases / pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
-        sc.insert(1, "Rank", sc["Cases/Day"].rank(method="min", ascending=False).astype(int).astype(str) if not sc.empty else [])
             
         if global_target > 0: sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
         else: sc["% Achievement from Target"] = ((sc["Cases/Day"] / sc["Cases/Day"].mean() * 100).round(1).astype(str) + "%" if sc["Cases/Day"].mean() > 0 else "0.0%")
@@ -1156,6 +1155,19 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             return f"{count_inc + (600 * qual) + 1000:,.0f} EGP"
             
         sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
+
+        # ── SMART RANKING SYSTEM (Incentive -> Quality -> Cases/Day) ──
+        if not sc.empty:
+            sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
+            sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc["_sort_cases"] = sc["Cases/Day"].astype(float)
+            
+            sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
+            sc.sort_values(by="_rank_score", ascending=False, inplace=True)
+            sc.insert(1, "Rank", sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
+            sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
+        else:
+            sc.insert(1, "Rank", [])
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         scope_agents = [aname] if is_exp else (sel_agents_t2 if sel_agents_t2 else OFFICIAL_EXPERTS)
@@ -1189,8 +1201,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
         sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True)
         
-        rank_df = sc.copy(); rank_df["_sort_val"] = pd.to_numeric(rank_df["Cases/Day"], errors="coerce").fillna(0)
-        top_exps = rank_df.nlargest(3, "_sort_val")["Expert"].tolist()
+        rank_df = sc.copy(); rank_df["_sort_val"] = pd.to_numeric(rank_df["Rank"], errors="coerce").fillna(999)
+        top_exps = rank_df.nsmallest(3, "_sort_val")["Expert"].tolist()
         gold_exp, silver_exp, bronze_exp = top_exps[0] if len(top_exps) > 0 else None, top_exps[1] if len(top_exps) > 1 else None, top_exps[2] if len(top_exps) > 2 else None
 
         display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
