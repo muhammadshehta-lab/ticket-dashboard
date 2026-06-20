@@ -847,7 +847,7 @@ with tabs[0]:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not df_prev.empty else 0
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
@@ -1235,7 +1235,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         except: 
             try: html_table = styled_df.hide_index().to_html()
             except: html_table = styled_df.to_html()
-        
+            
         st.markdown("### 📅 Schedule & Leaves Summary")
         rk1, rk2, rk3, rk4, rk5 = st.columns(5)
         rk1.markdown(kpi_colored("Working Days (Shifts)", int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
@@ -1283,17 +1283,41 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 def sfl(v):
                     try: return float(str(v).replace('%','').replace(',',''))
                     except: return 0.0
+                def t2s(t_str):
+                    try:
+                        p = str(t_str).split(':')
+                        return int(p[0])*3600 + int(p[1])*60 + int(p[2])
+                    except: return 0
                 
                 ach_v, q_v = sfl(arow["% Achievement from Target"]), sfl(arow["Service Quality"])
+                t_ach_v, t_q_v = sfl(trow["% Achievement from Target"]), sfl(trow["Service Quality"])
                 a_tot = int(sfl(arow['Tickets Count']) + sfl(arow['JHAH Requests']) + sfl(arow['Support Requests']))
                 t_tot = int(sfl(trow['Tickets Count']) + sfl(trow['JHAH Requests']) + sfl(trow['Support Requests']))
                 
-                perf_w, tgt_m = ("outstanding", f"You successfully exceeded the daily target with a brilliant **{arow['% Achievement from Target']}** achievement rate!") if ach_v >= 100 else (("solid", f"You reached a solid **{arow['% Achievement from Target']}** of the daily target. Great effort!") if ach_v >= 80 else ("developing", f"You achieved **{arow['% Achievement from Target']}** of the target. We believe in your potential!"))
-                q_msg = f"Your service quality is top-tier at **{arow['Service Quality']}**." if q_v >= 95 else (f"Your service quality is strong at **{arow['Service Quality']}**." if q_v >= 85 else f"Your service quality sits at **{arow['Service Quality']}**. Let's focus on accuracy.")
+                a_afr_sec, t_afr_sec = t2s(arow['AFR']), t2s(trow['AFR'])
+                a_st_sec, t_st_sec = t2s(arow['Service Time']), t2s(trow['Service Time'])
+                
+                c_cases = "#dc2626" if sfl(arow['Cases/Day']) < sfl(trow['Cases/Day']) else "#16a34a"
+                c_ach   = "#dc2626" if ach_v < 100 else "#16a34a"
+                c_qual  = "#dc2626" if q_v < t_q_v else "#16a34a"
+                c_afr   = "#dc2626" if a_afr_sec > t_afr_sec else "#16a34a"
+                c_st    = "#dc2626" if a_st_sec > t_st_sec else "#16a34a"
+                
+                enc_msg = ""
+                if ach_v >= 100:
+                    perf_w, tgt_m = "outstanding", f"You successfully exceeded the daily target with a brilliant **{arow['% Achievement from Target']}** achievement rate! Keep up the great momentum."
+                elif ach_v >= 80:
+                    perf_w, tgt_m = "solid", f"You reached a solid **{arow['% Achievement from Target']}** of the daily target. You are very close to hitting the green zone!"
+                else:
+                    perf_w, tgt_m = "developing", f"You achieved **{arow['% Achievement from Target']}** of the target. We noticed a drop this period, but we know your true capabilities are much higher."
+                    enc_msg = "<br><div style='background-color:#eff6ff; padding:15px; border-left:4px solid #3b82f6; margin-top:15px; border-radius:4px;'><b>💡 A Special Note for You:</b><br>Every great expert faces challenging periods. We believe in your potential and are fully here to support you in overcoming these obstacles. Let's work together to boost your numbers and bring out the best in you next week. You've absolutely got this! 💪</div>"
+
+                q_msg = f"Your service quality is top-tier at **{arow['Service Quality']}**." if q_v >= 95 else (f"Your service quality is strong at **{arow['Service Quality']}**." if q_v >= 85 else f"Your service quality sits at **{arow['Service Quality']}**. Let's focus on accuracy and double-check our steps to ensure excellence.")
+                if q_v < 90 and not enc_msg:
+                    enc_msg = "<br><div style='background-color:#eff6ff; padding:15px; border-left:4px solid #3b82f6; margin-top:15px; border-radius:4px;'><b>💡 A Special Note for You:</b><br>Quality is our top priority, and we noticed some challenges this period. Don't worry, we are here to support you! Let's take a moment to review the quality standards and work together to get your score back to 100%. You can do it! 💪</div>"
                 
                 c_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 
-                # ── تصميم الجدول الاحترافي للإيميل ──
                 email_html_table = f"""
                 <table style="width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif; font-size: 14px; border: 1px solid #e2e8f0;">
                     <thead>
@@ -1311,28 +1335,28 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                         </tr>
                         <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Cases/Day</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['Cases/Day']}</td>
-                            <td style="padding: 10px; text-align: center;">{trow['Cases/Day']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #e2e8f0;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Achievement</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['% Achievement from Target']}</td>
-                            <td style="padding: 10px; text-align: center;">{trow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Quality</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['Service Quality']}</td>
-                            <td style="padding: 10px; text-align: center;">{trow['Service Quality']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_qual}; font-weight: bold;">{arow['Service Quality']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Service Quality']}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #e2e8f0;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">AFR</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['AFR']}</td>
-                            <td style="padding: 10px; text-align: center;">{trow['AFR']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_afr}; font-weight: bold;">{arow['AFR']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['AFR']}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Service Time</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['Service Time']}</td>
-                            <td style="padding: 10px; text-align: center;">{trow['Service Time']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_st}; font-weight: bold;">{arow['Service Time']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Service Time']}</td>
                         </tr>
                         <tr>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Incentive</td>
@@ -1344,7 +1368,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 """
                 
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
                 
                 plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Your Score 👤 | Team Average 🏆 |\n|---|---|---|\n| Total Cases | {a_tot} | {t_tot} |\n| Cases/Day | {arow['Cases/Day']} | {trow['Cases/Day']} |\n| Achievement | {arow['% Achievement from Target']} | {trow['% Achievement from Target']} |\n| Quality | {arow['Service Quality']} | {trow['Service Quality']} |\n| AFR | {arow['AFR']} | {trow['AFR']} |\n| Service Time | {arow['Service Time']} | {trow['Service Time']} |\n| Incentive | {arow['Prospected Incentive']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
                 
