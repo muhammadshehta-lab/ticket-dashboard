@@ -58,7 +58,6 @@ def _save_store(): _DATA_FILE.write_text(json.dumps(st.session_state.store, inde
 def _hash(pw: str) -> str: return hashlib.sha256(pw.encode()).hexdigest()
 
 def parse_drive_link(raw_url):
-    """Converts a standard Google Drive share link into a direct image rendering link."""
     raw_url = str(raw_url).strip()
     if "drive.google.com" in raw_url:
         try:
@@ -117,12 +116,10 @@ def send_approval_email(to_email, name, uid):
         if "smtp" in st.secrets and "email" in st.secrets["smtp"] and "password" in st.secrets["smtp"]:
             sender_email = st.secrets["smtp"]["email"]
             sender_password = st.secrets["smtp"]["password"]
-            
             msg = EmailMessage()
             msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
             msg['From'] = f"Mohammed Shehta <{sender_email}>"
             msg['To'] = to_email
-            
             dashboard_url = "https://aldawaa-requests.streamlit.app" 
             body = f"Dear {name},\n\nYour request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.\n\nHere are your login credentials:\n- Username / ID: {uid}\n- Temporary Password: {uid}\n\n(Note: You will be required to set a new, secure password upon your first login).\n\nYou can access the dashboard via the link below:\n{dashboard_url}\n\nBest regards,\nMohammed Shehta"
             msg.set_content(body)
@@ -1238,7 +1235,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         except: 
             try: html_table = styled_df.hide_index().to_html()
             except: html_table = styled_df.to_html()
-            
+        
         st.markdown("### 📅 Schedule & Leaves Summary")
         rk1, rk2, rk3, rk4, rk5 = st.columns(5)
         rk1.markdown(kpi_colored("Working Days (Shifts)", int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
@@ -1277,6 +1274,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             st.divider(); st.markdown("#### 📥 Export Team Performance Report")
             csv_sc = display_df.copy(); csv_sc["Expert"] = csv_sc["Expert"].apply(lambda x: re.sub(r'^[🥇🥈🥉]\s*', '', str(x)))
             st.download_button("📥 Download Team Scorecard (CSV)", csv_sc.to_csv(index=False).encode('utf-8-sig'), f"Team_Scorecard_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
+            
             st.divider(); st.markdown("#### ✉️ Performance Review Emails")
             
             sel_email_agent = st.selectbox("Select Agent for Email Draft", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
@@ -1285,17 +1283,71 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 def sfl(v):
                     try: return float(str(v).replace('%','').replace(',',''))
                     except: return 0.0
-                ach_v, q_v, a_tot = sfl(arow["% Achievement from Target"]), sfl(arow["Service Quality"]), sfl(arow['Tickets Count']) + sfl(arow['JHAH Requests']) + sfl(arow['Support Requests'])
+                
+                ach_v, q_v = sfl(arow["% Achievement from Target"]), sfl(arow["Service Quality"])
+                a_tot = int(sfl(arow['Tickets Count']) + sfl(arow['JHAH Requests']) + sfl(arow['Support Requests']))
+                t_tot = int(sfl(trow['Tickets Count']) + sfl(trow['JHAH Requests']) + sfl(trow['Support Requests']))
                 
                 perf_w, tgt_m = ("outstanding", f"You successfully exceeded the daily target with a brilliant **{arow['% Achievement from Target']}** achievement rate!") if ach_v >= 100 else (("solid", f"You reached a solid **{arow['% Achievement from Target']}** of the daily target. Great effort!") if ach_v >= 80 else ("developing", f"You achieved **{arow['% Achievement from Target']}** of the target. We believe in your potential!"))
                 q_msg = f"Your service quality is top-tier at **{arow['Service Quality']}**." if q_v >= 95 else (f"Your service quality is strong at **{arow['Service Quality']}**." if q_v >= 85 else f"Your service quality sits at **{arow['Service Quality']}**. Let's focus on accuracy.")
                 
                 c_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 
-                st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br><br><b>👤 YOUR SCORE:</b><br>• Total Cases : {int(a_tot)}<br>• Cases/Day : {arow['Cases/Day']}<br>• Achievement : {arow['% Achievement from Target']}<br>• Quality : {arow['Service Quality']}<br>• AFR : {arow['AFR']}<br>• Service Time : {arow['Service Time']}<br>• Incentive : {arow['Prospected Incentive']}<br><br><b>🏆 TEAM AVERAGE:</b><br>• Total Cases : {int(sfl(trow['Tickets Count']) + sfl(trow['JHAH Requests']) + sfl(trow['Support Requests']))}<br>• Cases/Day : {trow['Cases/Day']}<br>• Achievement : {trow['% Achievement from Target']}<br>• Quality : {trow['Service Quality']}<br>• AFR : {trow['AFR']}<br>• Service Time : {trow['Service Time']}<br>• Incentive : 3,100 EGP<br><br><b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                # ── تصميم الجدول الاحترافي للإيميل ──
+                email_html_table = f"""
+                <table style="width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif; font-size: 14px; border: 1px solid #e2e8f0;">
+                    <thead>
+                        <tr style="background-color: #f8fafc; color: #0f172a; text-align: center; border-bottom: 2px solid #cbd5e1;">
+                            <th style="padding: 12px; border-right: 1px solid #e2e8f0; text-align: left;">Metric</th>
+                            <th style="padding: 12px; border-right: 1px solid #e2e8f0;">Your Score 👤</th>
+                            <th style="padding: 12px;">Team Average 🏆</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Total Cases</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{a_tot}</td>
+                            <td style="padding: 10px; text-align: center;">{t_tot}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Cases/Day</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['Cases/Day']}</td>
+                            <td style="padding: 10px; text-align: center;">{trow['Cases/Day']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Achievement</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; text-align: center;">{trow['% Achievement from Target']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Quality</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['Service Quality']}</td>
+                            <td style="padding: 10px; text-align: center;">{trow['Service Quality']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">AFR</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['AFR']}</td>
+                            <td style="padding: 10px; text-align: center;">{trow['AFR']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Service Time</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center;">{arow['Service Time']}</td>
+                            <td style="padding: 10px; text-align: center;">{trow['Service Time']}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155;">Incentive</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
+                            <td style="padding: 10px; text-align: center; font-weight: bold; color: #475569;">3,100 EGP</td>
+                        </tr>
+                    </tbody>
+                </table>
+                """
                 
-                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n👤 YOUR SCORE:\n• Total Cases  : {int(a_tot)}\n• Cases/Day    : {arow['Cases/Day']}\n• Achievement  : {arow['% Achievement from Target']}\n• Quality      : {arow['Service Quality']}\n• AFR          : {arow['AFR']}\n• Service Time : {arow['Service Time']}\n• Incentive    : {arow['Prospected Incentive']}\n\n🏆 TEAM AVERAGE:\n• Total Cases  : {int(sfl(trow['Tickets Count']) + sfl(trow['JHAH Requests']) + sfl(trow['Support Requests']))}\n• Cases/Day    : {trow['Cases/Day']}\n• Achievement  : {trow['% Achievement from Target']}\n• Quality      : {trow['Service Quality']}\n• AFR          : {trow['AFR']}\n• Service Time : {trow['Service Time']}\n• Incentive    : 3,100 EGP\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
+                st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                
+                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Your Score 👤 | Team Average 🏆 |\n|---|---|---|\n| Total Cases | {a_tot} | {t_tot} |\n| Cases/Day | {arow['Cases/Day']} | {trow['Cases/Day']} |\n| Achievement | {arow['% Achievement from Target']} | {trow['% Achievement from Target']} |\n| Quality | {arow['Service Quality']} | {trow['Service Quality']} |\n| AFR | {arow['AFR']} | {trow['AFR']} |\n| Service Time | {arow['Service Time']} | {trow['Service Time']} |\n| Incentive | {arow['Prospected Incentive']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
+                
                 with st.expander("Show Plain Text Version (For manual copy/paste)"): st.text_area("Plain Text Draft", value=plain_email, height=300)
                 st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}&body={urllib.parse.quote(plain_email)}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
