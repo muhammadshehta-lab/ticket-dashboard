@@ -1127,6 +1127,11 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         else: sc["Tickets Count"], sc["_Service_Time_val"], sc["_AFR_val"], sc["_c_ok_sum"], sc["_c_all_sum"] = 0, 0, 0, 0, 0
             
         sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
+        
+        # ── SECRET MANUAL ADJUSTMENTS ──
+        period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+        sc["Tickets Count"] = sc.apply(lambda row: row["Tickets Count"] + int(period_adjs.get(str(row["Expert"]).strip(), 0)), axis=1)
+
         sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
         sc["Off Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("off", 0))
         sc["Annual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("ann", 0))
@@ -1323,34 +1328,44 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                     <thead>
                         <tr style="background-color: #f8fafc; color: #0f172a; text-align: center; border-bottom: 2px solid #cbd5e1;">
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: left;">Metric</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Total Cases</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Cases/Day</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Achievement</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Quality</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">AFR</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Service Time</th>
-                            <th style="padding: 10px;">Incentive</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Your Score 👤</th>
+                            <th style="padding: 10px;">Team Average 🏆</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr style="border-bottom: 1px solid #e2e8f0;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Your Score 👤</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Total Cases</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{a_tot}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_qual}; font-weight: bold;">{arow['Service Quality']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_afr}; font-weight: bold;">{arow['AFR']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_st}; font-weight: bold;">{arow['Service Time']}</td>
-                            <td style="padding: 10px; text-align: center; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{t_tot}</td>
                         </tr>
-                        <tr style="background-color: #fcfcfc;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Team Avg 🏆</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{t_tot}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Quality']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['AFR']}</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Time']}</td>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Cases/Day</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Achievement</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Quality</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_qual}; font-weight: bold;">{arow['Service Quality']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Service Quality']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">AFR</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_afr}; font-weight: bold;">{arow['AFR']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['AFR']}</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Service Time</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_st}; font-weight: bold;">{arow['Service Time']}</td>
+                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Service Time']}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Incentive</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
                             <td style="padding: 10px; text-align: center; font-weight: bold; color: #475569;">3,100 EGP</td>
                         </tr>
                     </tbody>
@@ -1360,7 +1375,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
                 st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
                 
-                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Incentive |\n|---|---|---|---|---|---|---|---|\n| Your Score 👤 | {a_tot} | {arow['Cases/Day']} | {arow['% Achievement from Target']} | {arow['Service Quality']} | {arow['AFR']} | {arow['Service Time']} | {arow['Prospected Incentive']} |\n| Team Avg 🏆 | {t_tot} | {trow['Cases/Day']} | {trow['% Achievement from Target']} | {trow['Service Quality']} | {trow['AFR']} | {trow['Service Time']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
+                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Your Score 👤 | Team Average 🏆 |\n|---|---|---|\n| Total Cases | {a_tot} | {t_tot} |\n| Cases/Day | {arow['Cases/Day']} | {trow['Cases/Day']} |\n| Achievement | {arow['% Achievement from Target']} | {trow['% Achievement from Target']} |\n| Quality | {arow['Service Quality']} | {trow['Service Quality']} |\n| AFR | {arow['AFR']} | {trow['AFR']} |\n| Service Time | {arow['Service Time']} | {trow['Service Time']} |\n| Incentive | {arow['Prospected Incentive']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
                 
                 with st.expander("Show Plain Text Version (For manual copy/paste)"): st.text_area("Plain Text Draft", value=plain_email, height=300)
                 st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}&body={urllib.parse.quote(plain_email)}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
@@ -1374,6 +1389,32 @@ if is_admin():
             if st.form_submit_button("💾 Save Global Parameters", use_container_width=True):
                 if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
                 overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target; _save_store(); st.success("✅ Saved!"); st.rerun()
+
+        st.markdown("### 🤫 Secret Agent Ticket Adjustments")
+        st.info("💡 Any number added here will be invisibly added to the agent's total tickets for this period. Experts will NOT see the adjustment itself, only the final increased/decreased total.")
+        
+        if "agent_adjustments" not in overrides().get(PERIOD_KEY, {}):
+            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+            overrides()[PERIOD_KEY]["agent_adjustments"] = {}
+            
+        current_adjs = overrides()[PERIOD_KEY].get("agent_adjustments", {})
+        
+        with st.form("secret_adj_form"):
+            adj_agent = st.selectbox("Select Agent", OFFICIAL_EXPERTS)
+            adj_val = st.number_input("Adjustment Value (can be negative)", value=int(current_adjs.get(adj_agent, 0)), step=1)
+            
+            if st.form_submit_button("💾 Save Secret Adjustment", use_container_width=True):
+                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+                if "agent_adjustments" not in overrides()[PERIOD_KEY]: overrides()[PERIOD_KEY]["agent_adjustments"] = {}
+                
+                overrides()[PERIOD_KEY]["agent_adjustments"][adj_agent] = adj_val
+                _save_store()
+                st.success(f"✅ Secret adjustment of {adj_val} applied to {adj_agent}!")
+                st.rerun()
+        
+        if current_adjs:
+            st.markdown("**Current Active Adjustments for this period:**")
+            st.json(current_adjs)
 
 # ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
 if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
