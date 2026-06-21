@@ -853,7 +853,7 @@ with tabs[0]:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not df_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
@@ -1275,8 +1275,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
                 disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
                 def style_q(row):
-                    sev = str(row['Severity']).lower()
-                    styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
+                    sev, styles = str(row['Severity']).lower(), ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
                     for i, col in enumerate(row.index):
                         if col in ['Severity', 'Deduction (%)']: 
                             if 'critical' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
