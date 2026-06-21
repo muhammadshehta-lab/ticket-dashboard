@@ -828,9 +828,15 @@ with tabs[0]:
     if esc and not nesc: dfm = dfm[dfm["Is Email"] == True]; dfm_prev = dfm_prev[dfm_prev["Is Email"] == True]
     elif nesc and not esc: dfm = dfm[dfm["Is Email"] == False]; dfm_prev = dfm_prev[dfm_prev["Is Email"] == False]
 
-    total = len(dfm)
+    global_period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+    global_adj_total = sum(int(v) for v in global_period_adjs.values()) if not esc and not nesc else 0
+
+    global_prev_adjs = overrides().get(f"{prev_d_from}_{prev_d_to}", {}).get("agent_adjustments", {})
+    global_prev_adj_total = sum(int(v) for v in global_prev_adjs.values()) if not esc and not nesc else 0
+
+    total = len(dfm) + global_adj_total
     ss    = dfm["Status"].astype(str).str.strip()
-    ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0]
+    ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0] + global_adj_total
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
     
     curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
@@ -842,12 +848,12 @@ with tabs[0]:
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
     curr_avg_per_day = (total + global_jhah + global_support) / delta_days if delta_days > 0 else 0
     
-    prev_total = len(dfm_prev)
+    prev_total = len(dfm_prev) + global_prev_adj_total
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
-    prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+    prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not df_prev.empty else 0
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
@@ -1091,14 +1097,24 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             </div>
             ''', unsafe_allow_html=True)
         
+        scope_agents = [aname] if is_exp else (sel_agents_t2 if sel_agents_t2 else OFFICIAL_EXPERTS)
+        period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+        total_kpi_adj = sum(int(period_adjs.get(agent, 0)) for agent in scope_agents)
+
+        prev_period_adjs = overrides().get(f"{prev_d_from}_{prev_d_to}", {}).get("agent_adjustments", {})
+        prev_total_kpi_adj = sum(int(prev_period_adjs.get(agent, 0)) for agent in scope_agents)
+        
         df_kpi, df_kpi_prev = df.copy(), df_prev_all.copy()
         if is_exp: df_kpi = df_kpi[df_kpi["Assigned By"] == aname]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"] == aname]
         elif sel_agents_t2: df_kpi = df_kpi[df_kpi["Assigned By"].isin(sel_agents_t2)]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"].isin(sel_agents_t2)]
             
-        total_kpi, prev_kpi_total = len(df_kpi), len(df_kpi_prev)
+        total_kpi, prev_kpi_total = len(df_kpi) + total_kpi_adj, len(df_kpi_prev) + prev_total_kpi_adj
+        
         kpi_ss, kpi_ss_prev = df_kpi["Status"].astype(str).str.strip(), df_kpi_prev["Status"].astype(str).str.strip()
-        kpi_ok, prev_kpi_ok = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0], df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
-        kpi_iss, prev_kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0], df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+        kpi_ok = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0] + total_kpi_adj
+        prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0] + prev_total_kpi_adj
+        kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
+        prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
         
         kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
         kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
@@ -1129,7 +1145,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
         
         # ── SECRET MANUAL ADJUSTMENTS ──
-        period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
         sc["Tickets Count"] = sc.apply(lambda row: row["Tickets Count"] + int(period_adjs.get(str(row["Expert"]).strip(), 0)), axis=1)
 
         sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
@@ -1175,13 +1190,12 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             sc.insert(1, "Rank", [])
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
-        scope_agents = [aname] if is_exp else (sel_agents_t2 if sel_agents_t2 else OFFICIAL_EXPERTS)
-
+        
         kpi_curr_avg_per_day = (pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()) / pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() if pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() > 0 else 0
 
         prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
         prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin([a.lower() for a in scope_agents])] if scope_agents else df_kpi_prev
-        prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
+        prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
 
         chg_kpi_total = calc_change(total_kpi, prev_kpi_total); chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct; chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct; chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day); chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val); chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
@@ -1259,11 +1273,15 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             else:
                 disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy().rename(columns={'Deduction': 'Deduction (%)'})
                 disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
-                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','minor':'🟡 Minor'}.get(str(s).strip().lower(), s))
+                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
                 def style_q(row):
-                    sev, styles = str(row['Severity']).lower(), ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
+                    sev = str(row['Severity']).lower()
+                    styles = ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
                     for i, col in enumerate(row.index):
-                        if col in ['Severity', 'Deduction (%)']: styles[i] = 'background-color: #ffffff; color: #dc2626; font-weight: 900;' if 'critical' in sev else ('background-color: #ffffff; color: #ea580c; font-weight: 900;' if 'major' in sev else 'background-color: #ffffff; color: #ca8a04; font-weight: 900;')
+                        if col in ['Severity', 'Deduction (%)']: 
+                            if 'critical' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
+                            elif 'major' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
+                            elif 'minor' in sev: styles[i] = 'background-color: #dbeafe; color: #1d4ed8; font-weight: 900;'
                     return styles
                 
                 styled_q = disp_q.style.apply(style_q, axis=1).set_properties(**{"text-align": "center"})
@@ -1328,44 +1346,34 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                     <thead>
                         <tr style="background-color: #f8fafc; color: #0f172a; text-align: center; border-bottom: 2px solid #cbd5e1;">
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: left;">Metric</th>
-                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Your Score 👤</th>
-                            <th style="padding: 10px;">Team Average 🏆</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Total Cases</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Cases/Day</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Achievement</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Quality</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">AFR</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Service Time</th>
+                            <th style="padding: 10px;">Incentive</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr style="border-bottom: 1px solid #e2e8f0;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Total Cases</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Your Score 👤</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{a_tot}</td>
-                            <td style="padding: 10px; text-align: center; color: #475569;">{t_tot}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Cases/Day</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
-                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #e2e8f0;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Achievement</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
-                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Quality</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_qual}; font-weight: bold;">{arow['Service Quality']}</td>
-                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Service Quality']}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #e2e8f0;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">AFR</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_afr}; font-weight: bold;">{arow['AFR']}</td>
-                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['AFR']}</td>
-                        </tr>
-                        <tr style="border-bottom: 1px solid #e2e8f0; background-color: #fcfcfc;">
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Service Time</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_st}; font-weight: bold;">{arow['Service Time']}</td>
-                            <td style="padding: 10px; text-align: center; color: #475569;">{trow['Service Time']}</td>
+                            <td style="padding: 10px; text-align: center; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
                         </tr>
-                        <tr>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Incentive</td>
-                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
+                        <tr style="background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Team Avg 🏆</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{t_tot}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Quality']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['AFR']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Time']}</td>
                             <td style="padding: 10px; text-align: center; font-weight: bold; color: #475569;">3,100 EGP</td>
                         </tr>
                     </tbody>
@@ -1375,7 +1383,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
                 st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
                 
-                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Your Score 👤 | Team Average 🏆 |\n|---|---|---|\n| Total Cases | {a_tot} | {t_tot} |\n| Cases/Day | {arow['Cases/Day']} | {trow['Cases/Day']} |\n| Achievement | {arow['% Achievement from Target']} | {trow['% Achievement from Target']} |\n| Quality | {arow['Service Quality']} | {trow['Service Quality']} |\n| AFR | {arow['AFR']} | {trow['AFR']} |\n| Service Time | {arow['Service Time']} | {trow['Service Time']} |\n| Incentive | {arow['Prospected Incentive']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
+                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Incentive |\n|---|---|---|---|---|---|---|---|\n| Your Score 👤 | {a_tot} | {arow['Cases/Day']} | {arow['% Achievement from Target']} | {arow['Service Quality']} | {arow['AFR']} | {arow['Service Time']} | {arow['Prospected Incentive']} |\n| Team Avg 🏆 | {t_tot} | {trow['Cases/Day']} | {trow['% Achievement from Target']} | {trow['Service Quality']} | {trow['AFR']} | {trow['Service Time']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
                 
                 with st.expander("Show Plain Text Version (For manual copy/paste)"): st.text_area("Plain Text Draft", value=plain_email, height=300)
                 st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}&body={urllib.parse.quote(plain_email)}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
