@@ -799,7 +799,7 @@ if st.session_state.page == "settings":
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-def generate_pptx_summary():
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict):
     try:
         from pptx import Presentation
         from pptx.util import Inches, Pt
@@ -822,7 +822,7 @@ def generate_pptx_summary():
 
         # Subtitle (Date)
         p2 = tf.add_paragraph()
-        p2.text = f"Period: {d_from} to {d_to}"
+        p2.text = f"Period: {d_from_str} to {d_to_str}"
         p2.font.size = Pt(18)
         p2.font.color.rgb = RGBColor(100, 116, 139)
 
@@ -837,16 +837,16 @@ def generate_pptx_summary():
         table = slide.shapes.add_table(rows, cols, left, top, width, height).table
 
         metrics = [
-            ("Total Requests", f"{total:,}"),
-            ("Avg Requests / Day", f"{curr_avg_per_day:.1f}"),
-            ("Closed Completed", f"{ok:,} ({ok_pct:.1f}%)"),
-            ("Closed with Issue", f"{issue:,} ({issue_pct:.1f}%)"),
-            ("AFR (Avg First Response)", fmt_m(curr_afr_val)),
-            ("TAT (Avg Service)", fmt_m(curr_tat_val)),
-            ("Stores Served", f"{stores_count:,}"),
-            ("Total Actions", f"{status_actions_sum:,}"),
-            ("JHAH Requests", f"{global_jhah:,}"),
-            ("Support Requests", f"{global_support:,}")
+            ("Total Requests", f"{total_val:,}"),
+            ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
+            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"),
+            ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
+            ("AFR (Avg First Response)", afr_str),
+            ("TAT (Avg Service)", tat_str),
+            ("Stores Served", f"{stores_val:,}"),
+            ("Total Actions", f"{actions_val:,}"),
+            ("JHAH Requests", f"{jhah_val:,}"),
+            ("Support Requests", f"{support_val:,}")
         ]
         
         # Format table headers
@@ -864,8 +864,8 @@ def generate_pptx_summary():
         for m_name, m_val in metrics:
             table.cell(r, c).text = m_name
             table.cell(r, c+1).text = str(m_val)
-            for p in table.cell(r, c+1).text_frame.paragraphs:
-                p.font.bold = True
+            for paragraph in table.cell(r, c+1).text_frame.paragraphs:
+                paragraph.font.bold = True
             c += 2
             if c >= 4:
                 c = 0
@@ -881,11 +881,11 @@ def generate_pptx_summary():
         p3.font.color.rgb = RGBColor(15, 23, 42)
         
         # Add top 5 types
-        top_types = list(req_counts.items())[:5]
+        top_types = list(req_counts_dict.items())[:5]
         for rt_name, rt_count in top_types:
-            p = tf2.add_paragraph()
-            p.text = f"• {rt_name}: {rt_count} Tickets ({req_pct.get(rt_name, 0)}%)"
-            p.font.size = Pt(16)
+            p_rt = tf2.add_paragraph()
+            p_rt.text = f"• {rt_name}: {rt_count} Tickets ({req_pct_dict.get(rt_name, 0)}%)"
+            p_rt.font.size = Pt(16)
         
         ppt_stream = BytesIO()
         prs.save(ppt_stream)
@@ -1181,7 +1181,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                 for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Tickets ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
             st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
         with c_exp2:
-            ppt_file_data, err_msg = generate_pptx_summary()
+            ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict())
             if ppt_file_data:
                 st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data, file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
             else:
