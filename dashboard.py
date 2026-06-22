@@ -872,7 +872,7 @@ with tabs[0]:
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
     
-    r1c1.markdown(kpi_colored("Total Requests",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
@@ -1031,8 +1031,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty: return -1 
-            col_name, roster_date_map[target_date]
-            working_count = 0
+            col_name, working_count = roster_date_map[target_date], 0
             for _, row in df_roster.iterrows():
                 if any(tid in " ".join([str(x).strip().lower() for x in row.values]) for tid in tracked_ids):
                     cell_val = str(row.get(col_name, "")).strip().lower()
