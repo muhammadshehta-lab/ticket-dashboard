@@ -799,6 +799,101 @@ if st.session_state.page == "settings":
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
+def generate_pptx_summary():
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.enum.text import PP_ALIGN
+        from pptx.dml.color import RGBColor
+        from io import BytesIO
+
+        prs = Presentation()
+        # Use blank slide layout
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        # Title
+        txbox = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(9), Inches(1))
+        tf = txbox.text_frame
+        p = tf.add_paragraph()
+        p.text = "In-Store Requests - Operational Insights"
+        p.font.bold = True
+        p.font.size = Pt(32)
+        p.font.color.rgb = RGBColor(15, 23, 42)
+
+        # Subtitle (Date)
+        p2 = tf.add_paragraph()
+        p2.text = f"Period: {d_from} to {d_to}"
+        p2.font.size = Pt(18)
+        p2.font.color.rgb = RGBColor(100, 116, 139)
+
+        # KPI Table
+        rows = 6
+        cols = 4
+        top = Inches(1.5)
+        left = Inches(0.5)
+        width = Inches(9)
+        height = Inches(2)
+
+        table = slide.shapes.add_table(rows, cols, left, top, width, height).table
+
+        metrics = [
+            ("Total Requests", f"{total:,}"),
+            ("Avg Requests / Day", f"{curr_avg_per_day:.1f}"),
+            ("Closed Completed", f"{ok:,} ({ok_pct:.1f}%)"),
+            ("Closed with Issue", f"{issue:,} ({issue_pct:.1f}%)"),
+            ("AFR (Avg First Response)", fmt_m(curr_afr_val)),
+            ("TAT (Avg Service)", fmt_m(curr_tat_val)),
+            ("Stores Served", f"{stores_count:,}"),
+            ("Total Actions", f"{status_actions_sum:,}"),
+            ("JHAH Requests", f"{global_jhah:,}"),
+            ("Support Requests", f"{global_support:,}")
+        ]
+        
+        # Format table headers
+        for i in range(4):
+            table.cell(0, i).text = "Metric" if i % 2 == 0 else "Value"
+            table.cell(0, i).fill.solid()
+            table.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            for paragraph in table.cell(0, i).text_frame.paragraphs:
+                paragraph.font.color.rgb = RGBColor(255, 255, 255)
+                paragraph.font.bold = True
+                paragraph.alignment = PP_ALIGN.CENTER
+
+        # Fill table
+        r, c = 1, 0
+        for m_name, m_val in metrics:
+            table.cell(r, c).text = m_name
+            table.cell(r, c+1).text = str(m_val)
+            for p in table.cell(r, c+1).text_frame.paragraphs:
+                p.font.bold = True
+            c += 2
+            if c >= 4:
+                c = 0
+                r += 1
+
+        # Request Types Text
+        txbox2 = slide.shapes.add_textbox(Inches(0.5), Inches(4.5), Inches(9), Inches(2.5))
+        tf2 = txbox2.text_frame
+        p3 = tf2.add_paragraph()
+        p3.text = "Top Request Types Breakdown:"
+        p3.font.bold = True
+        p3.font.size = Pt(20)
+        p3.font.color.rgb = RGBColor(15, 23, 42)
+        
+        # Add top 5 types
+        top_types = list(req_counts.items())[:5]
+        for rt_name, rt_count in top_types:
+            p = tf2.add_paragraph()
+            p.text = f"• {rt_name}: {rt_count} Tickets ({req_pct.get(rt_name, 0)}%)"
+            p.font.size = Pt(16)
+        
+        ppt_stream = BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
+        return ppt_stream, None
+    except ImportError:
+        return None, "المكتبة الخاصة بالباوربوينت غير متوفرة. يرجى إضافة 'python-pptx' إلى ملف requirements.txt"
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -872,7 +967,7 @@ with tabs[0]:
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns([1.4, 0.9, 0.9, 0.9, 0.9])
     
-    r1c1.markdown(kpi_colored("Total Tickets",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Total Requests",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
@@ -1031,7 +1126,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
         def get_scheduled_agents(target_date):
             if target_date not in roster_date_map or df_roster.empty: return -1 
-            col_name, working_count = roster_date_map[target_date], 0
+            col_name = roster_date_map[target_date]
+            working_count = 0
             for _, row in df_roster.iterrows():
                 if any(tid in " ".join([str(x).strip().lower() for x in row.values]) for tid in tracked_ids):
                     cell_val = str(row.get(col_name, "")).strip().lower()
@@ -1072,16 +1168,24 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
 
     if is_admin():
         st.divider(); st.markdown("#### 📥 Export Operational Report")
-        base_metrics = [{"Metric": "Total Tickets", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
-        if not dfm.empty:
-            base_metrics.append({"Metric": "--- AVG TICKETS PER WEEKDAY ---", "Value": ""})
-            avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
-            for d in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']: base_metrics.append({"Metric": f"Avg Tickets ({d})", "Value": avg_per_weekday.get(d, 0)})
-            base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
-            has_tat = "Request Take (min)" in dfm.columns
-            rt_tat = dfm.groupby("Request Type")["Request Take (min)"].mean() if has_tat else pd.Series(dtype=float)
-            for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Tickets ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
-        st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
+        c_exp1, c_exp2 = st.columns(2)
+        with c_exp1:
+            base_metrics = [{"Metric": "Total Tickets", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            if not dfm.empty:
+                base_metrics.append({"Metric": "--- AVG TICKETS PER WEEKDAY ---", "Value": ""})
+                avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
+                for d in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']: base_metrics.append({"Metric": f"Avg Tickets ({d})", "Value": avg_per_weekday.get(d, 0)})
+                base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
+                has_tat = "Request Take (min)" in dfm.columns
+                rt_tat = dfm.groupby("Request Type")["Request Take (min)"].mean() if has_tat else pd.Series(dtype=float)
+                for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Tickets ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
+            st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
+        with c_exp2:
+            ppt_file_data, err_msg = generate_pptx_summary()
+            if ppt_file_data:
+                st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data, file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
+            else:
+                st.warning(f"⚠️ {err_msg}")
 
 # ── TAB 2 — Team Performance and KPIs (Admin & Expert) ─────────────────────────────
 if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
@@ -1398,10 +1502,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
                 st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
                 
-                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Incentive |\n|---|---|---|---|---|---|---|---|\n| Your Score 👤 | {a_tot} | {arow['Cases/Day']} | {arow['% Achievement from Target']} | {arow['Service Quality']} | {arow['AFR']} | {arow['Service Time']} | {arow['Prospected Incentive']} |\n| Team Avg 🏆 | {t_tot} | {trow['Cases/Day']} | {trow['% Achievement from Target']} | {trow['Service Quality']} | {trow['AFR']} | {trow['Service Time']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
-                
-                with st.expander("Show Plain Text Version (For manual copy/paste)"): st.text_area("Plain Text Draft", value=plain_email, height=300)
-                st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}&body={urllib.parse.quote(plain_email)}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
+                st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
 if is_admin():
