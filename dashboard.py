@@ -1370,10 +1370,13 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         styled_df = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
         
-        try: html_table = styled_df.hide(axis="index").to_html()
-        except: 
-            try: html_table = styled_df.hide_index().to_html()
-            except: html_table = styled_df.to_html()
+        try: 
+            html_table = styled_df.hide(axis="index").to_html()
+        except AttributeError: 
+            try: 
+                html_table = styled_df.hide_index().to_html()
+            except AttributeError: 
+                html_table = styled_df.to_html()
             
         st.markdown("### 📅 Schedule & Leaves Summary")
         rk1, rk2, rk3, rk4, rk5 = st.columns(5)
@@ -1404,10 +1407,13 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                     return styles
                 
                 styled_q = disp_q.style.apply(style_q, axis=1).set_properties(**{"text-align": "center"})
-                try: html_q_table = styled_q.hide(axis="index").to_html()
-                except: 
-                    try: html_q_table = styled_q.hide_index().to_html()
-                    except: html_q_table = styled_q.to_html()
+                try: 
+                    html_q_table = styled_q.hide(axis="index").to_html()
+                except AttributeError: 
+                    try: 
+                        html_q_table = styled_q.hide_index().to_html()
+                    except AttributeError: 
+                        html_q_table = styled_q.to_html()
                     
                 st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
         else: st.info("No quality issues logged in the system for this specific period.")
@@ -1501,6 +1507,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
                 st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                
+                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Incentive |\n|---|---|---|---|---|---|---|---|\n| Your Score 👤 | {a_tot} | {arow['Cases/Day']} | {arow['% Achievement from Target']} | {arow['Service Quality']} | {arow['AFR']} | {arow['Service Time']} | {arow['Prospected Incentive']} |\n| Team Avg 🏆 | {t_tot} | {trow['Cases/Day']} | {trow['% Achievement from Target']} | {trow['Service Quality']} | {trow['AFR']} | {trow['Service Time']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
                 
                 st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
