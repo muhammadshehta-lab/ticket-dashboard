@@ -587,8 +587,9 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
     df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
     def get_deduction(sev):
         s = str(sev).strip().lower()
-        if s == 'critical': return 2.0
-        elif s == 'major': return 1.0
+        if s == 'critical': return 5.0
+        elif s == 'major': return 2.0
+        elif s == 'medium': return 1.0
         elif s == 'minor': return 0.5
         return 0.0
     df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
@@ -799,7 +800,7 @@ if st.session_state.page == "settings":
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict):
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
     try:
         from pptx import Presentation
         from pptx.util import Inches, Pt
@@ -808,85 +809,91 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         from io import BytesIO
 
         prs = Presentation()
-        # Use blank slide layout
-        slide = prs.slides.add_slide(prs.slide_layouts[6])
 
-        # Title
-        txbox = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(9), Inches(1))
-        tf = txbox.text_frame
-        p = tf.add_paragraph()
-        p.text = "In-Store Requests - Operational Insights"
-        p.font.bold = True
-        p.font.size = Pt(32)
-        p.font.color.rgb = RGBColor(15, 23, 42)
+        # --- SLIDE 1: Title Slide ---
+        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
+        title = slide_title.shapes.title
+        subtitle = slide_title.placeholders[1]
+        title.text = "In-Store Requests: Executive Report"
+        subtitle.text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team"
 
-        # Subtitle (Date)
-        p2 = tf.add_paragraph()
-        p2.text = f"Period: {d_from_str} to {d_to_str}"
-        p2.font.size = Pt(18)
-        p2.font.color.rgb = RGBColor(100, 116, 139)
-
-        # KPI Table
-        rows = 6
-        cols = 4
-        top = Inches(1.5)
-        left = Inches(0.5)
-        width = Inches(9)
-        height = Inches(2)
-
-        table = slide.shapes.add_table(rows, cols, left, top, width, height).table
-
+        # --- SLIDE 2: KPIs ---
+        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_kpi.shapes.title.text = "Operational Insights & KPIs"
+        
+        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3)).table
+        table_shape.columns[0].width = Inches(2.5)
+        table_shape.columns[1].width = Inches(2.0)
+        table_shape.columns[2].width = Inches(2.5)
+        table_shape.columns[3].width = Inches(2.0)
         metrics = [
             ("Total Requests", f"{total_val:,}"),
             ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
             ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"),
             ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
-            ("AFR (Avg First Response)", afr_str),
+            ("AFR (Avg Response)", afr_str),
             ("TAT (Avg Service)", tat_str),
             ("Stores Served", f"{stores_val:,}"),
             ("Total Actions", f"{actions_val:,}"),
             ("JHAH Requests", f"{jhah_val:,}"),
             ("Support Requests", f"{support_val:,}")
         ]
-        
-        # Format table headers
         for i in range(4):
-            table.cell(0, i).text = "Metric" if i % 2 == 0 else "Value"
-            table.cell(0, i).fill.solid()
-            table.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
-            for paragraph in table.cell(0, i).text_frame.paragraphs:
+            table_shape.cell(0, i).text = "Metric" if i % 2 == 0 else "Value"
+            table_shape.cell(0, i).fill.solid()
+            table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            for paragraph in table_shape.cell(0, i).text_frame.paragraphs:
                 paragraph.font.color.rgb = RGBColor(255, 255, 255)
                 paragraph.font.bold = True
                 paragraph.alignment = PP_ALIGN.CENTER
-
-        # Fill table
         r, c = 1, 0
         for m_name, m_val in metrics:
-            table.cell(r, c).text = m_name
-            table.cell(r, c+1).text = str(m_val)
-            for paragraph in table.cell(r, c+1).text_frame.paragraphs:
+            table_shape.cell(r, c).text = m_name
+            table_shape.cell(r, c+1).text = str(m_val)
+            for paragraph in table_shape.cell(r, c+1).text_frame.paragraphs:
                 paragraph.font.bold = True
             c += 2
-            if c >= 4:
-                c = 0
-                r += 1
+            if c >= 4: c, r = 0, r + 1
 
-        # Request Types Text
-        txbox2 = slide.shapes.add_textbox(Inches(0.5), Inches(4.5), Inches(9), Inches(2.5))
-        tf2 = txbox2.text_frame
-        p3 = tf2.add_paragraph()
-        p3.text = "Top Request Types Breakdown:"
-        p3.font.bold = True
-        p3.font.size = Pt(20)
-        p3.font.color.rgb = RGBColor(15, 23, 42)
-        
-        # Add top 5 types
-        top_types = list(req_counts_dict.items())[:5]
-        for rt_name, rt_count in top_types:
-            p_rt = tf2.add_paragraph()
-            p_rt.text = f"• {rt_name}: {rt_count} Tickets ({req_pct_dict.get(rt_name, 0)}%)"
-            p_rt.font.size = Pt(16)
-        
+        # --- SLIDE 3: Top Categories ---
+        slide_types = prs.slides.add_slide(prs.slide_layouts[1])
+        slide_types.shapes.title.text = "Top Request Types Breakdown"
+        tf = slide_types.placeholders[1].text_frame
+        for rt_name, rt_count in list(req_counts_dict.items())[:8]:
+            p_rt = tf.add_paragraph()
+            p_rt.text = f"• {rt_name}: {rt_count:,} Tickets ({req_pct_dict.get(rt_name, 0)}%)"
+            p_rt.font.size = Pt(20)
+
+        # --- SLIDE 4: Team Scorecard ---
+        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_team.shapes.title.text = "Team Performance Scorecard"
+        if not sc_g.empty:
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            rows = len(sc_g) + 1
+            cols = len(cols_to_show)
+            table_team = slide_team.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9), Inches(0.4 * rows)).table
+            
+            table_team.columns[0].width = Inches(0.8) # Rank
+            table_team.columns[1].width = Inches(2.2) # Expert
+            table_team.columns[2].width = Inches(1.5) # Tickets
+            table_team.columns[3].width = Inches(1.5) # Cases/Day
+            table_team.columns[4].width = Inches(1.5) # Target
+            table_team.columns[5].width = Inches(1.5) # Quality
+            
+            for c_idx, col_name in enumerate(cols_to_show):
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %')
+                table_team.cell(0, c_idx).fill.solid()
+                table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+                if table_team.cell(0, c_idx).text_frame.paragraphs:
+                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
+            
+            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
+                for c_idx, col_name in enumerate(cols_to_show):
+                    table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
+                    if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
+                        table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
+
         ppt_stream = BytesIO()
         prs.save(ppt_stream)
         ppt_stream.seek(0)
@@ -948,7 +955,6 @@ with tabs[0]:
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
-    # ── FIXED: dfm_prev instead of df_prev ──
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
@@ -1184,9 +1190,46 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                 for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Tickets ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
             st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
         with c_exp2:
-            ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict())
+            # === تحضير بيانات الفريق أوتوماتيك لبريزنتيشن الباوربوينت ===
+            df_sc_g = df[df["Assigned By"].astype(str).str.strip().str.lower().isin([x.lower() for x in OFFICIAL_EXPERTS])].copy()
+            sc_g = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
+            if not df_sc_g.empty:
+                df_sc_g["Assigned By"] = df_sc_g["Assigned By"].astype(str).str.strip().str.lower().map({x.lower(): x for x in OFFICIAL_EXPERTS})
+                grp_g = df_sc_g.groupby("Assigned By")
+                stats_g = pd.DataFrame(index=grp_g.groups.keys())
+                stats_g["Tickets Count"] = grp_g["Request ID"].count()
+                sc_g = sc_g.merge(stats_g, left_on="Expert", right_index=True, how="left")
+            else:
+                sc_g["Tickets Count"] = 0
+                
+            sc_g["Tickets Count"] = sc_g["Tickets Count"].fillna(0).astype(int)
+            period_adjs_g = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+            sc_g["Tickets Count"] = sc_g.apply(lambda row: row["Tickets Count"] + int(period_adjs_g.get(str(row["Expert"]).strip(), 0)), axis=1)
+            sc_g["Working Days"] = sc_g["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
+            sc_g["JHAH Requests"] = sc_g.apply(lambda row: int(float(out_req_dict.get(str(row["Expert"]).strip().lower(), {}).get("JHAH", 0) or 0)), axis=1)
+            sc_g["Support Requests"] = sc_g.apply(lambda row: int(float(out_req_dict.get(str(row["Expert"]).strip().lower(), {}).get("Support Req", 0) or 0)), axis=1)
+            
+            total_cases_g = pd.to_numeric(sc_g["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["Support Requests"], errors='coerce').fillna(0)
+            sc_g["Cases/Day"] = (total_cases_g / pd.to_numeric(sc_g["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
+            
+            if global_target > 0: sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
+            else: sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / sc_g["Cases/Day"].mean() * 100).round(1).astype(str) + "%" if sc_g["Cases/Day"].mean() > 0 else "0.0%")
+            
+            sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
+            
+            if not sc_g.empty:
+                sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+                sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
+                sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+                sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
+                sc_g.insert(1, "Rank", sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
+            else:
+                sc_g.insert(1, "Rank", [])
+                
+            ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
+            
             if ppt_file_data:
-                st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data, file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
+                st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data.getvalue(), file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
             else:
                 st.warning(f"⚠️ {err_msg}")
 
@@ -1375,10 +1418,10 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         
         try: 
             html_table = styled_df.hide(axis="index").to_html()
-        except AttributeError: 
+        except Exception: 
             try: 
                 html_table = styled_df.hide_index().to_html()
-            except AttributeError: 
+            except Exception: 
                 html_table = styled_df.to_html()
             
         st.markdown("### 📅 Schedule & Leaves Summary")
@@ -1399,23 +1442,24 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             else:
                 disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy().rename(columns={'Deduction': 'Deduction (%)'})
                 disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
-                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
+                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'⚫ Critical', 'major':'🔴 Major', 'medium':'🟠 Medium', 'minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
                 def style_q(row):
                     sev, styles = str(row['Severity']).lower(), ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
                     for i, col in enumerate(row.index):
                         if col in ['Severity', 'Deduction (%)']: 
-                            if 'critical' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
-                            elif 'major' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
+                            if 'critical' in sev: styles[i] = 'background-color: #fef2f2; color: #7f1d1d; font-weight: 900;'
+                            elif 'major' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
+                            elif 'medium' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
                             elif 'minor' in sev: styles[i] = 'background-color: #dbeafe; color: #1d4ed8; font-weight: 900;'
                     return styles
                 
                 styled_q = disp_q.style.apply(style_q, axis=1).set_properties(**{"text-align": "center"})
                 try: 
                     html_q_table = styled_q.hide(axis="index").to_html()
-                except AttributeError: 
+                except Exception: 
                     try: 
                         html_q_table = styled_q.hide_index().to_html()
-                    except AttributeError: 
+                    except Exception: 
                         html_q_table = styled_q.to_html()
                     
                 st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
