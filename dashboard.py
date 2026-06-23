@@ -800,13 +800,26 @@ if st.session_state.page == "settings":
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g, fig_r, fig_st, fig_d, fig_hic):
     try:
         from pptx import Presentation
         from pptx.util import Inches, Pt
         from pptx.enum.text import PP_ALIGN
         from pptx.dml.color import RGBColor
         from io import BytesIO
+
+        def add_plot_to_slide(prs, fig, title_str):
+            if fig is None: return
+            slide = prs.slides.add_slide(prs.slide_layouts[5])
+            slide.shapes.title.text = title_str
+            try:
+                img_bytes = fig.to_image(format="png", width=950, height=500, engine="kaleido")
+                image_stream = BytesIO(img_bytes)
+                slide.shapes.add_picture(image_stream, Inches(0.5), Inches(1.5), width=Inches(9))
+            except Exception as e:
+                tf = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(8), Inches(1)).text_frame
+                tf.text = f"⚠️ Please add 'kaleido' to requirements.txt to render this chart.\n\nError details: {str(e)}"
+                tf.paragraphs[0].font.color.rgb = RGBColor(200, 0, 0)
 
         prs = Presentation()
 
@@ -855,16 +868,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             c += 2
             if c >= 4: c, r = 0, r + 1
 
-        # --- SLIDE 3: Top Categories ---
-        slide_types = prs.slides.add_slide(prs.slide_layouts[1])
-        slide_types.shapes.title.text = "Top Request Types Breakdown"
-        tf = slide_types.placeholders[1].text_frame
-        for rt_name, rt_count in list(req_counts_dict.items())[:8]:
-            p_rt = tf.add_paragraph()
-            p_rt.text = f"• {rt_name}: {rt_count:,} Tickets ({req_pct_dict.get(rt_name, 0)}%)"
-            p_rt.font.size = Pt(20)
-
-        # --- SLIDE 4: Team Scorecard ---
+        # --- SLIDE 3: Team Scorecard ---
         slide_team = prs.slides.add_slide(prs.slide_layouts[5])
         slide_team.shapes.title.text = "Team Performance Scorecard"
         if not sc_g.empty:
@@ -893,6 +897,22 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
                     table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
                     if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
                         table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
+
+        # --- SLIDE 4, 5, 6: Dynamic Charts ---
+        add_plot_to_slide(prs, fig_d, "Daily Volume & Schedule Workload Analysis")
+        add_plot_to_slide(prs, fig_r, "Time Segmentation: Hourly Flow & Avg First Response (FRT)")
+        add_plot_to_slide(prs, fig_st, "Time Segmentation: Hourly Flow & Avg Service Time (TAT)")
+
+        # --- SLIDE 7: Top Request Types (Chart format) ---
+        if req_counts_dict:
+            types_df = pd.DataFrame(list(req_counts_dict.items()), columns=["Request Type", "Count"]).head(8)
+            fig_req = px.bar(types_df, x="Request Type", y="Count", text="Count", title="Top Request Types Breakdown", color_discrete_sequence=["#3b82f6"])
+            fig_req.update_traces(textposition="outside")
+            fig_req.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=40, b=10))
+            add_plot_to_slide(prs, fig_req, "Top Request Types Breakdown")
+
+        # --- SLIDE 8: HIC Distribution ---
+        add_plot_to_slide(prs, fig_hic, "Health Insurance Companies (HIC) Distribution")
 
         ppt_stream = BytesIO()
         prs.save(ppt_stream)
@@ -1082,6 +1102,8 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
 
     st.divider()
 
+    fig_r, fig_st, fig_d, fig_hic = None, None, None, None
+
     if not df_raw.empty:
         st.markdown("### ⏳ Ticket flow rate over daily hours")
         df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
@@ -1226,7 +1248,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             else:
                 sc_g.insert(1, "Rank", [])
                 
-            ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
+            ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g, fig_r, fig_st, fig_d, fig_hic)
             
             if ppt_file_data:
                 st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data.getvalue(), file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
@@ -1442,13 +1464,13 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             else:
                 disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy().rename(columns={'Deduction': 'Deduction (%)'})
                 disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
-                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'⚫ Critical', 'major':'🔴 Major', 'medium':'🟠 Medium', 'minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
+                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','medium':'🟠 Medium','minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
                 def style_q(row):
                     sev, styles = str(row['Severity']).lower(), ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
                     for i, col in enumerate(row.index):
                         if col in ['Severity', 'Deduction (%)']: 
-                            if 'critical' in sev: styles[i] = 'background-color: #fef2f2; color: #7f1d1d; font-weight: 900;'
-                            elif 'major' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
+                            if 'critical' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
+                            elif 'major' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
                             elif 'medium' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
                             elif 'minor' in sev: styles[i] = 'background-color: #dbeafe; color: #1d4ed8; font-weight: 900;'
                     return styles
@@ -1554,8 +1576,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
                 st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
-                
-                plain_email = f"Dear {c_name},\n\nAs we review the performance for the period from {d_from} to {d_to}, I wanted to share your metrics and highlight your {perf_w} contributions.\n\n📊 Your Performance Scorecard:\n\n| Metric | Total Cases | Cases/Day | Achievement | Quality | AFR | Service Time | Incentive |\n|---|---|---|---|---|---|---|---|\n| Your Score 👤 | {a_tot} | {arow['Cases/Day']} | {arow['% Achievement from Target']} | {arow['Service Quality']} | {arow['AFR']} | {arow['Service Time']} | {arow['Prospected Incentive']} |\n| Team Avg 🏆 | {t_tot} | {trow['Cases/Day']} | {trow['% Achievement from Target']} | {trow['Service Quality']} | {trow['AFR']} | {trow['Service Time']} | 3,100 EGP |\n\n🎯 Targets & Quality:\n{tgt_m.replace('**','')}\n{q_msg.replace('**','')}\n\nThank you for your hard work!\n\nBest regards,\nMohammed Shehta\nTeam Leader"
                 
                 st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
