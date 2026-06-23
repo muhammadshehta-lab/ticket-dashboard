@@ -24,4 +24,5 @@ python-dotenv>=1.0.1
 gspread
 google-auth
 python-pptx
+python-pptx
 kaleido
