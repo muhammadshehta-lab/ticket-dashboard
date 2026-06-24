@@ -387,6 +387,22 @@ with st.sidebar:
     elif st.session_state.role == "supervisor": badge_cls, badge_txt = "badge-supervisor", "SUPERVISOR"
     else: badge_cls, badge_txt = "badge-expert", "EXPERT"
     st.markdown(f"👤 **{cur_user().get('display_name', '–')}** <span class='badge {badge_cls}'>{badge_txt}</span>", unsafe_allow_html=True)
+    
+    st.divider()
+    presentation_mode = st.checkbox("🖥️ Presentation Mode (Full Screen)", value=False)
+    if presentation_mode:
+        st.markdown("""
+            <style>
+            /* Hide Streamlit top header and footer */
+            header {display: none !important;}
+            footer {display: none !important;}
+            /* Maximize the main container for presentation */
+            .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 100% !important;}
+            </style>
+        """, unsafe_allow_html=True)
+        st.success("✨ Presentation Mode Active!\n\n1. Press **F11** on your keyboard.\n2. Click the **> Arrow** above to collapse this sidebar.")
+
+    st.divider()
 
     @st.cache_data(ttl=600, show_spinner="Syncing database tables…")
     def load_data():
