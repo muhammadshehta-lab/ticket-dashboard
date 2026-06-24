@@ -816,7 +816,7 @@ if st.session_state.page == "settings":
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, sc_g):
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
     try:
         from pptx import Presentation
         from pptx.util import Inches, Pt
@@ -843,7 +843,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         table_shape.columns[2].width = Inches(2.5)
         table_shape.columns[3].width = Inches(2.0)
         metrics = [
-            ("Total Requests", f"{total_val:,}"),
+            ("Tickets Count", f"{total_val:,}"),
             ("Total Actions", f"{actions_val:,}"),
             ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"),
             ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
@@ -877,7 +877,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         tf = slide_types.placeholders[1].text_frame
         for rt_name, rt_count in list(req_counts_dict.items())[:8]:
             p_rt = tf.add_paragraph()
-            p_rt.text = f"• {rt_name}: {rt_count:,} Tickets ({req_pct_dict.get(rt_name, 0)}%)"
+            p_rt.text = f"• {rt_name}: {rt_count:,} Requests ({req_pct_dict.get(rt_name, 0)}%)"
             p_rt.font.size = Pt(20)
 
         # --- SLIDE 4: Team Scorecard ---
@@ -897,7 +897,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             table_team.columns[5].width = Inches(1.5) # Quality
             
             for c_idx, col_name in enumerate(cols_to_show):
-                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %')
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Requests Count')
                 table_team.cell(0, c_idx).fill.solid()
                 table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
                 if table_team.cell(0, c_idx).text_frame.paragraphs:
@@ -993,18 +993,18 @@ with tabs[0]:
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     # ── الصف الأول ──
-    r1c1.markdown(kpi_colored("Total Requests",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
-    # ── الصف الثاني (الترتيب الجديد المطلوب) ──
-    r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral card-small", chg_tat, inverse=True),       unsafe_allow_html=True)
-    r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral card-small", chg_stores, neutral=True),  unsafe_allow_html=True)
-    r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
-    r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral card-small", neutral=True), unsafe_allow_html=True)
-    r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral card-small", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    # ── الصف الثاني ──
+    r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts, req_pct = pd.Series(dtype=int), pd.Series(dtype=float)
@@ -1067,13 +1067,13 @@ with tabs[0]:
 <script>
 const SB_PAYLOADS = {sb_payloads_json}; const BAR_DATA = {bar_data_json};
 let selectedRt = "All Types"; let selectedBarIdx = null;
-const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
+const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Requests: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
 const barLayout = {{ margin: {{ l: 8, r: 8, t: 10, b: 10 }}, bargap: 0.3, xaxis: {{ visible: false }}, yaxis: {{ autorange: "reversed", tickfont: {{ size: 12, color: "#334155", weight: "bold" }}, fixedrange: true, automargin: true }}, plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 function buildTrace(rt) {{
   const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
   if (!d || d.labels.length === 0) return null;
-  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
+  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Requests: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
 }}
 const sbLayout = {{ margin: {{ t: 10, b: 10, l: 10, r: 10 }}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{ name: rt, data: [buildTrace(rt)] }})).filter(f => f.data[0] !== null);
@@ -1101,7 +1101,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
     st.divider()
 
     if not df_raw.empty:
-        st.markdown("### ⏳ Ticket flow rate over daily hours")
+        st.markdown("### ⏳ Request flow rate over daily hours")
         df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         if esc and not nesc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == True]
         elif nesc and not esc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == False]
@@ -1119,7 +1119,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#10b981", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
         fig_r.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_r.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
+        fig_r.update_yaxes(title_text="Volume (Requests)", secondary_y=False); fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
         st.plotly_chart(fig_r, use_container_width=True)
 
         st.divider()
@@ -1129,12 +1129,12 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
         fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["ST"], name="TAT (Avg Service)", mode="lines+markers", line=dict(color="#f59e0b", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
         fig_st.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_st.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_st.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True)
+        fig_st.update_yaxes(title_text="Volume (Requests)", secondary_y=False); fig_st.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True)
         st.plotly_chart(fig_st, use_container_width=True)
 
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
-        st.markdown("""<div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem; color: #475569;"><strong>Agent Workload Indicator (Tickets per Agent):</strong><br><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#eab308; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span><span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span></div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem; color: #475569;"><strong>Agent Workload Indicator (Requests per Agent):</strong><br><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#eab308; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span><span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span></div>""", unsafe_allow_html=True)
         
         df_workload = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         if esc and not nesc: df_workload = df_workload[df_workload["Is Email"] == True]
@@ -1174,10 +1174,10 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         daily_vol["Color"] = np.select([daily_vol["Tickets per Agent"] > 70, daily_vol["Tickets per Agent"] > 63, daily_vol["Tickets per Agent"] > 60, daily_vol["Tickets per Agent"] > 55], ["#991b1b", "#ef4444", "#f97316", "#eab308"], default="#3b82f6") 
         
         fig_d = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_d.add_trace(go.Bar(x=daily_vol["Date Label"], y=daily_vol["Total_Tickets"], text=daily_vol["Total_Tickets"], textposition='auto', marker_color=daily_vol["Color"], name="Total Tickets", showlegend=False, hovertemplate="<b>%{x}</b><br>Tickets: %{y}<extra></extra>"), secondary_y=False)
-        fig_d.add_trace(go.Scatter(x=daily_vol["Date Label"], y=daily_vol["Tickets per Agent"], name="Tickets per Agent (Workload)", mode="lines+markers+text", text=daily_vol["Tickets per Agent"], textposition="top center", line=dict(color="#475569", width=3, shape="spline"), marker=dict(size=8, color="#1e293b"), hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>", customdata=daily_vol["Active_Agents"]), secondary_y=True)
+        fig_d.add_trace(go.Bar(x=daily_vol["Date Label"], y=daily_vol["Total_Tickets"], text=daily_vol["Total_Tickets"], textposition='auto', marker_color=daily_vol["Color"], name="Total Requests", showlegend=False, hovertemplate="<b>%{x}</b><br>Requests: %{y}<extra></extra>"), secondary_y=False)
+        fig_d.add_trace(go.Scatter(x=daily_vol["Date Label"], y=daily_vol["Tickets per Agent"], name="Requests per Agent (Workload)", mode="lines+markers+text", text=daily_vol["Tickets per Agent"], textposition="top center", line=dict(color="#475569", width=3, shape="spline"), marker=dict(size=8, color="#1e293b"), hovertemplate="<b>%{x}</b><br>Requests/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>", customdata=daily_vol["Active_Agents"]), secondary_y=True)
         fig_d.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=480, xaxis_title="", hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_d.update_yaxes(title_text="Total Tickets Count", secondary_y=False); fig_d.update_yaxes(title_text="Workload Ratio (Tickets/Agent)", secondary_y=True)
+        fig_d.update_yaxes(title_text="Total Requests Count", secondary_y=False); fig_d.update_yaxes(title_text="Workload Ratio (Requests/Agent)", secondary_y=True)
         st.plotly_chart(fig_d, use_container_width=True)
 
         st.divider()
@@ -1187,9 +1187,9 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         elif nesc and not esc: df_hic_strict = df_hic_strict[df_hic_strict["Is Email"] == False]
         if not df_hic_strict.empty:
             hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index().sort_values(by="Volume", ascending=False) 
-            fig_hic = px.bar(hic_counts, x="HIC", y="Volume", text="Volume", color_discrete_sequence=["#2563eb"], labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"})
-            fig_hic.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Tickets Resolved: %{y:,}<extra></extra>")
-            fig_hic.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=500, xaxis_title="", yaxis_title="Total Handled Volume (Tickets)", xaxis_tickangle=-45, legend_title_text="Insurance Provider")
+            fig_hic = px.bar(hic_counts, x="HIC", y="Volume", text="Volume", color_discrete_sequence=["#2563eb"], labels={"Volume": "Requests Count", "HIC": "Insurance Provider"})
+            fig_hic.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Requests Resolved: %{y:,}<extra></extra>")
+            fig_hic.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=500, xaxis_title="", yaxis_title="Total Handled Volume (Requests)", xaxis_tickangle=-45, legend_title_text="Insurance Provider")
             st.plotly_chart(fig_hic, use_container_width=True)
         else: st.info("No insurance (HIC) records available for this period.")
 
@@ -1197,26 +1197,15 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [
-                {"Metric": "Total Requests", "Value": total}, 
-                {"Metric": "Total Actions", "Value": status_actions_sum}, 
-                {"Metric": "Closed Completed", "Value": ok}, 
-                {"Metric": "Closed with Issue", "Value": issue}, 
-                {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, 
-                {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, 
-                {"Metric": "Stores Served", "Value": stores_count}, 
-                {"Metric": "JHAH Requests", "Value": global_jhah}, 
-                {"Metric": "Support Requests", "Value": global_support},
-                {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}
-            ]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
-                base_metrics.append({"Metric": "--- AVG TICKETS PER WEEKDAY ---", "Value": ""})
+                base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
-                for d in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']: base_metrics.append({"Metric": f"Avg Tickets ({d})", "Value": avg_per_weekday.get(d, 0)})
+                for d in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']: base_metrics.append({"Metric": f"Avg Requests ({d})", "Value": avg_per_weekday.get(d, 0)})
                 base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
                 has_tat = "Request Take (min)" in dfm.columns
                 rt_tat = dfm.groupby("Request Type")["Request Take (min)"].mean() if has_tat else pd.Series(dtype=float)
-                for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Tickets ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
+                for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Requests ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
             st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
         with c_exp2:
             df_sc_g = df[df["Assigned By"].astype(str).str.strip().str.lower().isin([x.lower() for x in OFFICIAL_EXPERTS])].copy()
@@ -1394,7 +1383,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         chg_kpi_total = calc_change(total_kpi, prev_kpi_total); chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct; chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct; chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day); chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val); chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(kpi_colored("Total Requests",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
+        k1.markdown(kpi_colored("Tickets Count",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
         k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
         k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
         k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
