@@ -616,6 +616,107 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
     df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
     expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
 
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.enum.text import PP_ALIGN
+        from pptx.dml.color import RGBColor
+        from io import BytesIO
+
+        prs = Presentation()
+
+        # --- SLIDE 1: Title Slide ---
+        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
+        title = slide_title.shapes.title
+        subtitle = slide_title.placeholders[1]
+        title.text = "In-Store Requests: Executive Report"
+        subtitle.text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team"
+
+        # --- SLIDE 2: KPIs ---
+        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_kpi.shapes.title.text = "Operational Insights & KPIs"
+        
+        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3)).table
+        table_shape.columns[0].width = Inches(2.5)
+        table_shape.columns[1].width = Inches(2.0)
+        table_shape.columns[2].width = Inches(2.5)
+        table_shape.columns[3].width = Inches(2.0)
+        metrics = [
+            ("Tickets Count", f"{total_val:,}"),
+            ("Total Actions", f"{actions_val:,}"),
+            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"),
+            ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
+            ("AFR (Avg Response)", afr_str),
+            ("TAT (Avg Service)", tat_str),
+            ("Stores Served", f"{stores_val:,}"),
+            ("JHAH Requests", f"{jhah_val:,}"),
+            ("Support Requests", f"{support_val:,}"),
+            ("Avg Requests / Day", f"{avg_per_day_val:.1f}")
+        ]
+        for i in range(4):
+            table_shape.cell(0, i).text = "Metric" if i % 2 == 0 else "Value"
+            table_shape.cell(0, i).fill.solid()
+            table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            for paragraph in table_shape.cell(0, i).text_frame.paragraphs:
+                paragraph.font.color.rgb = RGBColor(255, 255, 255)
+                paragraph.font.bold = True
+                paragraph.alignment = PP_ALIGN.CENTER
+        r, c = 1, 0
+        for m_name, m_val in metrics:
+            table_shape.cell(r, c).text = m_name
+            table_shape.cell(r, c+1).text = str(m_val)
+            for paragraph in table_shape.cell(r, c+1).text_frame.paragraphs:
+                paragraph.font.bold = True
+            c += 2
+            if c >= 4: c, r = 0, r + 1
+
+        # --- SLIDE 3: Top Categories ---
+        slide_types = prs.slides.add_slide(prs.slide_layouts[1])
+        slide_types.shapes.title.text = "Top Request Types Breakdown"
+        tf = slide_types.placeholders[1].text_frame
+        for rt_name, rt_count in list(req_counts_dict.items())[:8]:
+            p_rt = tf.add_paragraph()
+            p_rt.text = f"• {rt_name}: {rt_count:,} Requests ({req_pct_dict.get(rt_name, 0)}%)"
+            p_rt.font.size = Pt(20)
+
+        # --- SLIDE 4: Team Scorecard ---
+        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_team.shapes.title.text = "Team Performance Scorecard"
+        if not sc_g.empty:
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            rows = len(sc_g) + 1
+            cols = len(cols_to_show)
+            table_team = slide_team.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9), Inches(0.4 * rows)).table
+            
+            table_team.columns[0].width = Inches(0.8) # Rank
+            table_team.columns[1].width = Inches(2.2) # Expert
+            table_team.columns[2].width = Inches(1.5) # Tickets
+            table_team.columns[3].width = Inches(1.5) # Cases/Day
+            table_team.columns[4].width = Inches(1.5) # Target
+            table_team.columns[5].width = Inches(1.5) # Quality
+            
+            for c_idx, col_name in enumerate(cols_to_show):
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets')
+                table_team.cell(0, c_idx).fill.solid()
+                table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+                if table_team.cell(0, c_idx).text_frame.paragraphs:
+                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
+            
+            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
+                for c_idx, col_name in enumerate(cols_to_show):
+                    table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
+                    if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
+                        table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
+
+        ppt_stream = BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
+        return ppt_stream, None
+    except ImportError:
+        return None, "المكتبة الخاصة بالباوربوينت غير متوفرة. يرجى إضافة 'python-pptx' إلى ملف requirements.txt"
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS PANEL (INCLUDES PROFILE EDIT FORM)
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -782,7 +883,7 @@ if st.session_state.page == "settings":
                         _save_store(); st.success("✅ User settings updated."); st.rerun()
                     if deleted:
                         if uname == "admin": st.error("❌ Cannot delete the primary admin account!")
-                        elif uname == me(): st.error("❌ Youবেদন delete your own account while logged in!")
+                        elif uname == me(): st.error("❌ You cannot delete your own account while logged in!")
                         else: users().pop(uname); _save_store(); st.success(f"🗑️ Account for {uname} has been successfully revoked and deleted."); time.sleep(1); st.rerun()
                             
         with atab4:
@@ -818,107 +919,6 @@ if st.session_state.page == "settings":
                     users()[me()]["password_hash"] = _hash(new_p1); _save_store(); update_sheet_password(me(), new_p1); st.success("✅ Password updated."); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
-
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
-    try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt
-        from pptx.enum.text import PP_ALIGN
-        from pptx.dml.color import RGBColor
-        from io import BytesIO
-
-        prs = Presentation()
-
-        # --- SLIDE 1: Title Slide ---
-        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
-        title = slide_title.shapes.title
-        subtitle = slide_title.placeholders[1]
-        title.text = "In-Store Requests: Executive Report"
-        subtitle.text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team"
-
-        # --- SLIDE 2: KPIs ---
-        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_kpi.shapes.title.text = "Operational Insights & KPIs"
-        
-        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3)).table
-        table_shape.columns[0].width = Inches(2.5)
-        table_shape.columns[1].width = Inches(2.0)
-        table_shape.columns[2].width = Inches(2.5)
-        table_shape.columns[3].width = Inches(2.0)
-        metrics = [
-            ("Tickets Count", f"{total_val:,}"),
-            ("Total Actions", f"{actions_val:,}"),
-            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"),
-            ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
-            ("AFR (Avg Response)", afr_str),
-            ("TAT (Avg Service)", tat_str),
-            ("Stores Served", f"{stores_val:,}"),
-            ("JHAH Requests", f"{jhah_val:,}"),
-            ("Support Requests", f"{support_val:,}"),
-            ("Avg Requests / Day", f"{avg_per_day_val:.1f}")
-        ]
-        for i in range(4):
-            table_shape.cell(0, i).text = "Metric" if i % 2 == 0 else "Value"
-            table_shape.cell(0, i).fill.solid()
-            table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
-            for paragraph in table_shape.cell(0, i).text_frame.paragraphs:
-                paragraph.font.color.rgb = RGBColor(255, 255, 255)
-                paragraph.font.bold = True
-                paragraph.alignment = PP_ALIGN.CENTER
-        r, c = 1, 0
-        for m_name, m_val in metrics:
-            table_shape.cell(r, c).text = m_name
-            table_shape.cell(r, c+1).text = str(m_val)
-            for paragraph in table_shape.cell(r, c+1).text_frame.paragraphs:
-                paragraph.font.bold = True
-            c += 2
-            if c >= 4: c, r = 0, r + 1
-
-        # --- SLIDE 3: Top Categories ---
-        slide_types = prs.slides.add_slide(prs.slide_layouts[1])
-        slide_types.shapes.title.text = "Top Request Types Breakdown"
-        tf = slide_types.placeholders[1].text_frame
-        for rt_name, rt_count in list(req_counts_dict.items())[:8]:
-            p_rt = tf.add_paragraph()
-            p_rt.text = f"• {rt_name}: {rt_count:,} Requests ({req_pct_dict.get(rt_name, 0)}%)"
-            p_rt.font.size = Pt(20)
-
-        # --- SLIDE 4: Team Scorecard ---
-        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_team.shapes.title.text = "Team Performance Scorecard"
-        if not sc_g.empty:
-            cols_to_show = ["Rank", "Expert", "Tickets Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
-            rows = len(sc_g) + 1
-            cols = len(cols_to_show)
-            table_team = slide_team.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9), Inches(0.4 * rows)).table
-            
-            table_team.columns[0].width = Inches(0.8) # Rank
-            table_team.columns[1].width = Inches(2.2) # Expert
-            table_team.columns[2].width = Inches(1.5) # Tickets
-            table_team.columns[3].width = Inches(1.5) # Cases/Day
-            table_team.columns[4].width = Inches(1.5) # Target
-            table_team.columns[5].width = Inches(1.5) # Quality
-            
-            for c_idx, col_name in enumerate(cols_to_show):
-                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Requests Count')
-                table_team.cell(0, c_idx).fill.solid()
-                table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-                if table_team.cell(0, c_idx).text_frame.paragraphs:
-                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
-            
-            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
-                for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
-                    if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
-                        table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
-
-        ppt_stream = BytesIO()
-        prs.save(ppt_stream)
-        ppt_stream.seek(0)
-        return ppt_stream, None
-    except ImportError:
-        return None, "المكتبة الخاصة بالباوربوينت غير متوفرة. يرجى إضافة 'python-pptx' إلى ملف requirements.txt"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
@@ -1002,7 +1002,7 @@ with tabs[0]:
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
-    # ── الصف الثاني ──
+    # ── الصف الثاني (الترتيب الجديد المطلوب) ──
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
@@ -1246,7 +1246,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             else:
                 sc_g.insert(1, "Rank", [])
                 
-            # ربط كل المعاملات بالدالة السليمة 
+            # إرسال 17 متغيراً بالضبط للدالة كما تم تعريفها
             ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
             
             if ppt_file_data:
@@ -1617,7 +1617,7 @@ if is_admin():
 # ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
 if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
     with tabs[-1]:
-        st.markdown("### 🧑‍🤝‍ Approvals Team Profiles")
+        st.markdown("### 🧑‍🤝‍🧑 Approvals Team Profiles")
         st.info("💡 تعرف على زملائك في الفريق، تاريخ انضمامهم، وخبراتهم!")
         
         team_members = [u for uid, u in users().items() if u["role"] in ["expert", "admin", "supervisor"]]
