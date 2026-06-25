@@ -616,9 +616,6 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
     df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
     expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
 
-# ══════════════════════════════════════════════════════════════════════════════════
-#  PPTX GENERATOR FUNCTION
-# ══════════════════════════════════════════════════════════════════════════════════
 def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
     try:
         from pptx import Presentation
@@ -709,7 +706,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             
             for r_idx, row in sc_g.reset_index(drop=True).iterrows():
                 for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
+                    table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
                     if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
                         table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
 
@@ -1236,32 +1233,32 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             total_cases_g = pd.to_numeric(sc_g["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["Support Requests"], errors='coerce').fillna(0)
             sc_g["Cases/Day"] = (total_cases_g / pd.to_numeric(sc_g["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
             
-            if global_target > 0: 
-                sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
-            else: 
-                mean_c = sc_g["Cases/Day"].mean()
-                if mean_c > 0:
-                    sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / mean_c) * 100).round(1).astype(str) + "%"
-                else:
-                    sc_g["% Achievement from Target"] = "0.0%"
+            # --- New extremely safe logic for Achievement ---
+            mean_cases_g = float(sc_g["Cases/Day"].mean()) if not sc_g["Cases/Day"].empty else 0.0
+            if pd.isna(mean_cases_g): mean_cases_g = 0.0
+            
+            def get_ach_g(val):
+                try: v = float(val)
+                except: return "0.0%"
+                if global_target > 0: return f"{(v / global_target * 100):.1f}%"
+                if mean_cases_g > 0: return f"{(v / mean_cases_g * 100):.1f}%"
+                return "0.0%"
+                
+            sc_g["% Achievement from Target"] = sc_g["Cases/Day"].apply(get_ach_g)
             
             sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
             
-            if not sc_g.empty:
-                sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
-                sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
-                sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
-                sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
-                sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
-            else:
-                sc_g["Rank"] = ""
-                
-            # ترتيب الأعمدة وتجهيزها للباوربوينت
-            if "Rank" in sc_g.columns:
-                cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
-                sc_g = sc_g[cols_order]
+            sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
+            sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+            sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
+            sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
             
-            # إرسال البيانات لدالة الباوربوينت بشكل سليم
+            # ترتيب الأعمدة وتجهيزها للباوربوينت
+            cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
+            sc_g = sc_g[cols_order]
+            
+            # إرسال البيانات لدالة الباوربوينت بشكل سليم 100%
             ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
             
             if ppt_file_data:
@@ -1363,8 +1360,18 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
         sc["Cases/Day"] = (total_cases / pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
             
-        if global_target > 0: sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
-        else: sc["% Achievement from Target"] = ((sc["Cases/Day"] / sc["Cases/Day"].mean() * 100).round(1).astype(str) + "%" if sc["Cases/Day"].mean() > 0 else "0.0%")
+        # --- New safe Achievement calculation for UI table ---
+        mean_cases_val = float(sc["Cases/Day"].mean()) if not sc["Cases/Day"].empty else 0.0
+        if pd.isna(mean_cases_val): mean_cases_val = 0.0
+        
+        def get_ach(val):
+            try: v = float(val)
+            except: return "0.0%"
+            if global_target > 0: return f"{(v / global_target * 100):.1f}%"
+            if mean_cases_val > 0: return f"{(v / mean_cases_val * 100):.1f}%"
+            return "0.0%"
+            
+        sc["% Achievement from Target"] = sc["Cases/Day"].apply(get_ach)
             
         sc["Service Quality"] = sc["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
         
@@ -1383,13 +1390,15 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
             sc["_sort_cases"] = sc["Cases/Day"].astype(float)
-            
             sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
             sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
             sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
         else:
             sc["Rank"] = ""
+            
+        cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
+        sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         
