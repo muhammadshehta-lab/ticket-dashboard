@@ -616,6 +616,9 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
     df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
     expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
 
+# ══════════════════════════════════════════════════════════════════════════════════
+#  PPTX GENERATOR FUNCTION
+# ══════════════════════════════════════════════════════════════════════════════════
 def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
     try:
         from pptx import Presentation
@@ -706,7 +709,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             
             for r_idx, row in sc_g.reset_index(drop=True).iterrows():
                 for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
+                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
                     if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
                         table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
 
@@ -1244,17 +1247,21 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             
             sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
             
-            sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
-            sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
-            sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
-            sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
-            sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
-            
+            if not sc_g.empty:
+                sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+                sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
+                sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+                sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
+                sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
+            else:
+                sc_g["Rank"] = ""
+                
             # ترتيب الأعمدة وتجهيزها للباوربوينت
-            cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
-            sc_g = sc_g[cols_order]
+            if "Rank" in sc_g.columns:
+                cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
+                sc_g = sc_g[cols_order]
             
-            # إرسال البيانات لدالة الباوربوينت بشكل سليم 100%
+            # إرسال البيانات لدالة الباوربوينت بشكل سليم
             ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
             
             if ppt_file_data:
@@ -1372,20 +1379,17 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
 
         # ── SMART RANKING SYSTEM (Incentive -> Quality -> Cases/Day) ──
-        # طريقة سريعة ومحمية 100% لتجنب أي أخطاء من مكتبة Pandas
         if not sc.empty:
             sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
             sc["_sort_cases"] = sc["Cases/Day"].astype(float)
+            
             sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
             sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
             sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
         else:
             sc["Rank"] = ""
-            
-        cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
-        sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         
@@ -1418,8 +1422,12 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
         sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True)
         
-        rank_df = sc.copy(); rank_df["_sort_val"] = pd.to_numeric(rank_df["Rank"], errors="coerce").fillna(999)
-        top_exps = rank_df.nsmallest(3, "_sort_val")["Expert"].tolist()
+        if "Rank" in sc.columns:
+            rank_df = sc.copy(); rank_df["_sort_val"] = pd.to_numeric(rank_df["Rank"], errors="coerce").fillna(999)
+            top_exps = rank_df.nsmallest(3, "_sort_val")["Expert"].tolist()
+        else:
+            top_exps = []
+            
         gold_exp, silver_exp, bronze_exp = top_exps[0] if len(top_exps) > 0 else None, top_exps[1] if len(top_exps) > 1 else None, top_exps[2] if len(top_exps) > 2 else None
 
         display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
@@ -1445,7 +1453,9 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 styles[idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;' if inc != "3,100 EGP" else '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
             return styles
 
-        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        if "Rank" in display_df.columns:
+            display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        
         styled_df = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
         
         try: 
