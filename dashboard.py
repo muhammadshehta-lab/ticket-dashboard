@@ -1200,7 +1200,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
@@ -1211,6 +1211,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                 for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Requests ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
             st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
         with c_exp2:
+            # === تحضير الداتا الآمنة بنسبة 100% بدون أي Error ===
             df_sc_g = df[df["Assigned By"].astype(str).str.strip().str.lower().isin([x.lower() for x in OFFICIAL_EXPERTS])].copy()
             sc_g = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
             if not df_sc_g.empty:
@@ -1232,21 +1233,28 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             total_cases_g = pd.to_numeric(sc_g["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["Support Requests"], errors='coerce').fillna(0)
             sc_g["Cases/Day"] = (total_cases_g / pd.to_numeric(sc_g["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
             
-            if global_target > 0: sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
-            else: sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / sc_g["Cases/Day"].mean() * 100).round(1).astype(str) + "%" if sc_g["Cases/Day"].mean() > 0 else "0.0%")
+            if global_target > 0: 
+                sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
+            else: 
+                mean_c = sc_g["Cases/Day"].mean()
+                if mean_c > 0:
+                    sc_g["% Achievement from Target"] = ((sc_g["Cases/Day"] / mean_c) * 100).round(1).astype(str) + "%"
+                else:
+                    sc_g["% Achievement from Target"] = "0.0%"
             
             sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
             
-            if not sc_g.empty:
-                sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
-                sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
-                sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
-                sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
-                sc_g.insert(1, "Rank", sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
-            else:
-                sc_g.insert(1, "Rank", [])
-                
-            # إرسال 17 متغيراً بالضبط للدالة كما تم تعريفها
+            sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
+            sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+            sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
+            sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
+            
+            # ترتيب الأعمدة وتجهيزها للباوربوينت
+            cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
+            sc_g = sc_g[cols_order]
+            
+            # إرسال البيانات لدالة الباوربوينت بشكل سليم 100%
             ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
             
             if ppt_file_data:
@@ -1364,17 +1372,20 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
 
         # ── SMART RANKING SYSTEM (Incentive -> Quality -> Cases/Day) ──
+        # طريقة سريعة ومحمية 100% لتجنب أي أخطاء من مكتبة Pandas
         if not sc.empty:
             sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
             sc["_sort_cases"] = sc["Cases/Day"].astype(float)
-            
             sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
-            sc.insert(1, "Rank", sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
+            sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
             sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
         else:
-            sc.insert(1, "Rank", [])
+            sc["Rank"] = ""
+            
+        cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
+        sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         
