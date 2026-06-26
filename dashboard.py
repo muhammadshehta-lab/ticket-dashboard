@@ -1196,11 +1196,48 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             st.plotly_chart(fig_hic, use_container_width=True)
         else: st.info("No insurance (HIC) records available for this period.")
 
+        st.divider()
+        st.markdown("### 📊 Average Service Time (TAT) by Request Type")
+        if not dfm.empty and "Request Take (min)" in dfm.columns:
+            rt_tat_df = dfm.groupby("Request Type").agg(
+                Avg_TAT_min=("Request Take (min)", "mean"),
+                Volume=("Request ID", "count")
+            ).reset_index().sort_values(by="Avg_TAT_min", ascending=False)
+            
+            rt_tat_df = rt_tat_df[rt_tat_df["Volume"] > 0]
+            
+            if not rt_tat_df.empty:
+                fig_rt_tat = px.bar(
+                    rt_tat_df, 
+                    x="Request Type", 
+                    y="Avg_TAT_min", 
+                    text=rt_tat_df["Avg_TAT_min"].round(1).astype(str) + " min",
+                    color_discrete_sequence=["#f59e0b"],
+                    labels={"Avg_TAT_min": "Avg TAT (Minutes)", "Request Type": "Request Category"}
+                )
+                fig_rt_tat.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Avg TAT: %{y:.1f} min<br>Volume: %{customdata} Requests<extra></extra>", customdata=rt_tat_df["Volume"])
+                fig_rt_tat.update_layout(
+                    template="plotly_white", 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font_color="#1e293b", 
+                    margin=dict(l=10, r=10, t=55, b=10), 
+                    height=500, 
+                    xaxis_title="", 
+                    yaxis_title="Average Service Time (Minutes)", 
+                    xaxis_tickangle=-45
+                )
+                st.plotly_chart(fig_rt_tat, use_container_width=True)
+            else:
+                st.info("No TAT data available for the selected filters.")
+        else:
+            st.info("No TAT data available for the selected filters.")
+
     if is_admin():
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
