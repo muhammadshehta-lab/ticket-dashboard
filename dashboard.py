@@ -1002,7 +1002,7 @@ with tabs[0]:
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
-    # ── الصف الثاني (الترتيب الجديد المطلوب) ──
+    # ── الصف الثاني ──
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
@@ -1070,13 +1070,13 @@ with tabs[0]:
 <script>
 const SB_PAYLOADS = {sb_payloads_json}; const BAR_DATA = {bar_data_json};
 let selectedRt = "All Types"; let selectedBarIdx = null;
-const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Requests: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
+const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
 const barLayout = {{ margin: {{ l: 8, r: 8, t: 10, b: 10 }}, bargap: 0.3, xaxis: {{ visible: false }}, yaxis: {{ autorange: "reversed", tickfont: {{ size: 12, color: "#334155", weight: "bold" }}, fixedrange: true, automargin: true }}, plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 function buildTrace(rt) {{
   const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
   if (!d || d.labels.length === 0) return null;
-  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Requests: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
+  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
 }}
 const sbLayout = {{ margin: {{ t: 10, b: 10, l: 10, r: 10 }}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{ name: rt, data: [buildTrace(rt)] }})).filter(f => f.data[0] !== null);
@@ -1202,20 +1202,25 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             rt_tat_df = dfm.groupby("Request Type").agg(
                 Avg_TAT_min=("Request Take (min)", "mean"),
                 Volume=("Request ID", "count")
-            ).reset_index().sort_values(by="Avg_TAT_min", ascending=False)
+            ).reset_index()
             
+            rt_tat_df["Avg_TAT_hr"] = rt_tat_df["Avg_TAT_min"] / 60.0
+            rt_tat_df = rt_tat_df.sort_values(by="Avg_TAT_hr", ascending=False)
             rt_tat_df = rt_tat_df[rt_tat_df["Volume"] > 0]
             
             if not rt_tat_df.empty:
+                color_palette = ["#1e40af", "#3b82f6", "#0ea5e9", "#0284c7", "#0d9488", "#14b8a6", "#475569", "#64748b", "#8b5cf6", "#a855f7"]
+                
                 fig_rt_tat = px.bar(
                     rt_tat_df, 
                     x="Request Type", 
-                    y="Avg_TAT_min", 
-                    text=rt_tat_df["Avg_TAT_min"].round(1).astype(str) + " min",
-                    color_discrete_sequence=["#f59e0b"],
-                    labels={"Avg_TAT_min": "Avg TAT (Minutes)", "Request Type": "Request Category"}
+                    y="Avg_TAT_hr", 
+                    text=rt_tat_df["Avg_TAT_hr"].round(1).astype(str) + " hrs",
+                    color="Request Type", 
+                    color_discrete_sequence=color_palette,
+                    labels={"Avg_TAT_hr": "Avg TAT (Hours)", "Request Type": "Request Category"}
                 )
-                fig_rt_tat.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Avg TAT: %{y:.1f} min<br>Volume: %{customdata} Requests<extra></extra>", customdata=rt_tat_df["Volume"])
+                fig_rt_tat.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Avg TAT: %{y:.1f} hrs<br>Volume: %{customdata} Requests<extra></extra>", customdata=rt_tat_df["Volume"])
                 fig_rt_tat.update_layout(
                     template="plotly_white", 
                     paper_bgcolor="rgba(0,0,0,0)", 
@@ -1224,8 +1229,9 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                     margin=dict(l=10, r=10, t=55, b=10), 
                     height=500, 
                     xaxis_title="", 
-                    yaxis_title="Average Service Time (Minutes)", 
-                    xaxis_tickangle=-45
+                    yaxis_title="Average Service Time (Hours)", 
+                    xaxis_tickangle=-45,
+                    showlegend=False
                 )
                 st.plotly_chart(fig_rt_tat, use_container_width=True)
             else:
@@ -1397,18 +1403,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
         sc["Cases/Day"] = (total_cases / pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
             
-        # --- New safe Achievement calculation for UI table ---
-        mean_cases_val = float(sc["Cases/Day"].mean()) if not sc["Cases/Day"].empty else 0.0
-        if pd.isna(mean_cases_val): mean_cases_val = 0.0
-        
-        def get_ach(val):
-            try: v = float(val)
-            except: return "0.0%"
-            if global_target > 0: return f"{(v / global_target * 100):.1f}%"
-            if mean_cases_val > 0: return f"{(v / mean_cases_val * 100):.1f}%"
-            return "0.0%"
-            
-        sc["% Achievement from Target"] = sc["Cases/Day"].apply(get_ach)
+        if global_target > 0: sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
+        else: sc["% Achievement from Target"] = ((sc["Cases/Day"] / sc["Cases/Day"].mean() * 100).round(1).astype(str) + "%" if sc["Cases/Day"].mean() > 0 else "0.0%")
             
         sc["Service Quality"] = sc["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
         
@@ -1427,15 +1423,13 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
             sc["_sort_cases"] = sc["Cases/Day"].astype(float)
+            
             sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
-            sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
+            sc.insert(1, "Rank", sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
             sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
         else:
-            sc["Rank"] = ""
-            
-        cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
-        sc = sc[cols_sc]
+            sc.insert(1, "Rank", [])
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         
