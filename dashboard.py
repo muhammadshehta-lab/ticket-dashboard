@@ -68,7 +68,7 @@ def parse_drive_link(raw_url):
     return raw_url
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  GOOGLE SHEETS SYNC HELPERS (PASSWORD & PROFILE)
+#  GOOGLE SHEETS SYNC HELPERS (THE ULTIMATE MASTER DATABASE)
 # ══════════════════════════════════════════════════════════════════════════════════
 def update_sheet_password(uname: str, new_pass: str):
     try:
@@ -79,7 +79,7 @@ def update_sheet_password(uname: str, new_pass: str):
             ws = client.open("AlDawaa Tickets Data").worksheet("Users")
             cell = ws.find(str(uname), in_column=1)
             if cell: ws.update_cell(cell.row, 2, str(new_pass))
-    except Exception as e: pass
+    except Exception: pass
 
 def update_sheet_profile(uname: str, profile_data: dict):
     try:
@@ -96,7 +96,43 @@ def update_sheet_profile(uname: str, profile_data: dict):
                 ws.update_cell(row, 9, str(profile_data.get('join_cc', '')))
                 ws.update_cell(row, 10, str(profile_data.get('join_team', '')))
                 ws.update_cell(row, 11, str(profile_data.get('bio', '')))
-    except Exception as e: pass
+    except Exception: pass
+
+def add_user_to_sheet(uname, pwd, role, dname, aname):
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            ws = client.open("AlDawaa Tickets Data").worksheet("Users")
+            ws.append_row([str(uname), str(pwd), str(role), str(dname), str(aname or ""), "", "", "", "", "", ""])
+    except Exception: pass
+
+def delete_user_from_sheet(uname: str):
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            ws = client.open("AlDawaa Tickets Data").worksheet("Users")
+            cell = ws.find(str(uname), in_column=1)
+            if cell: ws.delete_rows(cell.row)
+    except Exception: pass
+
+def update_user_role_dname_aname_sheet(uname, role, dname, aname):
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            ws = client.open("AlDawaa Tickets Data").worksheet("Users")
+            cell = ws.find(str(uname), in_column=1)
+            if cell:
+                row = cell.row
+                if dname: ws.update_cell(row, 4, str(dname))
+                ws.update_cell(row, 5, str(aname or ""))
+                ws.update_cell(row, 3, str(role))
+    except Exception: pass
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  NOTIFICATIONS (WHATSAPP & EMAIL)
@@ -109,7 +145,7 @@ def notify_admin_whatsapp(logged_in_user):
             msg = f"🚨 *System Login Alert*%0AUser: *{logged_in_user}*%0ATime: {time.strftime('%Y-%m-%d %H:%M:%S')}"
             url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={msg}&apikey={api_key}"
             requests.get(url, timeout=3)
-    except Exception as e: pass
+    except Exception: pass
 
 def send_approval_email(to_email, name, uid):
     try:
@@ -129,7 +165,7 @@ def send_approval_email(to_email, name, uid):
                 server.send_message(msg)
             return True
         return False
-    except Exception as e: return False
+    except Exception: return False
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  CSS  — PROFESSIONAL CORPORATE THEME & PROFILE CARDS
@@ -481,17 +517,50 @@ with st.sidebar:
     # ── SYNC USERS PROFILES FROM SHEET TO DASHBOARD ──
     if not df_users.empty:
         updated = False
+        synced_unames = set()
         for _, row in df_users.iterrows():
             if len(row) > 0 and pd.notna(row.iloc[0]):
                 uname = str(row.iloc[0]).strip().lower()
-                if uname in st.session_state.store["users"]:
-                    u_dict = st.session_state.store["users"][uname]
-                    if len(row) > 6 and str(row.iloc[6]).strip(): u_dict["photo"] = parse_drive_link(str(row.iloc[6]))
-                    if len(row) > 7 and str(row.iloc[7]).strip(): u_dict["grad_year"] = str(row.iloc[7]).strip()
-                    if len(row) > 8 and str(row.iloc[8]).strip(): u_dict["join_cc"] = str(row.iloc[8]).strip()
-                    if len(row) > 9 and str(row.iloc[9]).strip(): u_dict["join_team"] = str(row.iloc[9]).strip()
-                    if len(row) > 10 and str(row.iloc[10]).strip(): u_dict["bio"] = str(row.iloc[10]).strip()
-                    updated = True
+                if not uname: continue
+                synced_unames.add(uname)
+                
+                pwd = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else uname
+                role = str(row.iloc[2]).strip().lower() if len(row) > 2 and pd.notna(row.iloc[2]) else "expert"
+                dname = str(row.iloc[3]).strip() if len(row) > 3 and pd.notna(row.iloc[3]) else uname
+                aname = str(row.iloc[4]).strip() if len(row) > 4 and pd.notna(row.iloc[4]) else None
+                if aname in ['none', 'nan', '']: aname = None
+                
+                if uname not in st.session_state.store["users"]:
+                    st.session_state.store["users"][uname] = {}
+                    
+                u_dict = st.session_state.store["users"][uname]
+                
+                if u_dict.get("display_name") != dname: u_dict["display_name"] = dname; updated = True
+                if u_dict.get("password_hash") != _hash(pwd): u_dict["password_hash"] = _hash(pwd); updated = True
+                if u_dict.get("role") != role: u_dict["role"] = role; updated = True
+                if u_dict.get("agent_name") != aname: u_dict["agent_name"] = aname; updated = True
+                
+                ph = parse_drive_link(str(row.iloc[6])) if len(row) > 6 and str(row.iloc[6]).strip() else ""
+                if u_dict.get("photo", "") != ph: u_dict["photo"] = ph; updated = True
+                
+                gy = str(row.iloc[7]).strip() if len(row) > 7 else ""
+                if u_dict.get("grad_year", "") != gy: u_dict["grad_year"] = gy; updated = True
+                
+                jcc = str(row.iloc[8]).strip() if len(row) > 8 else ""
+                if u_dict.get("join_cc", "") != jcc: u_dict["join_cc"] = jcc; updated = True
+                
+                jt = str(row.iloc[9]).strip() if len(row) > 9 else ""
+                if u_dict.get("join_team", "") != jt: u_dict["join_team"] = jt; updated = True
+                
+                bio = str(row.iloc[10]).strip() if len(row) > 10 else ""
+                if u_dict.get("bio", "") != bio: u_dict["bio"] = bio; updated = True
+
+        current_users = list(st.session_state.store["users"].keys())
+        for cu in current_users:
+            if cu != "admin" and cu not in synced_unames:
+                del st.session_state.store["users"][cu]
+                updated = True
+                
         if updated: _save_store()
 
     if df_raw.empty: st.warning("Empty source records."); st.stop()
@@ -706,7 +775,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             
             for r_idx, row in sc_g.reset_index(drop=True).iterrows():
                 for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row[col_name])
+                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
                     if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
                         table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
 
@@ -813,12 +882,7 @@ if st.session_state.page == "settings":
                             if st.button("✅ Approve", key=f"apr_na_{req['id']}", use_container_width=True):
                                 users()[p_data['id']] = {"display_name": p_data['name'], "password_hash": _hash(p_data['id']), "role": "expert", "agent_name": p_data['name']}
                                 req["status"] = "approved"; _save_store()
-                                try:
-                                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-                                    if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
-                                        creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
-                                        gspread.authorize(creds).open("AlDawaa Tickets Data").worksheet("Users").append_row([p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'], p_data.get('email', '')])
-                                except Exception as e: pass 
+                                add_user_to_sheet(p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'])
                                 user_email = p_data.get('email', '').strip()
                                 if user_email:
                                     if send_approval_email(user_email, p_data['name'], p_data['id']): st.success("✅ Account approved & Email sent successfully!")
@@ -857,7 +921,9 @@ if st.session_state.page == "settings":
                         elif len(add_pass1) < 6: st.error("❌ Password must be at least 6 characters.")
                         else:
                             users()[add_uname] = {"display_name": add_dname.strip(), "password_hash": _hash(add_pass1), "role": add_role, "agent_name": add_aname.strip() if add_aname.strip() else None}
-                            _save_store(); st.success(f"✅ Account for {add_dname.strip()} created successfully!"); time.sleep(1); st.rerun()
+                            _save_store()
+                            add_user_to_sheet(add_uname, add_pass1, add_role, add_dname.strip(), add_aname.strip())
+                            st.success(f"✅ Account for {add_dname.strip()} created successfully!"); time.sleep(1); st.rerun()
             st.divider()
             for uname, urow in list(users().items()):
                 role_icon = "🔑" if urow["role"] == "admin" else ("👁️" if urow["role"] == "supervisor" else "👤")
@@ -880,11 +946,17 @@ if st.session_state.page == "settings":
                         if eu_p1 and eu_p1 == eu_p2: 
                             users()[uname]["password_hash"] = _hash(eu_p1)
                             update_sheet_password(uname, eu_p1)
-                        _save_store(); st.success("✅ User settings updated."); st.rerun()
+                        _save_store()
+                        update_user_role_dname_aname_sheet(uname, eu_role, eu_dn.strip(), eu_an.strip())
+                        st.success("✅ User settings updated."); st.rerun()
                     if deleted:
                         if uname == "admin": st.error("❌ Cannot delete the primary admin account!")
                         elif uname == me(): st.error("❌ You cannot delete your own account while logged in!")
-                        else: users().pop(uname); _save_store(); st.success(f"🗑️ Account for {uname} has been successfully revoked and deleted."); time.sleep(1); st.rerun()
+                        else: 
+                            users().pop(uname)
+                            _save_store()
+                            delete_user_from_sheet(uname)
+                            st.success(f"🗑️ Account for {uname} has been successfully revoked and deleted."); time.sleep(1); st.rerun()
                             
         with atab4:
             st.markdown("### 📜 System Access Logs")
@@ -1070,13 +1142,13 @@ with tabs[0]:
 <script>
 const SB_PAYLOADS = {sb_payloads_json}; const BAR_DATA = {bar_data_json};
 let selectedRt = "All Types"; let selectedBarIdx = null;
-const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
+const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Requests: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
 const barLayout = {{ margin: {{ l: 8, r: 8, t: 10, b: 10 }}, bargap: 0.3, xaxis: {{ visible: false }}, yaxis: {{ autorange: "reversed", tickfont: {{ size: 12, color: "#334155", weight: "bold" }}, fixedrange: true, automargin: true }}, plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 function buildTrace(rt) {{
   const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
   if (!d || d.labels.length === 0) return null;
-  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
+  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Requests: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
 }}
 const sbLayout = {{ margin: {{ t: 10, b: 10, l: 10, r: 10 }}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{ name: rt, data: [buildTrace(rt)] }})).filter(f => f.data[0] !== null);
@@ -1403,8 +1475,18 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
         sc["Cases/Day"] = (total_cases / pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
             
-        if global_target > 0: sc["% Achievement from Target"] = ((sc["Cases/Day"] / global_target) * 100).round(1).astype(str) + "%"
-        else: sc["% Achievement from Target"] = ((sc["Cases/Day"] / sc["Cases/Day"].mean() * 100).round(1).astype(str) + "%" if sc["Cases/Day"].mean() > 0 else "0.0%")
+        # --- New safe Achievement calculation for UI table ---
+        mean_cases_val = float(sc["Cases/Day"].mean()) if not sc["Cases/Day"].empty else 0.0
+        if pd.isna(mean_cases_val): mean_cases_val = 0.0
+        
+        def get_ach(val):
+            try: v = float(val)
+            except: return "0.0%"
+            if global_target > 0: return f"{(v / global_target * 100):.1f}%"
+            if mean_cases_val > 0: return f"{(v / mean_cases_val * 100):.1f}%"
+            return "0.0%"
+            
+        sc["% Achievement from Target"] = sc["Cases/Day"].apply(get_ach)
             
         sc["Service Quality"] = sc["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
         
@@ -1423,13 +1505,15 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
             sc["_sort_cases"] = sc["Cases/Day"].astype(float)
-            
             sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
-            sc.insert(1, "Rank", sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
+            sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
             sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
         else:
-            sc.insert(1, "Rank", [])
+            sc["Rank"] = ""
+            
+        cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
+        sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         
