@@ -155,79 +155,68 @@ def send_approval_email(to_email, name, uid):
         return False
     except Exception: return False
 
-if "store" not in st.session_state: st.session_state.store = _load_store()
-if "db_users" not in st.session_state: st.session_state.db_users = {}
-
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SENSITIVE GATE & AUTH SYSTEM
+#  CSS  — PROFESSIONAL CORPORATE THEME
 # ══════════════════════════════════════════════════════════════════════════════════
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated, st.session_state.username, st.session_state.role = False, None, None
-    if "usr" in st.query_params and "tok" in st.query_params and "exp" in st.query_params:
-        q_usr, q_tok, q_exp = st.query_params["usr"], st.query_params["tok"], st.query_params["exp"]
-        try: is_expired = int(time.time()) > int(q_exp)
-        except ValueError: is_expired = True
-        if not is_expired and generate_signed_token(q_usr, q_exp) == q_tok:
-            st.session_state.username = q_usr
-            st.session_state.authenticated = True
+st.markdown("""
+<style>
+.stApp { background: #f1f5f9 !important; color: #0f172a !important; }
+.stApp, p, span, label, input, select { font-size: 1.05rem !important; font-weight: 600 !important; }
+h1 { font-size: 2.5rem !important; font-weight: 900 !important; color: #0f172a !important; }
+h2 { font-size: 2.15rem !important; font-weight: 900 !important; color: #1e293b !important; margin-top: 1rem !important; }
+h3 { font-size: 1.65rem !important; font-weight: 800 !important; color: #1e293b !important; }
+h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 !important; }
 
-if "page" not in st.session_state: st.session_state.page = "dashboard"
-if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
-if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
+[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid #e2e8f0 !important; }
+[data-testid="stSidebar"] * { color: #1e293b !important; font-weight: 700 !important; }
+[data-testid="stTabs"] [data-baseweb="tab"] { background: transparent; color: #64748b !important; font-weight: 700 !important; font-size: 1.15rem !important; padding-bottom: 8px !important; }
+[data-testid="stTabs"] [aria-selected="true"] { color: #2563eb !important; border-bottom: 3px solid #2563eb !important; }
 
-def requests_list() -> list: return st.session_state.store["requests"]
-def overrides()     -> dict: return st.session_state.store["overrides"]
-def me()            -> str:  return st.session_state.username
-def is_admin()      -> bool: return st.session_state.role == "admin"
-def cur_user()      -> dict: return st.session_state.db_users.get(me(), {})
-def agent_name_of(uname: str) -> str: return st.session_state.db_users.get(uname, {}).get("agent_name")
-def my_agent_name() -> str: return agent_name_of(me())
-def pending_count() -> int: return sum(1 for r in requests_list() if r["status"] == "pending")
+.stTextInput input, .stNumberInput input, .stSelectbox select, .stDateInput input { background: #ffffff !important; border: 1px solid #cbd5e1 !important; color: #0f172a !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 1.05rem !important; }
+.stTextInput input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important; }
+.stButton > button { background: #2563eb !important; border: 1px solid #1d4ed8 !important; color: #ffffff !important; border-radius: 8px !important; font-weight: 700 !important; font-size: 1.1rem !important; padding: 0.5rem 1.5rem !important; box-shadow: 0 2px 4px rgba(37,99,235,0.2); }
+.stButton > button:hover { background: #1d4ed8 !important; border-color: #1e40af !important; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(37,99,235,0.3); }
 
-def push_request(uname, rtype, new_value):
-    requests_list().append({"id": int(time.time() * 1000), "requester": uname, "type": rtype, "new_value": new_value, "status": "pending", "ts": time.strftime("%Y-%m-%d %H:%M")})
-    _save_store()
+.kpi-container { position: relative; border-radius: 12px; padding: 1.4rem 1.1rem; text-align: center; min-height: 124px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03); border-width: 1px !important; border-style: solid !important; background: #ffffff; }
+.kpi-container:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.05); }
+.kpi-label { font-size: .8rem !important; letter-spacing: .05em; text-transform: uppercase; margin-bottom: .5rem; font-weight: 700 !important; color: #64748b !important; }
+.kpi-value { font-size: 1.9rem !important; font-weight: 800 !important; letter-spacing: -.02em; color: #0f172a !important; }
+.card-primary { border-color: #cbd5e1 !important; border-top: 4px solid #2563eb !important; }
+.card-neutral { border-color: #e2e8f0 !important; border-top: 4px solid #94a3b8 !important; }
+.card-success { background: #f0fdf4 !important; border-color: #bbf7d0 !important; border-top: 4px solid #16a34a !important; }
+.card-danger { background: #fef2f2 !important; border-color: #fecaca !important; border-top: 4px solid #dc2626 !important; }
+.card-small { min-height: 90px !important; padding: 0.8rem 0.5rem !important; border-radius: 10px !important; }
+.card-small .kpi-label { font-size: 0.72rem !important; margin-bottom: 0.2rem !important; }
+.card-small .kpi-value { font-size: 1.45rem !important; }
 
-def reject_request(req_id):
-    for r in requests_list():
-        if r["id"] == req_id and r["status"] == "pending": r["status"] = "rejected"; _save_store(); return True
-    return False
+.login-wrap { max-width:460px; margin:5rem auto 0; padding:2.8rem 2.5rem 1.5rem; background: #ffffff; border:1px solid #cbd5e1; border-radius:16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+.login-title { font-size: 2rem !important; font-weight: 800 !important; text-align: center; margin-bottom: .4rem; color: #1e293b; }
+.login-sub { font-size: 1rem !important; text-align: center; color: #64748b; margin-bottom: 2rem; font-weight: 600 !important; }
 
-def calc_change(curr, prev):
-    if pd.isna(curr): curr = 0
-    if pd.isna(prev): prev = 0
-    if prev == 0: return 100.0 if curr > 0 else 0.0
-    return ((curr - prev) / prev) * 100.0
+.badge { display:inline-block; font-size:.72rem !important; border-radius:6px; padding:3px 11px; margin-left:6px; font-weight:800; letter-spacing:.05em; }
+.badge-admin  { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+.badge-expert { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.badge-supervisor { background:#fefce8; border:1px solid #fef08a; color:#a16207; }
+.req-pending  { background:#fffbeb; border:1px solid #fde047; border-radius:8px; padding:.85rem 1.4rem; margin-bottom:.8rem; color:#92400e; font-size:.95rem; font-weight:600; }
+.section-card { background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.6rem 2rem; margin-bottom:1.4rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 
-def time_to_minutes(s):
-    try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
-    except: return 0
+.scorecard-container { width: 100%; overflow-x: auto; margin-top: 1rem; margin-bottom: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+.scorecard-container table { width: 100%; border-collapse: collapse; background-color: #ffffff; font-family: inherit; table-layout: auto; }
+.scorecard-container th { background-color: #f8fafc !important; color: #334155 !important; font-weight: 800 !important; font-size: 0.9rem !important; text-align: center !important; padding: 10px 8px !important; border-bottom: 2px solid #cbd5e1; }
+.scorecard-container td { text-align: center !important; padding: 10px 8px !important; font-size: 0.95rem !important; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
+.scorecard-container td:first-child { font-weight: 700 !important; text-align: left !important; padding-left: 12px !important; }
 
-def fmt_m(v):
-    if pd.isna(v) or v <= 0: return "00:00:00"
-    t = int(round(v * 60))
-    return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
+.profile-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 1.5rem; transition: transform 0.2s; }
+.profile-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-color: #94a3b8; }
+.profile-img { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; object-position: top; border: 3px solid #2563eb; margin: 0 auto 1rem; padding: 2px; }
+.profile-name { font-size: 1.3rem !important; font-weight: 800 !important; color: #0f172a; margin-bottom: 2px; }
+.profile-role { font-size: 0.8rem !important; color: #64748b; margin-bottom: 1.2rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700 !important; }
+.profile-detail { font-size: 0.95rem !important; color: #334155; margin-bottom: 0.4rem; text-align: left; display:flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding-bottom:4px; font-weight: 600 !important;}
+.profile-bio { font-size: 0.95rem !important; font-style: italic; color: #475569; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-weight: 500 !important;}
+</style>
+""", unsafe_allow_html=True)
 
-def assign_time_tier(m):
-    if m <= 15: return "Under 15 Mins"
-    if m <= 30: return "15-30 Mins"
-    if m <= 45: return "30-45 Mins"
-    if m <= 60: return "45-60 Mins"
-    return "Over 1 Hour"
-
-DAYS_AR = {"Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"}
-OFFICIAL_EXPERTS = ["Ahmed El-Kholy", "Ahmed Kadry", "Amr El-Sayed", "Eslam Ramadan", "Mohamed Abdelmageed", "Mohamed Khalifa", "Yahia Ali Shafei"]
-EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
-AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
-EXCLUSION_LIST = ['off', 'اوف', 'أوف', 'راحة', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي', 'nan', 'none', '']
-
-def normalize_expert_name(name):
-    if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
-    n_lower = str(name).lower().strip()
-    if n_lower in AGENT_ALIASES: return AGENT_ALIASES[n_lower]
-    id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
-    if name in id_to_name: return id_to_name[name]
-    return str(name).strip()
+THEME = dict(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10))
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
@@ -297,6 +286,20 @@ def load_data():
             if c not in df.columns: df[c] = np.nan
         if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
         
+        def time_to_minutes(s):
+            try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
+            except: return 0
+            
+        def normalize_expert_name(name):
+            AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
+            EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
+            if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
+            n_lower = str(name).lower().strip()
+            if n_lower in AGENT_ALIASES: return AGENT_ALIASES[n_lower]
+            id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
+            if name in id_to_name: return id_to_name[name]
+            return str(name).strip()
+
         df["Status"]       = df["Status"].fillna("Unknown")
         df["Status Count"] = pd.to_numeric(df["Status Count"], errors="coerce").fillna(0).astype(int)
         df["Request Type"] = df["Request Type"].fillna("Unknown Type")
@@ -315,14 +318,92 @@ def load_data():
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
 
 df_raw, df_roster, df_out_req, df_quality, fetched_users = load_data()
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  SESSION STATE & SECURE PERSISTENT LOGIN
+# ══════════════════════════════════════════════════════════════════════════════════
+SESSION_DURATION_HOURS = 12  
+
+def generate_signed_token(uname: str, exp_timestamp: str) -> str:
+    return hashlib.sha256(f"{uname}|{exp_timestamp}|SECRET_ALDAWAA_TOKEN".encode()).hexdigest()
+
+if "store" not in st.session_state: st.session_state.store = _load_store()
 st.session_state.db_users = fetched_users
 
-# تحديث الصلاحية في هدم شاشات المخترقين
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated, st.session_state.username, st.session_state.role = False, None, None
+    if "usr" in st.query_params and "tok" in st.query_params and "exp" in st.query_params:
+        q_usr, q_tok, q_exp = st.query_params["usr"], st.query_params["tok"], st.query_params["exp"]
+        try: is_expired = int(time.time()) > int(q_exp)
+        except ValueError: is_expired = True
+        if not is_expired and generate_signed_token(q_usr, q_exp) == q_tok:
+            st.session_state.username = q_usr
+            st.session_state.authenticated = True
+
+if "page" not in st.session_state: st.session_state.page = "dashboard"
+if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
+if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
+
+# تحديث الصلاحية في حالة الحذف أو التعديل من الشيت
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
 elif st.session_state.authenticated:
     st.session_state.role = st.session_state.db_users[st.session_state.username]["role"]
+
+def requests_list() -> list: return st.session_state.store["requests"]
+def overrides()     -> dict: return st.session_state.store["overrides"]
+def me()            -> str:  return st.session_state.username
+def is_admin()      -> bool: return st.session_state.role == "admin"
+def cur_user()      -> dict: return st.session_state.db_users.get(me(), {})
+def agent_name_of(uname: str) -> str: return st.session_state.db_users.get(uname, {}).get("agent_name")
+def my_agent_name() -> str: return agent_name_of(me())
+def pending_count() -> int: return sum(1 for r in requests_list() if r["status"] == "pending")
+
+def push_request(uname, rtype, new_value):
+    requests_list().append({"id": int(time.time() * 1000), "requester": uname, "type": rtype, "new_value": new_value, "status": "pending", "ts": time.strftime("%Y-%m-%d %H:%M")})
+    _save_store()
+
+def reject_request(req_id):
+    for r in requests_list():
+        if r["id"] == req_id and r["status"] == "pending": r["status"] = "rejected"; _save_store(); return True
+    return False
+
+def calc_change(curr, prev):
+    if pd.isna(curr): curr = 0
+    if pd.isna(prev): prev = 0
+    if prev == 0: return 100.0 if curr > 0 else 0.0
+    return ((curr - prev) / prev) * 100.0
+
+def time_to_minutes(s):
+    try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
+    except: return 0
+
+def fmt_m(v):
+    if pd.isna(v) or v <= 0: return "00:00:00"
+    t = int(round(v * 60))
+    return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
+
+def assign_time_tier(m):
+    if m <= 15: return "Under 15 Mins"
+    if m <= 30: return "15-30 Mins"
+    if m <= 45: return "30-45 Mins"
+    if m <= 60: return "45-60 Mins"
+    return "Over 1 Hour"
+
+DAYS_AR = {"Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"}
+OFFICIAL_EXPERTS = ["Ahmed El-Kholy", "Ahmed Kadry", "Amr El-Sayed", "Eslam Ramadan", "Mohamed Abdelmageed", "Mohamed Khalifa", "Yahia Ali Shafei"]
+EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
+AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
+EXCLUSION_LIST = ['off', 'اوف', 'أوف', 'راحة', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي', 'nan', 'none', '']
+
+def normalize_expert_name(name):
+    if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
+    n_lower = str(name).lower().strip()
+    if n_lower in AGENT_ALIASES: return AGENT_ALIASES[n_lower]
+    id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
+    if name in id_to_name: return id_to_name[name]
+    return str(name).strip()
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE WITH TOTAL BAN SINK
@@ -345,6 +426,11 @@ if not st.session_state.authenticated:
                     st.session_state.username = uname
                     st.session_state.role = st.session_state.db_users[uname]["role"]
                     st.session_state.authenticated = True
+                    
+                    exp_time = str(int(time.time()) + (SESSION_DURATION_HOURS * 3600))
+                    st.query_params["usr"] = uname
+                    st.query_params["exp"] = exp_time
+                    st.query_params["tok"] = generate_signed_token(uname, exp_time)
                     
                     if inp_u.strip() == inp_p.strip() and st.session_state.role != "admin":
                         st.session_state.force_onboard = True
@@ -401,6 +487,20 @@ with st.sidebar:
     st.markdown(f"👤 **{cur_user().get('display_name', '–')}** <span class='badge {badge_cls}'>{badge_txt}</span>", unsafe_allow_html=True)
     
     st.divider()
+    presentation_mode = st.checkbox("🖥️ Presentation Mode", value=False)
+    if presentation_mode:
+        st.markdown("""
+            <style>
+            [data-testid="stToolbar"] {visibility: hidden !important;}
+            header {background: transparent !important;}
+            footer {display: none !important;}
+            .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 100% !important;}
+            </style>
+        """, unsafe_allow_html=True)
+        st.success("✨ Presentation Mode Active!\n\n1. Press **F11** on your keyboard for Full Screen.\n2. Click the **< Arrow** above to collapse this sidebar (You can bring it back anytime by clicking the **> Arrow**).\n3. Uncheck this box to exit.")
+
+    st.divider()
+    
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
     if not raw_dates.empty:
         max_uploaded_date = raw_dates.max()
@@ -439,6 +539,40 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DATA FILTERING INFRASTRUCTURE
 # ══════════════════════════════════════════════════════════════════════════════════
+def get_roster_stats(roster_df, start_date, end_date):
+    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
+    if roster_df.empty: return counts
+    valid_cols = []
+    for col in roster_df.columns:
+        col_str = str(col).strip()
+        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
+        if match:
+            try:
+                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                if start_date <= col_date <= end_date: valid_cols.append(col)
+            except: pass
+
+    df_r_str = roster_df.astype(str)
+    for exp in OFFICIAL_EXPERTS:
+        exp_id = EXPERT_ID_MAP.get(exp, "")
+        if exp_id:
+            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+            exp_rows = df_r_str[mask]
+            if not exp_rows.empty and valid_cols:
+                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
+                if safe_cols:
+                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
+                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
+                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
+                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
+                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
+    return counts
+
+curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
+prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
+
 out_req_dict, prev_out_req_dict = {}, {}
 global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
 
@@ -453,12 +587,138 @@ if not df_out_req.empty and "Date" in df_out_req.columns:
             if not exp_name or exp_name == "nan": continue 
             j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
             out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+            
+    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
+    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    prev_global_support = len(df_out_prev) - prev_global_jhah
+    if "Expert Name" in df_out_prev.columns:
+        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
 
 df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
 df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
 
 if sel_hic: df = df[df["HIC"].isin(sel_hic)]; df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
 if sel_req_type: df = df[df["Request Type"].isin(sel_req_type)]; df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+
+expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
+if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
+    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
+    df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
+    def get_deduction(sev):
+        s = str(sev).strip().lower()
+        if s == 'critical': return 5.0
+        elif s == 'major': return 2.0
+        elif s == 'medium': return 1.0
+        elif s == 'minor': return 0.5
+        return 0.0
+    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
+    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
+    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
+    expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  PPTX GENERATOR FUNCTION
+# ══════════════════════════════════════════════════════════════════════════════════
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, sc_g):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.enum.text import PP_ALIGN
+        from pptx.dml.color import RGBColor
+        from io import BytesIO
+
+        prs = Presentation()
+
+        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
+        title = slide_title.shapes.title
+        subtitle = slide_title.placeholders[1]
+        title.text = "In-Store Requests: Executive Report"
+        subtitle.text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team"
+
+        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_kpi.shapes.title.text = "Operational Insights & KPIs"
+        
+        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3)).table
+        table_shape.columns[0].width = Inches(2.5)
+        table_shape.columns[1].width = Inches(2.0)
+        table_shape.columns[2].width = Inches(2.5)
+        table_shape.columns[3].width = Inches(2.0)
+        metrics = [
+            ("Tickets Count", f"{total_val:,}"),
+            ("Total Actions", f"{actions_val:,}"),
+            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"),
+            ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
+            ("AFR (Avg Response)", afr_str),
+            ("TAT (Avg Service)", tat_str),
+            ("Stores Served", f"{stores_val:,}"),
+            ("JHAH Requests", f"{jhah_val:,}"),
+            ("Support Requests", f"{support_val:,}"),
+            ("Avg Requests / Day", f"{avg_per_day_val:.1f}")
+        ]
+        for i in range(4):
+            table_shape.cell(0, i).text = "Metric" if i % 2 == 0 else "Value"
+            table_shape.cell(0, i).fill.solid()
+            table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            for paragraph in table_shape.cell(0, i).text_frame.paragraphs:
+                paragraph.font.color.rgb = RGBColor(255, 255, 255)
+                paragraph.font.bold = True
+                paragraph.alignment = PP_ALIGN.CENTER
+        r, c = 1, 0
+        for m_name, m_val in metrics:
+            table_shape.cell(r, c).text = m_name
+            table_shape.cell(r, c+1).text = str(m_val)
+            for paragraph in table_shape.cell(r, c+1).text_frame.paragraphs:
+                paragraph.font.bold = True
+            c += 2
+            if c >= 4: c, r = 0, r + 1
+
+        slide_types = prs.slides.add_slide(prs.slide_layouts[1])
+        slide_types.shapes.title.text = "Top Request Types Breakdown"
+        tf = slide_types.placeholders[1].text_frame
+        for rt_name, rt_count in list(req_counts_dict.items())[:8]:
+            p_rt = tf.add_paragraph()
+            p_rt.text = f"• {rt_name}: {rt_count:,} Requests ({req_pct_dict.get(rt_name, 0)}%)"
+            p_rt.font.size = Pt(20)
+
+        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_team.shapes.title.text = "Team Performance Scorecard"
+        if not sc_g.empty:
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            rows = len(sc_g) + 1
+            cols = len(cols_to_show)
+            table_team = slide_team.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9), Inches(0.4 * rows)).table
+            
+            table_team.columns[0].width = Inches(0.8) # Rank
+            table_team.columns[1].width = Inches(2.2) # Expert
+            table_team.columns[2].width = Inches(1.5) # Tickets
+            table_team.columns[3].width = Inches(1.5) # Cases/Day
+            table_team.columns[4].width = Inches(1.5) # Target
+            table_team.columns[5].width = Inches(1.5) # Quality
+            
+            for c_idx, col_name in enumerate(cols_to_show):
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets')
+                table_team.cell(0, c_idx).fill.solid()
+                table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+                if table_team.cell(0, c_idx).text_frame.paragraphs:
+                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                    table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
+            
+            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
+                for c_idx, col_name in enumerate(cols_to_show):
+                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
+                    if table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs:
+                        table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(12)
+
+        ppt_stream = BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
+        return ppt_stream, None
+    except ImportError:
+        return None, "المكتبة الخاصة بالباوربوينت غير متوفرة. يرجى إضافة 'python-pptx' إلى ملف requirements.txt"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS / ADMIN CONTROL SINK
@@ -524,7 +784,6 @@ if st.session_state.page == "settings":
                             delete_user_from_sheet(uname)
                             st.success("Deleted completely from Google Sheets!"); time.sleep(1); st.cache_data.clear(); st.rerun()
     else:
-        # Expert settings
         with st.form("exp_profile_edit"):
             st.subheader("📋 تعديل ملفي الشخصي")
             p_grad = st.text_input("🎓 Graduation Year", value=urow.get("grad_year", ""))
@@ -536,7 +795,788 @@ if st.session_state.page == "settings":
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  TAB 1 & TAB 2 MAIN ARCHITECTURE (CONTINUES REST OF MAIN CODES SAFELY)
+#  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
-# [ملحوظة: باقي أكواد بناء لوحة العمل، الشارتات، المتوسطات، وتاب الـ Leaderboard تعمل الآن بكفاءة وبشكل كامل بناءً على التحديث الحصين المربوط مباشرة بشيت جوجل]
-st.info(f"📡 النظام مستقر حالياً ويعمل مباشرة من قاعدة بيانات شيت جوجل الحية. تم مزامنة {len(st.session_state.db_users)} حساب نشط بأمان.")
+period_ovs = overrides().get(PERIOD_KEY, {})
+global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
+
+caption_text = f"Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})" if d_from == d_to else f"Search Period: {d_from} to {d_to}"
+st.markdown("## 💊 In-Store Requests Matrix")
+st.caption(caption_text)
+
+tabs_list = ["📈 Operational Insights"]
+if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles"])
+elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles"])
+
+tabs = st.tabs(tabs_list)
+
+# ── TAB 1 — Operational Insights ────────────────────────────
+with tabs[0]:
+    c1, c2 = st.columns(2)
+    with c1: esc  = st.checkbox("🔥 Escalated Cases Only",    value=False, key="t1_esc")
+    with c2: nesc = st.checkbox("🟢 Non-Escalated Cases Only", value=False, key="t1_nesc")
+
+    dfm = df.copy(); dfm_prev = df_prev_all.copy()
+    if esc and not nesc: dfm = dfm[dfm["Is Email"] == True]; dfm_prev = dfm_prev[dfm_prev["Is Email"] == True]
+    elif nesc and not esc: dfm = dfm[dfm["Is Email"] == False]; dfm_prev = dfm_prev[dfm_prev["Is Email"] == False]
+
+    global_period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+    global_adj_total = sum(int(v) for v in global_period_adjs.values()) if not esc and not nesc else 0
+
+    global_prev_adjs = overrides().get(f"{prev_d_from}_{prev_d_to}", {}).get("agent_adjustments", {})
+    global_prev_adj_total = sum(int(v) for v in global_prev_adjs.values()) if not esc and not nesc else 0
+
+    total = len(dfm) + global_adj_total
+    ss    = dfm["Status"].astype(str).str.strip()
+    ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0] + global_adj_total
+    issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
+    
+    curr_afr_val = dfm["Response Take (min)"].mean() if "Response Take (min)" in dfm.columns and not dfm.empty else 0
+    curr_tat_val = dfm["Request Take (min)"].mean() if "Request Take (min)" in dfm.columns and not dfm.empty else 0
+    
+    ok_pct = (ok / total * 100) if total > 0 else 0
+    issue_pct = (issue / total * 100) if total > 0 else 0
+    stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
+    status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
+    curr_avg_per_day = (total + global_jhah + global_support) / delta_days if delta_days > 0 else 0
+    
+    prev_total = len(dfm_prev) + global_prev_adj_total
+    ss_prev    = dfm_prev["Status"].astype(str).str.strip()
+    prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
+    prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+    
+    prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    
+    prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
+    prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
+    prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
+    prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
+    prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / delta_days if delta_days > 0 else 0
+
+    chg_total = calc_change(total, prev_total)
+    chg_stores = calc_change(stores_count, prev_stores_count)
+    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
+    chg_ok = ok_pct - prev_ok_pct  
+    chg_issue = issue_pct - prev_issue_pct 
+    chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
+    chg_afr = calc_change(curr_afr_val, prev_afr_val)
+    chg_tat = calc_change(curr_tat_val, prev_tat_val)
+
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+    
+    r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    
+    r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
+    r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
+    r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
+    r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
+    r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    st.write("")
+
+    req_counts, req_pct = pd.Series(dtype=int), pd.Series(dtype=float)
+    if not dfm.empty:
+        req_counts = dfm['Request Type'].value_counts()
+        req_pct = (req_counts / len(dfm) * 100).round(1)
+        dfm_work = dfm.copy()
+        dfm_work["Response Tier"] = dfm_work["Response Take (min)"].apply(assign_time_tier)
+        dfm_work["Service Tier"]  = dfm_work["Request Take (min)"].apply(assign_time_tier)
+        bar_palette = ["#1e40af", "#3b82f6", "#0ea5e9", "#0284c7", "#0d9488", "#14b8a6", "#475569", "#64748b", "#8b5cf6", "#a855f7"]
+        bar_labels, bar_values, bar_counts = list(req_pct.index), list(req_pct.values), [int(x) for x in req_counts.values]
+        bar_colors  = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
+        SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 15 Mins": "#22c55e", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
+        tier_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+        sb_payloads = {}   
+        
+        for rt in ["All Types"] + bar_labels:
+            if rt == "All Types": sub, use_response = dfm_work.copy(), True
+            else: sub, use_response = dfm_work[dfm_work["Request Type"] == rt].copy(), False
+            if sub.empty: sb_payloads[rt] = {"ids": [], "labels": [], "parents": [], "values": [], "colors": []}; continue
+            ids, lbl, par, val, col = [], [], [], [], []
+            if use_response:
+                rd, sd = sub.groupby("Response Tier").size(), sub.groupby("Service Tier").size()
+                if rd.sum() > 0:
+                    ids.append("Response Time"); lbl.append("Response Time"); par.append(""); val.append(int(rd.sum())); col.append(SB_COLORS["Response Time"])
+                    for tier in tier_order:
+                        if rd.get(tier, 0) > 0: ids.append(f"RT_{tier}"); lbl.append(tier); par.append("Response Time"); val.append(int(rd.get(tier, 0))); col.append(SB_COLORS.get(tier, "#cbd5e1"))
+                if sd.sum() > 0:
+                    ids.append("Service Resolution"); lbl.append("Service Resolution"); par.append(""); val.append(int(sd.sum())); col.append(SB_COLORS["Service Resolution"])
+                    for tier in tier_order:
+                        if sd.get(tier, 0) > 0: ids.append(f"SR_{tier}"); lbl.append(tier); par.append("Service Resolution"); val.append(int(sd.get(tier, 0))); col.append(SB_COLORS.get(tier, "#cbd5e1"))
+            else:
+                sd = sub.groupby("Service Tier").size()
+                if sd.sum() > 0:
+                    ids.append("Service Resolution"); lbl.append("Service Resolution"); par.append(""); val.append(int(sd.sum())); col.append(SB_COLORS["Service Resolution"])
+                    for tier in tier_order:
+                        if sd.get(tier, 0) > 0: ids.append(f"SR_{tier}"); lbl.append(tier); par.append("Service Resolution"); val.append(int(sd.get(tier, 0))); col.append(SB_COLORS.get(tier, "#cbd5e1"))
+            sb_payloads[rt] = {"ids": ids, "labels": lbl, "parents": par, "values": val, "colors": col}
+
+        import json as _json
+        sb_payloads_json, bar_data_json = _json.dumps(sb_payloads), _json.dumps({"labels": bar_labels, "values": bar_values, "counts": bar_counts, "colors": bar_colors})
+        component_height = max(650, len(bar_labels) * 55 + 100)
+
+        html_component = f"""
+<!DOCTYPE html><html><head><meta charset="utf-8"><script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>* {{ box-sizing: border-box; margin: 0; padding: 0; }} body {{ background: transparent; font-family: inherit; }}
+#wrapper {{ display: flex; gap: 20px; width: 100%; height: {component_height}px; align-items: stretch; }}
+.chart-card {{ background: #ffffff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; display: flex; flex-direction: column; }}
+#sunburst-col {{ flex: 5.5; }} #bar-col {{ flex: 4.5; }}
+#sb-title {{ font-size: 1.25rem; font-weight: 800; color: #1e293b; margin-bottom: 6px; min-height: 40px; line-height: 1.3; }}
+#sb-title span {{ color: #2563eb; font-size: 1.05rem; }}
+#bar-title {{ font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; }}
+#bar-hint {{ font-size: 0.85rem; color: #64748b; margin-bottom: 6px; }}
+#sunburst-div, #bar-div {{ flex: 1; min-height: 0; }}
+</style></head><body>
+<div id="wrapper">
+  <div id="sunburst-col" class="chart-card"><div id="sb-title">&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)</div><div id="sunburst-div"></div></div>
+  <div id="bar-col" class="chart-card"><div id="bar-title">&#x1F39B;&#xFE0F; Interactive Request Types</div><div id="bar-hint">&#x1F5B1;&#xFE0F; Click any bar to filter &bull; Click empty space to reset</div><div id="bar-div"></div></div>
+</div>
+<script>
+const SB_PAYLOADS = {sb_payloads_json}; const BAR_DATA = {bar_data_json};
+let selectedRt = "All Types"; let selectedBarIdx = null;
+const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
+const barLayout = {{ margin: {{ l: 8, r: 8, t: 10, b: 10 }}, bargap: 0.3, xaxis: {{ visible: false }}, yaxis: {{ autorange: "reversed", tickfont: {{ size: 12, color: "#334155", weight: "bold" }}, fixedrange: true, automargin: true }}, plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
+Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
+function buildTrace(rt) {{
+  const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
+  if (!d || d.labels.length === 0) return null;
+  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
+}}
+const sbLayout = {{ margin: {{ t: 10, b: 10, l: 10, r: 10 }}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
+const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{ name: rt, data: [buildTrace(rt)] }})).filter(f => f.data[0] !== null);
+Plotly.newPlot("sunburst-div", [buildTrace("All Types")], sbLayout, {{ displayModeBar: false, responsive: true }}).then(() => {{ Plotly.addFrames("sunburst-div", allFrames); }});
+document.getElementById("bar-div").on("plotly_click", function(data) {{
+  const clicked = data.points[0].y; const clickedIdx = data.points[0].pointIndex;
+  if (selectedRt === clicked) {{ selectedRt = "All Types"; selectedBarIdx = null; }} else {{ selectedRt = clicked; selectedBarIdx = clickedIdx; }}
+  Plotly.animate("sunburst-div", [selectedRt], {{ transition: {{ duration: 600, easing: "cubic-in-out" }}, frame: {{ duration: 600, redraw: true }} }});
+  Plotly.restyle("bar-div", {{ "marker.opacity": [BAR_DATA.labels.map((_, i) => selectedRt === "All Types" ? 1 : (i === selectedBarIdx ? 1 : 0.25))] }});
+  document.getElementById("sb-title").innerHTML = selectedRt === "All Types" ? "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)" : "&#x23F1;&#xFE0F; Service Time Breakdown (TAT)<br><span>&#x27A4; " + selectedRt + "</span>";
+}});
+document.getElementById("bar-div").on("plotly_deselect", function() {{
+  if (selectedRt !== "All Types") {{
+    selectedRt = "All Types"; selectedBarIdx = null;
+    Plotly.animate("sunburst-div", [selectedRt], {{ transition: {{ duration: 600, easing: "cubic-in-out" }}, frame: {{ duration: 600, redraw: true }} }});
+    Plotly.restyle("bar-div", {{ "marker.opacity": [BAR_DATA.labels.map(() => 1)] }});
+    document.getElementById("sb-title").innerHTML = "&#x23F1;&#xFE0F; Service Time Breakdown (AFR &amp; TAT)";
+  }}
+}});
+</script></body></html>
+"""
+        import streamlit.components.v1 as components
+        components.html(html_component, height=component_height + 40, scrolling=False)
+
+    st.divider()
+
+    if not df_raw.empty:
+        st.markdown("### ⏳ Ticket flow rate over daily hours")
+        df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        if esc and not nesc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == True]
+        elif nesc and not esc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == False]
+            
+        hrs = df_flow_strict.groupby("Hour").agg(
+            Volume=("Request ID", "count"), 
+            AR=("Response Take (min)" , "mean"),
+            ST=("Request Take (min)", "mean")
+        ).reset_index().set_index("Hour").reindex(range(24)).fillna(0).reset_index()
+        
+        hrs["Hour Label"] = ["12 AM" if h == 0 else ("12 PM" if h == 12 else (f"{h} AM" if h < 12 else f"{h - 12} PM")) for h in hrs["Hour"]]
+        hrs["Avg_Vol"] = hrs["Volume"] / max(1, delta_days)
+        
+        fig_r = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#10b981", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
+        fig_r.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_r.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
+        st.plotly_chart(fig_r, use_container_width=True)
+
+        st.divider()
+
+        st.markdown("### ⏱️ Service Time (TAT) over daily hours")
+        fig_st = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
+        fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["ST"], name="TAT (Avg Service)", mode="lines+markers", line=dict(color="#f59e0b", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
+        fig_st.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_st.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_st.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True)
+        st.plotly_chart(fig_st, use_container_width=True)
+
+        st.divider()
+        st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
+        st.markdown("""<div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem; color: #475569;"><strong>Agent Workload Indicator (Tickets per Agent):</strong><br><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#eab308; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span><span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span></div>""", unsafe_allow_html=True)
+        
+        df_workload = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        if esc and not nesc: df_workload = df_workload[df_workload["Is Email"] == True]
+        elif nesc and not esc: df_workload = df_workload[df_workload["Is Email"] == False]
+        dfm_shift = df_workload.copy(); dfm_shift["Shift Date"] = dfm_shift["Date Only"]
+        daily_vol = dfm_shift.groupby("Shift Date").agg(Total_Tickets=("Request ID", "count")).reset_index()
+        
+        roster_date_map = {}
+        if not df_roster.empty:
+            for col in df_roster.columns:
+                match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', str(col).strip()).strip())
+                if match:
+                    try: roster_date_map[pd.to_datetime(match.group(1), dayfirst=True).date()] = col
+                    except: pass
+        
+        tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
+        def get_scheduled_agents(target_date):
+            if target_date not in roster_date_map or df_roster.empty: return -1 
+            col_name = roster_date_map[target_date]
+            working_count = 0
+            for _, row in df_roster.iterrows():
+                if any(tid in " ".join([str(x).strip().lower() for x in row.values]) for tid in tracked_ids):
+                    cell_val = str(row.get(col_name, "")).strip().lower()
+                    if cell_val and cell_val not in EXCLUSION_LIST: working_count += 1
+            return working_count
+        
+        daily_vol["Scheduled_Agents"] = daily_vol["Shift Date"].apply(get_scheduled_agents)
+        active_df = dfm_shift[dfm_shift["Assigned By"].isin(OFFICIAL_EXPERTS)].groupby("Shift Date").agg(Actual_Agents=("Assigned By", "nunique")).reset_index()
+        daily_vol = pd.merge(daily_vol, active_df, on="Shift Date", how="left")
+        daily_vol["Actual_Agents"] = daily_vol["Actual_Agents"].fillna(0)
+        daily_vol["Active_Agents"] = np.where(daily_vol["Scheduled_Agents"] != -1, daily_vol["Scheduled_Agents"], daily_vol["Actual_Agents"]).clip(1)
+        daily_vol["Tickets per Agent"] = (daily_vol["Total_Tickets"] / daily_vol["Active_Agents"]).round(1)
+        daily_vol["Date DT"] = pd.to_datetime(daily_vol["Shift Date"])
+        daily_vol["Day Name"] = daily_vol["Date DT"].dt.day_name()
+        DAY_COLORS = {"Saturday": "#64748b", "Sunday": "#1e40af", "Monday": "#2563eb", "Tuesday": "#3b82f6", "Wednesday": "#0ea5e9", "Thursday": "#0284c7", "Friday": "#475569"}
+        daily_vol["Date Label"] = daily_vol.apply(lambda r: f"{r['Date DT'].strftime('%b %d')}<br><span style='color:{DAY_COLORS.get(r['Day Name'], '#1e293b')}'><b>({r['Day Name']})</b></span>", axis=1)
+        daily_vol["Color"] = np.select([daily_vol["Tickets per Agent"] > 70, daily_vol["Tickets per Agent"] > 63, daily_vol["Tickets per Agent"] > 60, daily_vol["Tickets per Agent"] > 55], ["#991b1b", "#ef4444", "#f97316", "#eab308"], default="#3b82f6") 
+        
+        fig_d = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_d.add_trace(go.Bar(x=daily_vol["Date Label"], y=daily_vol["Total_Tickets"], text=daily_vol["Total_Tickets"], textposition='auto', marker_color=daily_vol["Color"], name="Total Tickets", showlegend=False, hovertemplate="<b>%{x}</b><br>Tickets: %{y}<extra></extra>"), secondary_y=False)
+        fig_d.add_trace(go.Scatter(x=daily_vol["Date Label"], y=daily_vol["Tickets per Agent"], name="Tickets per Agent (Workload)", mode="lines+markers+text", text=daily_vol["Tickets per Agent"], textposition="top center", line=dict(color="#475569", width=3, shape="spline"), marker=dict(size=8, color="#1e293b"), hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>", customdata=daily_vol["Active_Agents"]), secondary_y=True)
+        fig_d.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=480, xaxis_title="", hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_d.update_yaxes(title_text="Total Tickets Count", secondary_y=False); fig_d.update_yaxes(title_text="Workload Ratio (Tickets/Agent)", secondary_y=True)
+        st.plotly_chart(fig_d, use_container_width=True)
+
+        st.divider()
+        st.markdown("### 🏥 Health Insurance Companies (HIC) Distribution Analysis")
+        df_hic_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        if esc and not nesc: df_hic_strict = df_hic_strict[df_hic_strict["Is Email"] == True]
+        elif nesc and not esc: df_hic_strict = df_hic_strict[df_hic_strict["Is Email"] == False]
+        if not df_hic_strict.empty:
+            hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index().sort_values(by="Volume", ascending=False) 
+            fig_hic = px.bar(hic_counts, x="HIC", y="Volume", text="Volume", color_discrete_sequence=["#2563eb"], labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"})
+            fig_hic.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Tickets Resolved: %{y:,}<extra></extra>")
+            fig_hic.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=500, xaxis_title="", yaxis_title="Total Handled Volume (Tickets)", xaxis_tickangle=-45, legend_title_text="Insurance Provider")
+            st.plotly_chart(fig_hic, use_container_width=True)
+        else: st.info("No insurance (HIC) records available for this period.")
+
+        st.divider()
+        st.markdown("### 📊 Average Service Time (TAT) by Request Type")
+        if not dfm.empty and "Request Take (min)" in dfm.columns:
+            rt_tat_df = dfm.groupby("Request Type").agg(
+                Avg_TAT_min=("Request Take (min)", "mean"),
+                Volume=("Request ID", "count")
+            ).reset_index()
+            
+            rt_tat_df["Avg_TAT_hr"] = rt_tat_df["Avg_TAT_min"] / 60.0
+            rt_tat_df = rt_tat_df.sort_values(by="Avg_TAT_hr", ascending=False)
+            rt_tat_df = rt_tat_df[rt_tat_df["Volume"] > 0]
+            
+            if not rt_tat_df.empty:
+                color_palette = ["#1e40af", "#3b82f6", "#0ea5e9", "#0284c7", "#0d9488", "#14b8a6", "#475569", "#64748b", "#8b5cf6", "#a855f7"]
+                
+                fig_rt_tat = px.bar(
+                    rt_tat_df, 
+                    x="Request Type", 
+                    y="Avg_TAT_hr", 
+                    text=rt_tat_df["Avg_TAT_hr"].round(1).astype(str) + " hrs",
+                    color="Request Type", 
+                    color_discrete_sequence=color_palette,
+                    labels={"Avg_TAT_hr": "Avg TAT (Hours)", "Request Type": "Request Category"}
+                )
+                fig_rt_tat.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Avg TAT: %{y:.1f} hrs<br>Volume: %{customdata} Requests<extra></extra>", customdata=rt_tat_df["Volume"])
+                fig_rt_tat.update_layout(
+                    template="plotly_white", 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font_color="#1e293b", 
+                    margin=dict(l=10, r=10, t=55, b=10), 
+                    height=500, 
+                    xaxis_title="", 
+                    yaxis_title="Average Service Time (Hours)", 
+                    xaxis_tickangle=-45,
+                    showlegend=False
+                )
+                st.plotly_chart(fig_rt_tat, use_container_width=True)
+            else:
+                st.info("No TAT data available for the selected filters.")
+        else:
+            st.info("No TAT data available for the selected filters.")
+
+    if is_admin():
+        st.divider(); st.markdown("#### 📥 Export Operational Report")
+        c_exp1, c_exp2 = st.columns(2)
+        with c_exp1:
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            if not dfm.empty:
+                base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
+                avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
+                for d in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']: base_metrics.append({"Metric": f"Avg Requests ({d})", "Value": avg_per_weekday.get(d, 0)})
+                base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
+                has_tat = "Request Take (min)" in dfm.columns
+                rt_tat = dfm.groupby("Request Type")["Request Take (min)"].mean() if has_tat else pd.Series(dtype=float)
+                for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Requests ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
+            st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
+        with c_exp2:
+            df_sc_g = df[df["Assigned By"].astype(str).str.strip().str.lower().isin([x.lower() for x in OFFICIAL_EXPERTS])].copy()
+            sc_g = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
+            if not df_sc_g.empty:
+                df_sc_g["Assigned By"] = df_sc_g["Assigned By"].astype(str).str.strip().str.lower().map({x.lower(): x for x in OFFICIAL_EXPERTS})
+                grp_g = df_sc_g.groupby("Assigned By")
+                stats_g = pd.DataFrame(index=grp_g.groups.keys())
+                stats_g["Tickets Count"] = grp_g["Request ID"].count()
+                sc_g = sc_g.merge(stats_g, left_on="Expert", right_index=True, how="left")
+            else:
+                sc_g["Tickets Count"] = 0
+                
+            sc_g["Tickets Count"] = sc_g["Tickets Count"].fillna(0).astype(int)
+            period_adjs_g = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+            sc_g["Tickets Count"] = sc_g.apply(lambda row: row["Tickets Count"] + int(period_adjs_g.get(str(row["Expert"]).strip(), 0)), axis=1)
+            sc_g["Working Days"] = sc_g["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
+            sc_g["JHAH Requests"] = sc_g.apply(lambda row: int(float(out_req_dict.get(str(row["Expert"]).strip().lower(), {}).get("JHAH", 0) or 0)), axis=1)
+            sc_g["Support Requests"] = sc_g.apply(lambda row: int(float(out_req_dict.get(str(row["Expert"]).strip().lower(), {}).get("Support Req", 0) or 0)), axis=1)
+            
+            total_cases_g = pd.to_numeric(sc_g["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc_g["Support Requests"], errors='coerce').fillna(0)
+            sc_g["Cases/Day"] = (total_cases_g / pd.to_numeric(sc_g["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
+            
+            mean_cases_g = float(sc_g["Cases/Day"].mean()) if not sc_g["Cases/Day"].empty else 0.0
+            if pd.isna(mean_cases_g): mean_cases_g = 0.0
+            
+            def get_ach_g(val):
+                try: v = float(val)
+                except: return "0.0%"
+                if global_target > 0: return f"{(v / global_target * 100):.1f}%"
+                if mean_cases_g > 0: return f"{(v / mean_cases_g * 100):.1f}%"
+                return "0.0%"
+                
+            sc_g["% Achievement from Target"] = sc_g["Cases/Day"].apply(get_ach_g)
+            
+            sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
+            
+            sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
+            sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+            sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
+            sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
+            
+            cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
+            sc_g = sc_g[cols_order]
+            
+            ppt_file_data, err_msg = generate_pptx_summary(d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct, fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support, req_counts.to_dict(), req_pct.to_dict(), sc_g)
+            
+            if ppt_file_data:
+                st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data.getvalue(), file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
+            else:
+                st.warning(f"⚠️ {err_msg}")
+
+# ── TAB 2 — Team Performance and KPIs (Admin & Expert) ─────────────────────────────
+if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
+    with tabs[1]:
+        st.markdown("### 👥 Team Performance and KPIs")
+        sel_agents_t2 = st.multiselect("Filter by Expert Name", sorted(df_raw["Assigned By"].dropna().unique()), key="t2_agents")
+        aname = my_agent_name()
+        is_exp = (st.session_state.role == "expert" and aname)
+        
+        target_agent_photo = aname if is_exp else (sel_agents_t2[0] if sel_agents_t2 and len(sel_agents_t2) == 1 else None)
+        if target_agent_photo:
+            p_photo = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+            p_bio, p_role = "", "⭐ EXPERT"
+            for u in users().values():
+                if u.get("agent_name") == target_agent_photo or u.get("display_name") == target_agent_photo:
+                    p_photo = u.get("photo", "") or p_photo
+                    p_bio = u.get("bio", "")
+                    p_role = "👑 ADMIN" if u.get('role') == 'admin' else ("👁️ SUPERVISOR" if u.get('role') == 'supervisor' else "⭐ EXPERT")
+                    break
+            
+            st.markdown(f'''
+            <div style="display: flex; align-items: center; background: #ffffff; padding: 1.2rem; border-radius: 12px; border: 1px solid #cbd5e1; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <img src="{p_photo}" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'" style="width: 85px; height: 85px; border-radius: 50%; object-fit: cover; object-position: top; border: 3px solid #2563eb; padding: 2px; margin-right: 1.5rem;">
+                <div>
+                    <h2 style="margin: 0 !important; padding: 0 !important; font-size: 1.6rem !important; color: #0f172a;">{target_agent_photo}</h2>
+                    <span style="color: #64748b; font-weight: 700; font-size: 0.95rem;">{p_role}</span>
+                    <p style="margin: 0.4rem 0 0 0 !important; color: #475569; font-style: italic; font-size: 0.95rem;">"{p_bio}"</p>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        scope_agents = [aname] if is_exp else (sel_agents_t2 if sel_agents_t2 else OFFICIAL_EXPERTS)
+        period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+        total_kpi_adj = sum(int(period_adjs.get(agent, 0)) for agent in scope_agents)
+
+        prev_period_adjs = overrides().get(f"{prev_d_from}_{prev_d_to}", {}).get("agent_adjustments", {})
+        prev_total_kpi_adj = sum(int(prev_period_adjs.get(agent, 0)) for agent in scope_agents)
+        
+        df_kpi, df_kpi_prev = df.copy(), df_prev_all.copy()
+        if is_exp: df_kpi = df_kpi[df_kpi["Assigned By"] == aname]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"] == aname]
+        elif sel_agents_t2: df_kpi = df_kpi[df_kpi["Assigned By"].isin(sel_agents_t2)]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"].isin(sel_agents_t2)]
+            
+        total_kpi, prev_kpi_total = len(df_kpi) + total_kpi_adj, len(df_kpi_prev) + prev_total_kpi_adj
+        
+        kpi_ss, kpi_ss_prev = df_kpi["Status"].astype(str).str.strip(), df_kpi_prev["Status"].astype(str).str.strip()
+        kpi_ok = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & ~kpi_ss.str.contains("issue", na=False, case=False)].shape[0] + total_kpi_adj
+        prev_kpi_ok = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & ~kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0] + prev_total_kpi_adj
+        kpi_iss = df_kpi[kpi_ss.str.contains("Closed", na=False, case=False) & kpi_ss.str.contains("issue", na=False, case=False)].shape[0]
+        prev_kpi_iss = df_kpi_prev[kpi_ss_prev.str.contains("Closed", na=False, case=False) & kpi_ss_prev.str.contains("issue", na=False, case=False)].shape[0]
+        
+        kpi_curr_afr_val = df_kpi["Response Take (min)"].mean() if "Response Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+        kpi_curr_tat_val = df_kpi["Request Take (min)"].mean() if "Request Take (min)" in df_kpi.columns and not df_kpi.empty else 0
+        prev_kpi_afr_val = df_kpi_prev["Response Take (min)"].mean() if "Response Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+        prev_kpi_tat_val = df_kpi_prev["Request Take (min)"].mean() if "Request Take (min)" in df_kpi_prev.columns and not df_kpi_prev.empty else 0
+        
+        kpi_ok_pct = (kpi_ok / total_kpi * 100) if total_kpi > 0 else 0
+        kpi_iss_pct = (kpi_iss / total_kpi * 100) if total_kpi > 0 else 0
+        prev_kpi_ok_pct = (prev_kpi_ok / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+        prev_kpi_iss_pct = (prev_kpi_iss / prev_kpi_total * 100) if prev_kpi_total > 0 else 0
+
+        df_sc = df[df["Assigned By"].astype(str).str.strip().str.lower().isin([x.lower() for x in OFFICIAL_EXPERTS])].copy()
+        sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
+        if not df_sc.empty:
+            df_sc["Assigned By"] = df_sc["Assigned By"].astype(str).str.strip().str.lower().map({x.lower(): x for x in OFFICIAL_EXPERTS})
+            df_sc["_jhah"] = df_sc["Request Type"].astype(str).str.lower().str.contains("jhah", na=False)
+            df_sc["_c_ok"] = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
+            df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
+            grp = df_sc.groupby("Assigned By")
+            stats = pd.DataFrame(index=grp.groups.keys())
+            stats["Tickets Count"] = grp["Request ID"].count()
+            stats["_Service_Time_val"] = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
+            stats["_AFR_val"] = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
+            stats["_c_ok_sum"], stats["_c_all_sum"] = grp["_c_ok"].sum(), grp["_c_all"].sum()
+            sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
+        else: sc["Tickets Count"], sc["_Service_Time_val"], sc["_AFR_val"], sc["_c_ok_sum"], sc["_c_all_sum"] = 0, 0, 0, 0, 0
+            
+        sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
+        
+        # ── SECRET MANUAL ADJUSTMENTS ──
+        sc["Tickets Count"] = sc.apply(lambda row: row["Tickets Count"] + int(period_adjs.get(str(row["Expert"]).strip(), 0)), axis=1)
+
+        sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
+        sc["Off Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("off", 0))
+        sc["Annual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("ann", 0))
+        sc["Casual Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("cas", 0))
+        sc["Sick Leaves"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("sick", 0))
+        sc["AFR"], sc["Service Time"] = sc["_AFR_val"].fillna(0).apply(fmt_m), sc["_Service_Time_val"].fillna(0).apply(fmt_m)
+        sc["JHAH Requests"] = sc.apply(lambda row: int(float(out_req_dict.get(str(row["Expert"]).strip().lower(), {}).get("JHAH", 0) or 0)), axis=1)
+        sc["Support Requests"] = sc.apply(lambda row: int(float(out_req_dict.get(str(row["Expert"]).strip().lower(), {}).get("Support Req", 0) or 0)), axis=1)
+        
+        sc = sc[(pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0) > 0) | ((pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)) > 0)].copy()
+        
+        total_cases = pd.to_numeric(sc["Tickets Count"], errors='coerce').fillna(0) + pd.to_numeric(sc["JHAH Requests"], errors='coerce').fillna(0) + pd.to_numeric(sc["Support Requests"], errors='coerce').fillna(0)
+        sc["Cases/Day"] = (total_cases / pd.to_numeric(sc["Working Days"], errors='coerce').fillna(0).replace(0, 1)).round(1)
+            
+        mean_cases_val = float(sc["Cases/Day"].mean()) if not sc["Cases/Day"].empty else 0.0
+        if pd.isna(mean_cases_val): mean_cases_val = 0.0
+        
+        def get_ach(val):
+            try: v = float(val)
+            except: return "0.0%"
+            if global_target > 0: return f"{(v / global_target * 100):.1f}%"
+            if mean_cases_val > 0: return f"{(v / mean_cases_val * 100):.1f}%"
+            return "0.0%"
+            
+        sc["% Achievement from Target"] = sc["Cases/Day"].apply(get_ach)
+            
+        sc["Service Quality"] = sc["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
+        
+        def calc_incentive(row):
+            try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
+            except: achiev = 0.0
+            count_inc = 1500 if achiev >= 0.97 else (1350 if achiev >= 0.95 else (1200 if achiev >= 0.90 else (1050 if achiev >= 0.85 else 0)))
+            try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
+            except: qual = 0.0
+            return f"{count_inc + (600 * qual) + 1000:,.0f} EGP"
+            
+        sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
+
+        # ── SMART RANKING SYSTEM ──
+        if not sc.empty:
+            sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
+            sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc["_sort_cases"] = sc["Cases/Day"].astype(float)
+            sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
+            sc.sort_values(by="_rank_score", ascending=False, inplace=True)
+            sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
+            sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
+        else:
+            sc["Rank"] = ""
+            
+        cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
+        sc = sc[cols_sc]
+
+        kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
+        
+        kpi_curr_avg_per_day = (pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()) / pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() if pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() > 0 else 0
+
+        prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
+        prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin([a.lower() for a in scope_agents])] if scope_agents else df_kpi_prev
+        prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
+
+        chg_kpi_total = calc_change(total_kpi, prev_kpi_total); chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct; chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct; chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day); chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val); chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.markdown(kpi_colored("Tickets Count",      f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True),     unsafe_allow_html=True)
+        k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True),     unsafe_allow_html=True)
+        k3.markdown(kpi_colored("Closed Completed",   f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>",      "card-success", chg_kpi_ok), unsafe_allow_html=True)
+        k4.markdown(kpi_colored("Closed with Issue",  f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>",     "card-danger", chg_kpi_iss, inverse=True),     unsafe_allow_html=True)
+        k5.markdown(kpi_colored("AFR (Avg First Response)", fmt_m(kpi_curr_afr_val), "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
+        k6.markdown(kpi_colored("Avg Service (TAT)",  fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
+        st.write(""); st.divider()
+
+        team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
+        team_row = {
+            "Expert": "🏆 Team AVG", "Rank": "-",
+            "Working Days": team_wd, "Tickets Count": round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0, "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0, "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Cases/Day": round((round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0) / (team_wd if team_wd > 0 else 1), 1),
+            "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0, "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "% Achievement from Target": "100.0%", "AFR": fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0), "Service Time": fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0),
+            "Service Quality": f"{sc['Service Quality'].apply(lambda p: float(str(p).replace('%', '')) if pd.notnull(p) else 0.0).mean() if not sc.empty else 0:.1f}%", "Prospected Incentive": "3,100 EGP"
+        }
+        sc.drop(columns=["_Service_Time_val", "_AFR_val"], inplace=True, errors='ignore')
+        sc_final = pd.concat([pd.DataFrame([team_row]), sc], ignore_index=True)
+        
+        if "Rank" in sc.columns:
+            rank_df = sc.copy(); rank_df["_sort_val"] = pd.to_numeric(rank_df["Rank"], errors="coerce").fillna(999)
+            top_exps = rank_df.nsmallest(3, "_sort_val")["Expert"].tolist()
+        else:
+            top_exps = []
+            
+        gold_exp, silver_exp, bronze_exp = top_exps[0] if len(top_exps) > 0 else None, top_exps[1] if len(top_exps) > 1 else None, top_exps[2] if len(top_exps) > 2 else None
+
+        display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
+        
+        def format_clean_num(x):
+            if x == "-": return "-"
+            try: return str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))
+            except: return str(x)
+        for c in ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]:
+            if c in display_df.columns: display_df[c] = display_df[c].apply(format_clean_num)
+
+        display_df["Expert"] = display_df["Expert"].apply(lambda v: f"🥇 {v}" if v == gold_exp else (f"🥈 {v}" if v == silver_exp else (f"🥉 {v}" if v == bronze_exp else v)))
+
+        def style_performers(row):
+            exp, styles = row["Expert"], [''] * len(row)
+            if exp == "🏆 Team AVG": styles = ['background-color: #cbd5e1; font-weight: 800; color: #0f172a'] * len(row)
+            elif "🥇" in exp: styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
+            elif "🥈" in exp: styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
+            elif "🥉" in exp: styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+            elif exp == aname and not is_admin(): styles = ['background-color: #dbeafe; color: #1e40af; font-weight: 800'] * len(row)
+            if "Prospected Incentive" in row.index and exp != "🏆 Team AVG":
+                idx, inc = row.index.get_loc("Prospected Incentive"), str(row["Prospected Incentive"])
+                styles[idx] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;' if inc != "3,100 EGP" else '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
+            return styles
+
+        if "Rank" in display_df.columns:
+            display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        
+        styled_df = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+        
+        try: 
+            html_table = styled_df.hide(axis="index").to_html()
+        except Exception: 
+            try: 
+                html_table = styled_df.hide_index().to_html()
+            except Exception: 
+                html_table = styled_df.to_html()
+            
+        st.markdown("### 📅 Schedule & Leaves Summary")
+        rk1, rk2, rk3, rk4, rk5 = st.columns(5)
+        rk1.markdown(kpi_colored("Working Days (Shifts)", int(pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
+        rk2.markdown(kpi_colored("Off Days", int(pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
+        rk3.markdown(kpi_colored("Annual Leaves", int(pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
+        rk4.markdown(kpi_colored("Casual Leaves", int(pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
+        rk5.markdown(kpi_colored("Sick Leaves", int(pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum()), "card-neutral"), unsafe_allow_html=True)
+        
+        st.markdown("### 📊 Expert Performance Scorecard Dashboard")
+        st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True); st.divider()
+        
+        st.markdown("### 🔍 Quality Issues Log (Current Period)")
+        if not df_q_filtered.empty:
+            q_view = df_q_filtered[df_q_filtered['Display_Expert'] == aname].copy() if is_exp else (df_q_filtered[df_q_filtered['Display_Expert'].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])] if sel_agents_t2 else df_q_filtered.copy())
+            if q_view.empty: st.success("🎉 No quality issues recorded for the selected expert(s) in this period!")
+            else:
+                disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy().rename(columns={'Deduction': 'Deduction (%)'})
+                disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
+                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','medium':'🟠 Medium','minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
+                def style_q(row):
+                    sev, styles = str(row['Severity']).lower(), ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
+                    for i, col in enumerate(row.index):
+                        if col in ['Severity', 'Deduction (%)']: 
+                            if 'critical' in sev: styles[i] = 'background-color: #fef2f2; color: #7f1d1d; font-weight: 900;'
+                            elif 'major' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
+                            elif 'medium' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
+                            elif 'minor' in sev: styles[i] = 'background-color: #dbeafe; color: #1d4ed8; font-weight: 900;'
+                    return styles
+                
+                styled_q = disp_q.style.apply(style_q, axis=1).set_properties(**{"text-align": "center"})
+                try: 
+                    html_q_table = styled_q.hide(axis="index").to_html()
+                except Exception: 
+                    try: 
+                        html_q_table = styled_q.hide_index().to_html()
+                    except Exception: 
+                        html_q_table = styled_q.to_html()
+                    
+                st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
+        else: st.info("No quality issues logged in the system for this specific period.")
+        
+        if is_admin():
+            st.divider(); st.markdown("#### 📥 Export Team Performance Report")
+            csv_sc = display_df.copy(); csv_sc["Expert"] = csv_sc["Expert"].apply(lambda x: re.sub(r'^[🥇🥈🥉]\s*', '', str(x)))
+            st.download_button("📥 Download Team Scorecard (CSV)", csv_sc.to_csv(index=False).encode('utf-8-sig'), f"Team_Scorecard_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
+            
+            st.divider(); st.markdown("#### ✉️ Performance Review Emails")
+            
+            sel_email_agent = st.selectbox("Select Agent for Email Draft", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
+            if sel_email_agent:
+                arow, trow = sc_final[sc_final["Expert"] == sel_email_agent].iloc[0], sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
+                def sfl(v):
+                    try: return float(str(v).replace('%','').replace(',',''))
+                    except: return 0.0
+                def t2s(t_str):
+                    try:
+                        p = str(t_str).split(':')
+                        return int(p[0])*3600 + int(p[1])*60 + int(p[2])
+                    except: return 0
+                
+                ach_v, q_v = sfl(arow["% Achievement from Target"]), sfl(arow["Service Quality"])
+                t_ach_v, t_q_v = sfl(trow["% Achievement from Target"]), sfl(trow["Service Quality"])
+                a_tot = int(sfl(arow['Tickets Count']) + sfl(arow['JHAH Requests']) + sfl(arow['Support Requests']))
+                t_tot = int(sfl(trow['Tickets Count']) + sfl(trow['JHAH Requests']) + sfl(trow['Support Requests']))
+                
+                a_afr_sec, t_afr_sec = t2s(arow['AFR']), t2s(trow['AFR'])
+                a_st_sec, t_st_sec = t2s(arow['Service Time']), t2s(trow['Service Time'])
+                
+                c_cases = "#dc2626" if sfl(arow['Cases/Day']) < sfl(trow['Cases/Day']) else "#16a34a"
+                c_ach   = "#dc2626" if ach_v < 100 else "#16a34a"
+                c_qual  = "#dc2626" if q_v < t_q_v else "#16a34a"
+                c_afr   = "#dc2626" if a_afr_sec > t_afr_sec else "#16a34a"
+                c_st    = "#dc2626" if a_st_sec > t_st_sec else "#16a34a"
+                
+                enc_msg = ""
+                if ach_v >= 100:
+                    perf_w, tgt_m = "outstanding", f"You successfully exceeded the daily target with a brilliant **{arow['% Achievement from Target']}** achievement rate! Keep up the great momentum."
+                elif ach_v >= 80:
+                    perf_w, tgt_m = "solid", f"You reached a solid **{arow['% Achievement from Target']}** of the daily target. You are very close to hitting the green zone!"
+                else:
+                    perf_w, tgt_m = "developing", f"You achieved **{arow['% Achievement from Target']}** of the target. We noticed a drop this period, but we know your true capabilities are much higher."
+                    enc_msg = "<br><div style='background-color:#eff6ff; padding:15px; border-left:4px solid #3b82f6; margin-top:15px; border-radius:4px;'><b>💡 A Special Note for You:</b><br>Every great expert faces challenging periods. We believe in your potential and are fully here to support you in overcoming these obstacles. Let's work together to boost your numbers and bring out the best in you next week. You've absolutely got this! 💪</div>"
+
+                q_msg = f"Your service quality is top-tier at **{arow['Service Quality']}**." if q_v >= 95 else (f"Your service quality is strong at **{arow['Service Quality']}**." if q_v >= 85 else f"Your service quality sits at **{arow['Service Quality']}**. Let's focus on accuracy and double-check our steps to ensure excellence.")
+                if q_v < 90 and not enc_msg:
+                    enc_msg = "<br><div style='background-color:#eff6ff; padding:15px; border-left:4px solid #3b82f6; margin-top:15px; border-radius:4px;'><b>💡 A Special Note for You:</b><br>Quality is our top priority, and we noticed some challenges this period. Don't worry, we are here to support you! Let's take a moment to review the quality standards and work together to get your score back to 100%. You can do it! 💪</div>"
+                
+                c_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
+                
+                email_html_table = f"""
+                <table style="width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif; font-size: 13px; border: 1px solid #e2e8f0;">
+                    <thead>
+                        <tr style="background-color: #f8fafc; color: #0f172a; text-align: center; border-bottom: 2px solid #cbd5e1;">
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: left;">Metric</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Total Cases</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Cases/Day</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Achievement</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Quality</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">AFR</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Service Time</th>
+                            <th style="padding: 10px;">Incentive</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Your Score 👤</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{a_tot}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_qual}; font-weight: bold;">{arow['Service Quality']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_afr}; font-weight: bold;">{arow['AFR']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_st}; font-weight: bold;">{arow['Service Time']}</td>
+                            <td style="padding: 10px; text-align: center; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
+                        </tr>
+                        <tr style="background-color: #fcfcfc;">
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Team Avg 🏆</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{t_tot}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Quality']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['AFR']}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Time']}</td>
+                            <td style="padding: 10px; text-align: center; font-weight: bold; color: #475569;">3,100 EGP</td>
+                        </tr>
+                    </tbody>
+                </table>
+                """
+                
+                st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                
+                st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
+
+# ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
+if is_admin():
+    with tabs[2]:
+        st.markdown("### 🎯 Global Settings (This Period)")
+        with st.form("global_target_form"):
+            new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
+            if st.form_submit_button("💾 Save Global Parameters", use_container_width=True):
+                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+                overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target; _save_store(); st.success("✅ Saved!"); st.rerun()
+
+        st.markdown("### 🤫 Secret Agent Ticket Adjustments")
+        st.info("💡 Any number added here will be invisibly added to the agent's total tickets for this period. Experts will NOT see the adjustment itself, only the final increased/decreased total.")
+        
+        if "agent_adjustments" not in overrides().get(PERIOD_KEY, {}):
+            if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+            overrides()[PERIOD_KEY]["agent_adjustments"] = {}
+            
+        current_adjs = overrides()[PERIOD_KEY].get("agent_adjustments", {})
+        
+        with st.form("secret_adj_form"):
+            adj_agent = st.selectbox("Select Agent", OFFICIAL_EXPERTS)
+            adj_val = st.number_input("Adjustment Value (can be negative)", value=int(current_adjs.get(adj_agent, 0)), step=1)
+            
+            if st.form_submit_button("💾 Save Secret Adjustment", use_container_width=True):
+                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
+                if "agent_adjustments" not in overrides()[PERIOD_KEY]: overrides()[PERIOD_KEY]["agent_adjustments"] = {}
+                
+                overrides()[PERIOD_KEY]["agent_adjustments"][adj_agent] = adj_val
+                _save_store()
+                st.success(f"✅ Secret adjustment of {adj_val} applied to {adj_agent}!")
+                st.rerun()
+        
+        if current_adjs:
+            st.markdown("**Current Active Adjustments for this period:**")
+            st.json(current_adjs)
+
+# ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
+if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
+    with tabs[-1]:
+        st.markdown("### 🧑‍🤝‍🧑 Approvals Team Profiles")
+        st.info("💡 تعرف على زملائك في الفريق، تاريخ انضمامهم، وخبراتهم!")
+        
+        team_members = [u for uid, u in st.session_state.db_users.items() if u["role"] in ["expert", "admin", "supervisor"]]
+        cols = st.columns(3)
+        for i, member in enumerate(team_members):
+            photo_url = member.get("photo", "") or "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" 
+            r_badge = "👑 ADMIN" if member['role'] == 'admin' else ("👁️ SUPERVISOR" if member['role'] == 'supervisor' else "⭐ EXPERT")
+            grad, join_cc, join_team = member.get('grad_year') or 'N/A', member.get('join_cc') or 'N/A', member.get('join_team') or 'N/A'
+            bio = member.get('bio') or 'لا توجد نبذة شخصية حتى الآن.'
+            
+            card_html = f"""
+            <div class="profile-card">
+                <img src="{photo_url}" class="profile-img" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
+                <div class="profile-name">{member.get('display_name', 'Unknown')}</div>
+                <div class="profile-role">{r_badge}</div>
+                <div class="profile-detail"><span>🎓 Graduation</span> <b>{grad}</b></div>
+                <div class="profile-detail"><span>🏢 Joined CC</span> <b>{join_cc}</b></div>
+                <div class="profile-detail"><span>🚀 Joined Team</span> <b>{join_team}</b></div>
+                <div class="profile-bio">"{bio}"</div>
+            </div>
+            """
+            cols[i % 3].markdown(card_html, unsafe_allow_html=True)
+
+st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
+# --- END OF SCRIPT ---
