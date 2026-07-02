@@ -25,7 +25,7 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  PERSISTENCE & PRE-SEEDED USER DATABASE (LOCAL DATA SINK REMOVED EXCEPT FOR REQS)
+#  PERSISTENCE & PRE-SEEDED USER DATABASE
 # ══════════════════════════════════════════════════════════════════════════════════
 _DATA_FILE = pathlib.Path(__file__).parent / ".dashboard_data.json"
 
@@ -374,6 +374,18 @@ def calc_change(curr, prev):
     if pd.isna(prev): prev = 0
     if prev == 0: return 100.0 if curr > 0 else 0.0
     return ((curr - prev) / prev) * 100.0
+
+def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
+    change_html = ""
+    if change is not None:
+        if neutral: color, arrow = "#64748b", ("▲" if change > 0 else ("▼" if change < 0 else "−"))
+        else:
+            if change > 0: arrow, color = "▲", ("#dc2626" if inverse else "#16a34a")
+            elif change < 0: arrow, color = "▼", ("#16a34a" if inverse else "#dc2626")
+            else: arrow, color = "−", "#94a3b8"
+        bg_color = color + "15"
+        change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: {color}; background-color: {bg_color};">{arrow} {abs(change):.1f}%</div>'
+    return (f'<div class="kpi-container {cls}"><div class="kpi-label">{label}</div><div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;">{value}</div>{change_html}</div>')
 
 def time_to_minutes(s):
     try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
@@ -754,13 +766,13 @@ if st.session_state.page == "settings":
                         st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 طلب حساب جديد لـ: <b>{p_data.get('name')}</b> (كود: {p_data.get('id')})</div>", unsafe_allow_html=True)
                         rc1, rc2 = st.columns(2)
                         with rc1:
-                            if st.button("✅ موافقة واعتماد", key=f"apr_{req['id']}", use_container_width=True):
+                            if st.button("✅ موافقة واعتماد", key=f"apr_na_{req['id']}", use_container_width=True):
                                 add_user_to_sheet(p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'])
                                 req["status"] = "approved"; _save_store()
                                 send_approval_email(p_data['email'], p_data['name'], p_data['id'])
                                 st.success("Approved!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                         with rc2:
-                            if st.button("❌ رفض الطلب", key=f"rej_{req['id']}", use_container_width=True):
+                            if st.button("❌ رفض الطلب", key=f"rej_na_{req['id']}", use_container_width=True):
                                 reject_request(req["id"])
                                 st.warning("Rejected!"); time.sleep(1); st.rerun()
 
