@@ -344,6 +344,7 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
+# تحديث الصلاحية في حالة الحذف أو التعديل من الشيت
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -512,7 +513,6 @@ with st.sidebar:
 
     st.divider()
     
-    # === التحديث المطلوب: الفلتر بيجيب من أول الشهر لحد أخر تحديث للبيانات ===
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
     if not raw_dates.empty:
         max_date = raw_dates.max().date()
@@ -1486,11 +1486,21 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 
                 c_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 
+                # إعداد الميداليات ورسالة الترتيب للإيميل
+                rank_str = str(arow.get('Rank', '-'))
+                if rank_str == "1": rank_badge = "🥇 1st Place"
+                elif rank_str == "2": rank_badge = "🥈 2nd Place"
+                elif rank_str == "3": rank_badge = "🥉 3rd Place"
+                else: rank_badge = f"#{rank_str} Place"
+                
+                rank_msg = f"<br><br>🏆 <b>Team Ranking:</b> I am proud to share that you have successfully secured <b>{rank_badge}</b> in the overall team ranking this period! 🌟"
+
                 email_html_table = f"""
                 <table style="width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif; font-size: 13px; border: 1px solid #e2e8f0;">
                     <thead>
                         <tr style="background-color: #f8fafc; color: #0f172a; text-align: center; border-bottom: 2px solid #cbd5e1;">
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: left;">Metric</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Rank</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Total Cases</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Cases/Day</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Achievement</th>
@@ -1503,6 +1513,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                     <tbody>
                         <tr style="border-bottom: 1px solid #e2e8f0;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Your Score 👤</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold; color: #2563eb; font-size: 14px;">#{arow.get('Rank', '-')}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{a_tot}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
@@ -1513,6 +1524,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                         </tr>
                         <tr style="background-color: #fcfcfc;">
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Team Avg 🏆</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">-</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{t_tot}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
@@ -1526,7 +1538,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 """
                 
                 st.markdown("##### 📝 Email Preview (Highlight & Copy directly from here!)")
-                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{c_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your **{perf_w}** contributions.{rank_msg}<br>{email_html_table}<b>🎯 Targets & Quality:</b><br>{tgt_m}<br>{q_msg}{enc_msg}<br><br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
                 
                 st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {c_name}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px; box-shadow: 0 4px 6px rgba(37,99,235, 0.3);">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
