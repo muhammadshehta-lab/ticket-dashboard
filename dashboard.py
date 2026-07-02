@@ -702,20 +702,21 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         slide_team = prs.slides.add_slide(prs.slide_layouts[5])
         slide_team.shapes.title.text = "Team Performance Scorecard"
         if not sc_g.empty:
-            cols_to_show = ["Rank", "Expert", "Tickets Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
             rows = len(sc_g) + 1
             cols = len(cols_to_show)
             table_team = slide_team.shapes.add_table(rows, cols, Inches(0.5), Inches(1.5), Inches(9), Inches(0.4 * rows)).table
             
-            table_team.columns[0].width = Inches(0.8) # Rank
-            table_team.columns[1].width = Inches(2.2) # Expert
-            table_team.columns[2].width = Inches(1.5) # Tickets
-            table_team.columns[3].width = Inches(1.5) # Cases/Day
-            table_team.columns[4].width = Inches(1.5) # Target
-            table_team.columns[5].width = Inches(1.5) # Quality
+            table_team.columns[0].width = Inches(0.7) # Rank
+            table_team.columns[1].width = Inches(2.0) # Expert
+            table_team.columns[2].width = Inches(1.3) # Tickets
+            table_team.columns[3].width = Inches(1.0) # Emails
+            table_team.columns[4].width = Inches(1.3) # Cases/Day
+            table_team.columns[5].width = Inches(1.4) # Target
+            table_team.columns[6].width = Inches(1.3) # Quality
             
             for c_idx, col_name in enumerate(cols_to_show):
-                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets')
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
                 table_team.cell(0, c_idx).fill.solid()
                 table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
                 if table_team.cell(0, c_idx).text_frame.paragraphs:
@@ -1142,14 +1143,21 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             sc_g = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
             if not df_sc_g.empty:
                 df_sc_g["Assigned By"] = df_sc_g["Assigned By"].astype(str).str.strip().str.lower().map({x.lower(): x for x in OFFICIAL_EXPERTS})
+                
+                df_sc_g["_email_int"] = df_sc_g["Is Email"].fillna(False).astype(int)
+                
                 grp_g = df_sc_g.groupby("Assigned By")
                 stats_g = pd.DataFrame(index=grp_g.groups.keys())
                 stats_g["Tickets Count"] = grp_g["Request ID"].count()
+                stats_g["Emails Count"] = grp_g["_email_int"].sum()
                 sc_g = sc_g.merge(stats_g, left_on="Expert", right_index=True, how="left")
             else:
                 sc_g["Tickets Count"] = 0
+                sc_g["Emails Count"] = 0
                 
             sc_g["Tickets Count"] = sc_g["Tickets Count"].fillna(0).astype(int)
+            sc_g["Emails Count"] = sc_g["Emails Count"].fillna(0).astype(int)
+            
             period_adjs_g = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
             sc_g["Tickets Count"] = sc_g.apply(lambda row: row["Tickets Count"] + int(period_adjs_g.get(str(row["Expert"]).strip(), 0)), axis=1)
             sc_g["Working Days"] = sc_g["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
@@ -1252,19 +1260,25 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc = pd.DataFrame({"Expert": OFFICIAL_EXPERTS})
         if not df_sc.empty:
             df_sc["Assigned By"] = df_sc["Assigned By"].astype(str).str.strip().str.lower().map({x.lower(): x for x in OFFICIAL_EXPERTS})
+            df_sc["_email_int"] = df_sc["Is Email"].fillna(False).astype(int)
             df_sc["_jhah"] = df_sc["Request Type"].astype(str).str.lower().str.contains("jhah", na=False)
             df_sc["_c_ok"] = (df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False) & ~df_sc["Status"].astype(str).str.contains("issue", case=False, na=False))
             df_sc["_c_all"] = df_sc["Status"].astype(str).str.contains("Closed", case=False, na=False)
             grp = df_sc.groupby("Assigned By")
             stats = pd.DataFrame(index=grp.groups.keys())
             stats["Tickets Count"] = grp["Request ID"].count()
+            stats["Emails Count"] = grp["_email_int"].sum()
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
             stats["_AFR_val"] = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
             stats["_c_ok_sum"], stats["_c_all_sum"] = grp["_c_ok"].sum(), grp["_c_all"].sum()
             sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
-        else: sc["Tickets Count"], sc["_Service_Time_val"], sc["_AFR_val"], sc["_c_ok_sum"], sc["_c_all_sum"] = 0, 0, 0, 0, 0
+        else: 
+            sc["Tickets Count"] = 0
+            sc["Emails Count"] = 0
+            sc["_Service_Time_val"], sc["_AFR_val"], sc["_c_ok_sum"], sc["_c_all_sum"] = 0, 0, 0, 0
             
         sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
+        sc["Emails Count"] = sc.get("Emails Count", pd.Series([0]*len(sc))).fillna(0).astype(int)
         
         # ── SECRET MANUAL ADJUSTMENTS ──
         sc["Tickets Count"] = sc.apply(lambda row: row["Tickets Count"] + int(period_adjs.get(str(row["Expert"]).strip(), 0)), axis=1)
@@ -1344,7 +1358,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
         team_row = {
             "Expert": "🏆 Team AVG", "Rank": "-",
-            "Working Days": team_wd, "Tickets Count": round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0, "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0, "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Working Days": team_wd, "Tickets Count": round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0, "Emails Count": round(pd.to_numeric(sc["Emails Count"], errors='coerce').mean(), 1) if not sc.empty else 0, "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0, "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Cases/Day": round((round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0) / (team_wd if team_wd > 0 else 1), 1),
             "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0, "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "% Achievement from Target": "100.0%", "AFR": fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0), "Service Time": fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0),
@@ -1367,7 +1381,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             if x == "-": return "-"
             try: return str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))
             except: return str(x)
-        for c in ["Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]:
+        for c in ["Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]:
             if c in display_df.columns: display_df[c] = display_df[c].apply(format_clean_num)
 
         display_df["Expert"] = display_df["Expert"].apply(lambda v: f"🥇 {v}" if v == gold_exp else (f"🥈 {v}" if v == silver_exp else (f"🥉 {v}" if v == bronze_exp else v)))
@@ -1385,7 +1399,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             return styles
 
         if "Rank" in display_df.columns:
-            display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+            display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         
         styled_df = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
         
@@ -1486,7 +1500,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 
                 c_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 
-                # إعداد الميداليات ورسالة الترتيب للإيميل
                 rank_str = str(arow.get('Rank', '-'))
                 if rank_str == "1": rank_badge = "🥇 1st Place"
                 elif rank_str == "2": rank_badge = "🥈 2nd Place"
@@ -1502,6 +1515,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: left;">Metric</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Rank</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Total Cases</th>
+                            <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Emails</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Cases/Day</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Achievement</th>
                             <th style="padding: 10px; border-right: 1px solid #e2e8f0;">Quality</th>
@@ -1515,6 +1529,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Your Score 👤</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold; color: #2563eb; font-size: 14px;">#{arow.get('Rank', '-')}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold;">{a_tot}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; font-weight: bold; color: #0ea5e9;">{arow.get('Emails Count', 0)}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_cases}; font-weight: bold;">{arow['Cases/Day']}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_ach}; font-weight: bold;">{arow['% Achievement from Target']}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: {c_qual}; font-weight: bold;">{arow['Service Quality']}</td>
@@ -1526,6 +1541,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; font-weight: bold; color: #334155; white-space: nowrap;">Team Avg 🏆</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">-</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{t_tot}</td>
+                            <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow.get('Emails Count', 0)}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Cases/Day']}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['% Achievement from Target']}</td>
                             <td style="padding: 10px; border-right: 1px solid #e2e8f0; text-align: center; color: #475569;">{trow['Service Quality']}</td>
