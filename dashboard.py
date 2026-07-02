@@ -344,7 +344,6 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
-# تحديث الصلاحية في حالة الحذف أو التعديل من الشيت
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -513,16 +512,20 @@ with st.sidebar:
 
     st.divider()
     
+    # === التحديث المطلوب: الفلتر بيجيب من أول الشهر لحد أخر تحديث للبيانات ===
     raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
     if not raw_dates.empty:
-        max_uploaded_date = raw_dates.max()
-        first_of_current_upload_month = max_uploaded_date.replace(day=1)
-        last_day_of_ended_month = first_of_current_upload_month - pd.Timedelta(days=1)
-        default_from, default_to = last_day_of_ended_month.replace(day=1).date(), last_day_of_ended_month.date()
+        max_date = raw_dates.max().date()
+        default_from = max_date.replace(day=1)
+        default_to = max_date
     else:
-        default_from, default_to = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
-
+        default_from = pd.Timestamp.today().date().replace(day=1)
+        default_to = pd.Timestamp.today().date()
+        
     min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
+    if pd.isna(min_d): min_d = default_from
+    if pd.isna(max_d): max_d = default_to
+
     date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
     d_from, d_to = date_range if isinstance(date_range, (list, tuple)) and len(date_range) == 2 else (min_d, max_d)
     if d_from == d_to: st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
