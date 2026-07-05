@@ -221,7 +221,7 @@ THEME = dict(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolo
 # ══════════════════════════════════════════════════════════════════════════════════
 #  GLOBALS & CONFIGURATIONS
 # ══════════════════════════════════════════════════════════════════════════════════
-DAYS_AR = {"Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"}
+DAYS_AR = {"Saturday": "Saturday", "Sunday": "Sunday", "Monday": "Monday", "Tuesday": "Tuesday", "Wednesday": "Wednesday", "Thursday": "Thursday", "Friday": "Friday"}
 OFFICIAL_EXPERTS = ["Ahmed El-Kholy", "Ahmed Kadry", "Amr El-Sayed", "Eslam Ramadan", "Mohamed Abdelmageed", "Mohamed Khalifa", "Yahia Ali Shafei"]
 EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
 AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
@@ -525,7 +525,7 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         ppt_stream.seek(0)
         return ppt_stream, None
     except Exception as e:
-        return None, f"حدث خطأ أثناء بناء العرض التقديمي: {str(e)}"
+        return None, f"An error occurred while generating presentation: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE WITH TOTAL BAN SINK
@@ -558,43 +558,43 @@ if not st.session_state.authenticated:
                         st.session_state.force_onboard = True
                     st.rerun()
                 else:
-                    st.error("❌ الحساب غير مسجل أو كلمة المرور خاطئة. إذا كنت مسحت الحساب أو عضو جديد، يرجى تقديم طلب انضمام بالأسفل.")
+                    st.error("❌ Account not registered or incorrect password. If your account was deleted or you are a new member, please request access below.")
             st.write("")
-            if st.button("🆕 تقديم طلب انضمام للوحة التحكم", use_container_width=True):
+            if st.button("🆕 Request Dashboard Access", use_container_width=True):
                 st.session_state.view_request_form = True; st.rerun()
         else:
-            st.markdown("### 📝 استمارة طلب انضمام للسيستم")
-            req_name = st.text_input("الاسم بالكامل *", placeholder="أدخل اسمك الثلاثي")
-            req_id = st.text_input("كود الموظف / كود الشيفت *", placeholder="أدخل كودك الوظيفي")
-            req_email = st.text_input("البريد الإلكتروني (Gmail) *", placeholder="example@gmail.com") 
-            if st.button("📤 إرسال الطلب للقائد", use_container_width=True):
+            st.markdown("### 📝 System Access Request Form")
+            req_name = st.text_input("Full Name *", placeholder="Enter your full name")
+            req_id = st.text_input("Employee ID / Shift Code *", placeholder="Enter your employee ID")
+            req_email = st.text_input("Email (Gmail) *", placeholder="example@gmail.com") 
+            if st.button("📤 Submit Request to Leader", use_container_width=True):
                 if req_name.strip() and req_id.strip() and req_email.strip():
                     uid = req_id.strip().lower()
                     push_request(uid, "new_account", json.dumps({"name": req_name.strip(), "id": uid, "email": req_email.strip()}))
-                    st.success(f"✅ تم إرسال طلبك بنجاح يا هندسة! سيصلك بريد إلكتروني فور موافقة القائد محمد شحاتة.")
+                    st.success(f"✅ Request sent successfully! You will receive an email once approved by Team Leader Mohammed Shehta.")
                     time.sleep(2.5)
                     st.session_state.view_request_form = False; st.rerun()
-                else: st.error("❌ يرجى تعبئة كافة الحقول المطلوبة (*)")
-            if st.button("⬅️ العودة لصفحة الدخول", use_container_width=True): st.session_state.view_request_form = False; st.rerun()
+                else: st.error("❌ Please fill in all required fields (*)")
+            if st.button("⬅️ Back to Login Page", use_container_width=True): st.session_state.view_request_form = False; st.rerun()
     st.stop()
 
 if st.session_state.force_onboard:
     st.markdown("## ⚙️ Mandatory Password Update Required")
-    st.info("🚨 هذا أول دخول لك بالصيغة القديمة، أو تم تصفير حسابك، يرجى تعيين كلمة مرور جديدة آمنة.")
+    st.info("🚨 This is your first login or your account was reset. Please set a new secure password.")
     _, ob_col, _ = st.columns([1, 1.5, 1])
     with ob_col:
         st.markdown("<div class='section-card'>", unsafe_allow_html=True)
         with st.form("onboard_pass_form"):
-            new_ob1 = st.text_input("كلمة المرور الجديدة", type="password")
-            new_ob2 = st.text_input("تأكيد كلمة المرور", type="password")
-            if st.form_submit_button("💾 حفظ كلمة المرور والدخول", use_container_width=True):
-                if new_ob1 != new_ob2: st.error("❌ كلمات المرور غير متطابقة.")
-                elif len(new_ob1) < 6: st.error("❌ يجب أن تتكون كلمة المرور من 6 خانات على الأقل.")
+            new_ob1 = st.text_input("New Password", type="password")
+            new_ob2 = st.text_input("Confirm New Password", type="password")
+            if st.form_submit_button("💾 Save Password & Enter Dashboard", use_container_width=True):
+                if new_ob1 != new_ob2: st.error("❌ Passwords do not match.")
+                elif len(new_ob1) < 6: st.error("❌ Password must be at least 6 characters.")
                 else:
                     uname = st.session_state.username
                     update_sheet_password(uname, new_ob1)
                     st.session_state.force_onboard = False
-                    st.success("✅ تم تحديث كلمة المرور بنجاح في قاعدة البيانات الرئيسية!"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
+                    st.success("✅ Password successfully updated in Master Database!"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -667,90 +667,6 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DATA FILTERING INFRASTRUCTURE
-# ══════════════════════════════════════════════════════════════════════════════════
-def get_roster_stats(roster_df, start_date, end_date):
-    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
-    if roster_df.empty: return counts
-    valid_cols = []
-    for col in roster_df.columns:
-        col_str = str(col).strip()
-        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
-        if match:
-            try:
-                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                if start_date <= col_date <= end_date: valid_cols.append(col)
-            except: pass
-
-    df_r_str = roster_df.astype(str)
-    for exp in OFFICIAL_EXPERTS:
-        exp_id = EXPERT_ID_MAP.get(exp, "")
-        if exp_id:
-            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
-            exp_rows = df_r_str[mask]
-            if not exp_rows.empty and valid_cols:
-                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
-                if safe_cols:
-                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
-                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
-                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
-                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
-                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
-    return counts
-
-curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
-prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
-
-out_req_dict, prev_out_req_dict = {}, {}
-global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
-
-if not df_out_req.empty and "Date" in df_out_req.columns:
-    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
-    df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
-    if "Source" in df_out_filtered.columns: global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    global_support = len(df_out_filtered) - global_jhah
-    if "Expert Name" in df_out_filtered.columns:
-        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-            
-    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
-    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    prev_global_support = len(df_out_prev) - prev_global_jhah
-    if "Expert Name" in df_out_prev.columns:
-        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-
-df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
-
-if sel_hic: df = df[df["HIC"].isin(sel_hic)]; df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
-if sel_req_type: df = df[df["Request Type"].isin(sel_req_type)]; df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
-
-expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
-if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
-    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
-    df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
-    def get_deduction(sev):
-        s = str(sev).strip().lower()
-        if s == 'critical': return 5.0
-        elif s == 'major': return 2.0
-        elif s == 'medium': return 1.0
-        elif s == 'minor': return 0.5
-        return 0.0
-    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
-    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
-    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
-    expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
-
-# ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS / ADMIN CONTROL SINK
 # ══════════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "settings":
@@ -764,61 +680,61 @@ if st.session_state.page == "settings":
         with atab1:
             st.markdown("<div class='section-card'>", unsafe_allow_html=True)
             with st.form("admin_profile_edit"):
-                st.subheader("📋 تعديل الملف الشخصي")
+                st.subheader("📋 Edit Profile")
                 p_grad = st.text_input("🎓 Graduation Year", value=urow.get("grad_year", ""))
                 p_bio = st.text_input("✍️ Bio / Quote", value=urow.get("bio", ""))
-                if st.form_submit_button("💾 حفظ البيانات", use_container_width=True):
+                if st.form_submit_button("💾 Save Data", use_container_width=True):
                     urow["grad_year"] = p_grad; urow["bio"] = p_bio
                     update_sheet_profile(me(), urow)
-                    st.success("✅ تم تحديث بياناتك بنجاح!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+                    st.success("✅ Profile updated successfully!"); time.sleep(1); st.cache_data.clear(); st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
         with atab2:
-            st.markdown("### 🔔 طلبات الانضمام المعلقة")
+            st.markdown("### 🔔 Pending Access Requests")
             pending = [r for r in requests_list() if r["status"] == "pending"]
-            if not pending: st.info("✅ لا توجد طلبات معلقة حالياً.")
+            if not pending: st.info("✅ No pending requests at the moment.")
             else:
                 for req in pending:
                     if req["type"] == "new_account":
                         p_data = json.loads(req["new_value"])
-                        st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 طلب حساب جديد لـ: <b>{p_data.get('name')}</b> (كود: {p_data.get('id')})</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 New account request for: <b>{p_data.get('name')}</b> (ID: {p_data.get('id')})</div>", unsafe_allow_html=True)
                         rc1, rc2 = st.columns(2)
                         with rc1:
-                            if st.button("✅ موافقة واعتماد", key=f"apr_na_{req['id']}", use_container_width=True):
+                            if st.button("✅ Approve", key=f"apr_na_{req['id']}", use_container_width=True):
                                 add_user_to_sheet(p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'])
                                 req["status"] = "approved"; _save_store()
                                 send_approval_email(p_data['email'], p_data['name'], p_data['id'])
                                 st.success("Approved!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                         with rc2:
-                            if st.button("❌ رفض الطلب", key=f"rej_na_{req['id']}", use_container_width=True):
+                            if st.button("❌ Deny", key=f"rej_na_{req['id']}", use_container_width=True):
                                 reject_request(req["id"])
                                 st.warning("Rejected!"); time.sleep(1); st.rerun()
 
         with atab3:
-            st.markdown("### 👥 إدارة الموظفين الحالية (Live on Sheet)")
+            st.markdown("### 👥 Current Employee Management (Live on Sheet)")
             for uname, u_data in list(st.session_state.db_users.items()):
                 with st.expander(f"👤 {u_data['display_name']} (@{uname}) — [{u_data['role'].upper()}]"):
                     with st.form(f"f_edit_{uname}"):
-                        eu_dn = st.text_input("اسم العرض", value=u_data["display_name"])
-                        eu_role = st.selectbox("الصلاحية", ["expert", "supervisor", "admin"], index=["expert", "supervisor", "admin"].index(u_data["role"]))
+                        eu_dn = st.text_input("Display Name", value=u_data["display_name"])
+                        eu_role = st.selectbox("Role", ["expert", "supervisor", "admin"], index=["expert", "supervisor", "admin"].index(u_data["role"]))
                         eu_an = st.text_input("Agent Key Mapping", value=u_data["agent_name"] or "")
                         c_sav, c_del = st.columns([3, 1])
-                        with c_sav: saved = st.form_submit_button("💾 تحديث الحساب", use_container_width=True)
-                        with c_del: deleted = st.form_submit_button("🗑️ حذف الموظف نهائياً", use_container_width=True)
+                        with c_sav: saved = st.form_submit_button("💾 Update Account", use_container_width=True)
+                        with c_del: deleted = st.form_submit_button("🗑️ Delete Employee", use_container_width=True)
                     if saved:
                         update_user_role_dname_aname_sheet(uname, eu_role, eu_dn, eu_an)
                         st.success("Updated!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                     if deleted:
-                        if uname == "admin": st.error("لا يمكن حذف حساب الأدمن الأساسي!")
+                        if uname == "admin": st.error("Cannot delete the primary admin account!")
                         else:
                             delete_user_from_sheet(uname)
                             st.success("Deleted completely from Google Sheets!"); time.sleep(1); st.cache_data.clear(); st.rerun()
     else:
         with st.form("exp_profile_edit"):
-            st.subheader("📋 تعديل ملفي الشخصي")
+            st.subheader("📋 Edit Profile")
             p_grad = st.text_input("🎓 Graduation Year", value=urow.get("grad_year", ""))
             p_bio = st.text_input("✍️ Bio / Quote", value=urow.get("bio", ""))
-            if st.form_submit_button("💾 حفظ", use_container_width=True):
+            if st.form_submit_button("💾 Save", use_container_width=True):
                 urow["grad_year"] = p_grad; urow["bio"] = p_bio
                 update_sheet_profile(me(), urow)
                 st.success("Saved!"); time.sleep(1); st.cache_data.clear(); st.rerun()
@@ -876,7 +792,7 @@ with tabs[0]:
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in df_prev.columns and not df_m_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1132,7 +1048,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
