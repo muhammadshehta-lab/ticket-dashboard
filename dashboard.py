@@ -344,7 +344,11 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
-# تحديث الصلاحية في حالة الحذف أو التعديل من الشيت
+# ── EXPLICIT SAFE INITIALIZATION OF GLOBALS TO PREVENT NAMERROR ──
+d_from = pd.Timestamp.today().date().replace(day=1)
+d_to = pd.Timestamp.today().date()
+PERIOD_KEY = f"{d_from}_{d_to}"
+
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -483,7 +487,6 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
         if not hrs_df.empty:
             peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
-            avg_vol_day = hrs_df['Volume'].mean()
             tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
             tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
             tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
@@ -526,7 +529,230 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         return None, f"حدث خطأ أثناء بناء العرض التقديمي: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  SETTINGS / ADMIN CONTROL PANEL ARCHITECTURE
+#  LOGIN GATE WITH TOTAL BAN SINK
+# ══════════════════════════════════════════════════════════════════════════════════
+if not st.session_state.authenticated:
+    st.markdown("""<div class='login-wrap'><div class='login-title'>💊 Dashboard Login</div><div class='login-sub'>In-Store Requests · AlDawaa</div></div>""", unsafe_allow_html=True)
+    _, lc, _ = st.columns([1, 1.4, 1])
+    with lc:
+        if not st.session_state.view_request_form:
+            inp_u = st.text_input("Username / ID", placeholder="Enter ID", key="li_u")
+            inp_p = st.text_input("Password", type="password", placeholder="Enter password", key="li_p")
+            if st.button("🔐 Login", use_container_width=True):
+                uname = inp_u.strip().lower()
+                if uname in st.session_state.db_users and st.session_state.db_users[uname]["password_hash"] == _hash(inp_p):
+                    notify_admin_whatsapp(st.session_state.db_users[uname]["display_name"] + " ✅ Success")
+                    if "login_logs" not in st.session_state.store: st.session_state.store["login_logs"] = []
+                    st.session_state.store["login_logs"].append({"Timestamp": time.strftime('%Y-%m-%d %H:%M:%S'), "Username": uname, "Display Name": st.session_state.db_users[uname]["display_name"], "Role": st.session_state.db_users[uname]["role"]})
+                    _save_store()
+                    
+                    st.session_state.username = uname
+                    st.session_state.role = st.session_state.db_users[uname]["role"]
+                    st.session_state.authenticated = True
+                    
+                    exp_time = str(int(time.time()) + (SESSION_DURATION_HOURS * 3600))
+                    st.query_params["usr"] = uname
+                    st.query_params["exp"] = exp_time
+                    st.query_params["tok"] = generate_signed_token(uname, exp_time)
+                    
+                    if inp_u.strip() == inp_p.strip() and st.session_state.role != "admin":
+                        st.session_state.force_onboard = True
+                    st.rerun()
+                else:
+                    st.error("❌ الحساب غير مسجل أو كلمة المرور خاطئة. إذا كنت مسحت الحساب أو عضو جديد، يرجى تقديم طلب انضمام بالأسفل.")
+            st.write("")
+            if st.button("🆕 تقديم طلب انضمام للوحة التحكم", use_container_width=True):
+                st.session_state.view_request_form = True; st.rerun()
+        else:
+            st.markdown("### 📝 استمارة طلب انضمام للسيستم")
+            req_name = st.text_input("الاسم بالكامل *", placeholder="أدخل اسمك الثلاثي")
+            req_id = st.text_input("كود الموظف / كود الشيفت *", placeholder="أدخل كودك الوظيفي")
+            req_email = st.text_input("البريد الإلكتروني (Gmail) *", placeholder="example@gmail.com") 
+            if st.button("📤 إرسال الطلب للقائد", use_container_width=True):
+                if req_name.strip() and req_id.strip() and req_email.strip():
+                    uid = req_id.strip().lower()
+                    push_request(uid, "new_account", json.dumps({"name": req_name.strip(), "id": uid, "email": req_email.strip()}))
+                    st.success(f"✅ تم إرسال طلبك بنجاح يا هندسة! سيصلك بريد إلكتروني فور موافقة القائد محمد شحاتة.")
+                    time.sleep(2.5)
+                    st.session_state.view_request_form = False; st.rerun()
+                else: st.error("❌ يرجى تعبئة كافة الحقول المطلوبة (*)")
+            if st.button("⬅️ العودة لصفحة الدخول", use_container_width=True): st.session_state.view_request_form = False; st.rerun()
+    st.stop()
+
+if st.session_state.force_onboard:
+    st.markdown("## ⚙️ Mandatory Password Update Required")
+    st.info("🚨 هذا أول دخول لك بالصيغة القديمة، أو تم تصفير حسابك، يرجى تعيين كلمة مرور جديدة آمنة.")
+    _, ob_col, _ = st.columns([1, 1.5, 1])
+    with ob_col:
+        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        with st.form("onboard_pass_form"):
+            new_ob1 = st.text_input("كلمة المرور الجديدة", type="password")
+            new_ob2 = st.text_input("تأكيد كلمة المرور", type="password")
+            if st.form_submit_button("💾 حفظ كلمة المرور والدخول", use_container_width=True):
+                if new_ob1 != new_ob2: st.error("❌ كلمات المرور غير متطابقة.")
+                elif len(new_ob1) < 6: st.error("❌ يجب أن تتكون كلمة المرور من 6 خانات على الأقل.")
+                else:
+                    uname = st.session_state.username
+                    update_sheet_password(uname, new_ob1)
+                    st.session_state.force_onboard = False
+                    st.success("✅ تم تحديث كلمة المرور بنجاح في قاعدة البيانات الرئيسية!"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  SIDEBAR MODULE
+# ══════════════════════════════════════════════════════════════════════════════════
+with st.sidebar:
+    st.markdown("## Approvals Team Dashboard")
+    if is_admin(): badge_cls, badge_txt = "badge-admin", "ADMIN"
+    elif st.session_state.role == "supervisor": badge_cls, badge_txt = "badge-supervisor", "SUPERVISOR"
+    else: badge_cls, badge_txt = "badge-expert", "EXPERT"
+    st.markdown(f"👤 **{cur_user().get('display_name', '–')}** <span class='badge {badge_cls}'>{badge_txt}</span>", unsafe_allow_html=True)
+    
+    st.divider()
+    presentation_mode = st.checkbox("🖥️ Presentation Mode", value=False)
+    if presentation_mode:
+        st.markdown("""
+            <style>
+            [data-testid="stToolbar"] {visibility: hidden !important;}
+            header {background: transparent !important;}
+            footer {display: none !important;}
+            .block-container {padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 100% !important;}
+            </style>
+        """, unsafe_allow_html=True)
+        st.success("✨ Presentation Mode Active!\n\n1. Press **F11** on your keyboard for Full Screen.\n2. Click the **< Arrow** above to collapse this sidebar (You can bring it back anytime by clicking the **> Arrow**).\n3. Uncheck this box to exit.")
+
+    st.divider()
+    
+    raw_dates = pd.to_datetime(df_raw["Request Date"]).dropna()
+    if not raw_dates.empty:
+        max_date = raw_dates.max().date()
+        default_from = max_date.replace(day=1)
+        default_to = max_date
+    else:
+        default_from = pd.Timestamp.today().date().replace(day=1)
+        default_to = pd.Timestamp.today().date()
+        
+    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
+    if pd.isna(min_d): min_d = default_from
+    if pd.isna(max_d): max_d = default_to
+
+    date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
+    
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        d_from, d_to = date_range
+    else:
+        d_from, d_to = min_d, max_d
+        
+    if d_from == d_to: st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
+        
+    delta_days = (d_to - d_from).days + 1
+    prev_d_from, prev_d_to = d_from - timedelta(days=delta_days), d_from - timedelta(days=1)
+    PERIOD_KEY = f"{d_from}_{d_to}"
+    
+    sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
+    sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
+
+    st.markdown("<br><br>", unsafe_allow_html=True); st.divider()
+    if is_admin() and pending_count() > 0: st.warning(f"🔔 {pending_count()} pending requests")
+    st.success("📡 Master Live-DB Synced")
+    if is_admin() and st.button("🔄 Refresh Master Tables", use_container_width=True): st.cache_data.clear(); st.rerun()
+
+    sb1, sb2 = st.columns(2)
+    with sb1:
+        if st.button("⚙️ Settings", use_container_width=True): st.session_state.page = "settings"; st.rerun()
+    with sb2:
+        if st.button("🚪 Logout", use_container_width=True):
+            st.query_params.clear()
+            for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
+            st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  DATA FILTERING INFRASTRUCTURE
+# ══════════════════════════════════════════════════════════════════════════════════
+def get_roster_stats(roster_df, start_date, end_date):
+    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
+    if roster_df.empty: return counts
+    valid_cols = []
+    for col in roster_df.columns:
+        col_str = str(col).strip()
+        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
+        if match:
+            try:
+                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                if start_date <= col_date <= end_date: valid_cols.append(col)
+            except: pass
+
+    df_r_str = roster_df.astype(str)
+    for exp in OFFICIAL_EXPERTS:
+        exp_id = EXPERT_ID_MAP.get(exp, "")
+        if exp_id:
+            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+            exp_rows = df_r_str[mask]
+            if not exp_rows.empty and valid_cols:
+                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
+                if safe_cols:
+                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
+                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
+                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
+                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
+                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
+    return counts
+
+curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
+prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
+
+out_req_dict, prev_out_req_dict = {}, {}
+global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
+
+if not df_out_req.empty and "Date" in df_out_req.columns:
+    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
+    df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
+    if "Source" in df_out_filtered.columns: global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    global_support = len(df_out_filtered) - global_jhah
+    if "Expert Name" in df_out_filtered.columns:
+        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+            
+    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
+    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    prev_global_support = len(df_out_prev) - prev_global_jhah
+    if "Expert Name" in df_out_prev.columns:
+        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+
+df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
+
+if sel_hic: df = df[df["HIC"].isin(sel_hic)]; df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
+if sel_req_type: df = df[df["Request Type"].isin(sel_req_type)]; df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+
+expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
+if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
+    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
+    df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
+    def get_deduction(sev):
+        s = str(sev).strip().lower()
+        if s == 'critical': return 5.0
+        elif s == 'major': return 2.0
+        elif s == 'medium': return 1.0
+        elif s == 'minor': return 0.5
+        return 0.0
+    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
+    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
+    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
+    expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  SETTINGS / ADMIN CONTROL SINK
 # ══════════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "settings":
     if st.button("← Back to Dashboard"): st.session_state.page = "dashboard"; st.rerun()
@@ -559,7 +785,7 @@ if st.session_state.page == "settings":
                         st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 طلب حساب جديد لـ: <b>{p_data.get('name')}</b> (كود: {p_data.get('id')})</div>", unsafe_allow_html=True)
                         rc1, rc2 = st.columns(2)
                         with rc1:
-                            if st.button("✅ موافقة واعتماد", key=f"apr_{req['id']}", use_container_width=True):
+                            if st.button("✅ موافقة واعتماد", key=f"apr_na_{req['id']}", use_container_width=True):
                                 add_user_to_sheet(p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'])
                                 req["status"] = "approved"; _save_store()
                                 send_approval_email(p_data['email'], p_data['name'], p_data['id'])
@@ -907,7 +1133,15 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            if not dfm.empty:
+                base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
+                avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
+                for d in ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']: base_metrics.append({"Metric": f"Avg Requests ({d})", "Value": avg_per_weekday.get(d, 0)})
+                base_metrics.append({"Metric": "--- REQUEST TYPES BREAKDOWN ---", "Value": ""})
+                has_tat = "Request Take (min)" in dfm.columns
+                rt_tat = dfm.groupby("Request Type")["Request Take (min)"].mean() if has_tat else pd.Series(dtype=float)
+                for rt_name, rt_count in req_counts.items(): base_metrics.append({"Metric": f"Type: {rt_name}", "Value": f"{rt_count} Requests ({req_pct[rt_name]}%) | Avg TAT: {fmt_m(rt_tat.get(rt_name, 0)) if has_tat else '00:00:00'}"})
             st.download_button("📥 Download Operational Summary (CSV)", pd.DataFrame(base_metrics).to_csv(index=False).encode('utf-8-sig'), f"Operational_Summary_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
         with c_exp2:
             df_sc_g = df[df["Assigned By"].astype(str).str.strip().str.lower().isin([x.lower() for x in OFFICIAL_EXPERTS])].copy()
