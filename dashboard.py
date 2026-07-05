@@ -127,7 +127,7 @@ def update_user_role_dname_aname_sheet(uname, role, dname, aname):
 # ══════════════════════════════════════════════════════════════════════════════════
 def notify_admin_whatsapp(logged_in_user):
     try:
-        if "whatsapp" in st.secrets pinning and "api_key" in st.secrets["whatsapp"]:
+        if "whatsapp" in st.secrets and "api_key" in st.secrets["whatsapp"]:
             api_key = st.secrets["whatsapp"]["api_key"]
             phone = "+201129217380"
             msg = f"🚨 *System Login Alert*%0AUser: *{logged_in_user}*%0ATime: {time.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -291,7 +291,7 @@ def load_data():
             except: return 0
             
         def normalize_expert_name(name):
-            AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "islam رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
+            AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
             EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
             if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
             n_lower = str(name).lower().strip()
@@ -744,13 +744,13 @@ with tabs[0]:
 <script>
 const SB_PAYLOADS = {sb_payloads_json}; const BAR_DATA = {bar_data_json};
 let selectedRt = "All Types"; let selectedBarIdx = null;
-const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Requests: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
+const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
 const barLayout = {{ margin: {{ l: 8, r: 8, t: 10, b: 10 }}, bargap: 0.3, xaxis: {{ visible: false }}, yaxis: {{ autorange: "reversed", tickfont: {{ size: 12, color: "#334155", weight: "bold" }}, fixedrange: true, automargin: true }}, plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 function buildTrace(rt) {{
   const d = SB_PAYLOADS[rt] || SB_PAYLOADS["All Types"];
   if (!d || d.labels.length === 0) return null;
-  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Requests: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
+  return {{ type: "sunburst", ids: d.ids, labels: d.labels, parents: d.parents, values: d.values, branchvalues: "total", sort: false, marker: {{ colors: d.colors }}, texttemplate: d.labels.map((lbl, i) => d.parents[i] === "" ? "<b>%{{label}}</b>" : "%{{label}}<br>%{{percentParent:.0%}}"), textinfo: "none", insidetextorientation: "radial", hovertemplate: "<b>%{{label}}</b><br>Tickets: %{{value:,}}<br>Share: %{{percentParent:.1%}}<extra></extra>", leaf: {{ opacity: 0.93 }} }};
 }}
 const sbLayout = {{ margin: {{ t: 10, b: 10, l: 10, r: 10 }}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 const allFrames = Object.keys(SB_PAYLOADS).map(rt => ({{ name: rt, data: [buildTrace(rt)] }})).filter(f => f.data[0] !== null);
@@ -778,7 +778,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
     st.divider()
 
     if not df_raw.empty:
-        st.markdown("### ⏳ Request flow rate over daily hours")
+        st.markdown("### ⏳ Ticket flow rate over daily hours")
         df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         if esc and not nesc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == True]
         elif nesc and not esc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == False]
@@ -796,7 +796,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
         fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#10b981", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
         fig_r.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_r.update_yaxes(title_text="Volume (Requests)", secondary_y=False); fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
+        fig_r.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
         st.plotly_chart(fig_r, use_container_width=True)
 
         st.divider()
@@ -806,12 +806,12 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
         fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["ST"], name="TAT (Avg Service)", mode="lines+markers", line=dict(color="#f59e0b", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
         fig_st.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_st.update_yaxes(title_text="Volume (Requests)", secondary_y=False); fig_st.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True)
+        fig_st.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_st.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True)
         st.plotly_chart(fig_st, use_container_width=True)
 
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
-        st.markdown("""<div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem; color: #475569;"><strong>Agent Workload Indicator (Requests per Agent):</strong><br><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#eab308; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span><span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span></div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="text-align: left; font-size: 1.1rem; margin-bottom: 1rem; color: #475569;"><strong>Agent Workload Indicator (Tickets per Agent):</strong><br><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#3b82f6; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Optimal (≤55)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#eab308; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Moderate (56-60)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#f97316; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>High (61-63)</span><span style="display: inline-block; margin-right: 15px;"><span style="display:inline-block; width:14px; height:14px; background-color:#ef4444; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Severe (64-70)</span><span style="display: inline-block;"><span style="display:inline-block; width:14px; height:14px; background-color:#991b1b; border-radius:3px; vertical-align:middle; margin-right:6px; margin-bottom:2px;"></span>Excessive (>70)</span></div>""", unsafe_allow_html=True)
         
         df_workload = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         if esc and not nesc: df_workload = df_workload[df_workload["Is Email"] == True]
@@ -851,10 +851,10 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         daily_vol["Color"] = np.select([daily_vol["Tickets per Agent"] > 70, daily_vol["Tickets per Agent"] > 63, daily_vol["Tickets per Agent"] > 60, daily_vol["Tickets per Agent"] > 55], ["#991b1b", "#ef4444", "#f97316", "#eab308"], default="#3b82f6") 
         
         fig_d = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_d.add_trace(go.Bar(x=daily_vol["Date Label"], y=daily_vol["Total_Tickets"], text=daily_vol["Total_Tickets"], textposition='auto', marker_color=daily_vol["Color"], name="Total Requests", showlegend=False, hovertemplate="<b>%{x}</b><br>Requests: %{y}<extra></extra>"), secondary_y=False)
-        fig_d.add_trace(go.Scatter(x=daily_vol["Date Label"], y=daily_vol["Tickets per Agent"], name="Requests per Agent (Workload)", mode="lines+markers+text", text=daily_vol["Tickets per Agent"], textposition="top center", line=dict(color="#475569", width=3, shape="spline"), marker=dict(size=8, color="#1e293b"), hovertemplate="<b>%{x}</b><br>Requests/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>", customdata=daily_vol["Active_Agents"]), secondary_y=True)
+        fig_d.add_trace(go.Bar(x=daily_vol["Date Label"], y=daily_vol["Total_Tickets"], text=daily_vol["Total_Tickets"], textposition='auto', marker_color=daily_vol["Color"], name="Total Tickets", showlegend=False, hovertemplate="<b>%{x}</b><br>Tickets: %{y}<extra></extra>"), secondary_y=False)
+        fig_d.add_trace(go.Scatter(x=daily_vol["Date Label"], y=daily_vol["Tickets per Agent"], name="Tickets per Agent (Workload)", mode="lines+markers+text", text=daily_vol["Tickets per Agent"], textposition="top center", line=dict(color="#475569", width=3, shape="spline"), marker=dict(size=8, color="#1e293b"), hovertemplate="<b>%{x}</b><br>Tickets/Agent: %{y}<br>Scheduled Agents: %{customdata}<extra></extra>", customdata=daily_vol["Active_Agents"]), secondary_y=True)
         fig_d.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=480, xaxis_title="", hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_d.update_yaxes(title_text="Total Requests Count", secondary_y=False); fig_d.update_yaxes(title_text="Workload Ratio (Requests/Agent)", secondary_y=True)
+        fig_d.update_yaxes(title_text="Total Tickets Count", secondary_y=False); fig_d.update_yaxes(title_text="Workload Ratio (Tickets/Agent)", secondary_y=True)
         st.plotly_chart(fig_d, use_container_width=True)
 
         st.divider()
@@ -866,9 +866,9 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         hic_counts = pd.DataFrame()
         if not df_hic_strict.empty:
             hic_counts = df_hic_strict.groupby("HIC").agg(Volume=("Request ID", "count")).reset_index().sort_values(by="Volume", ascending=False) 
-            fig_hic = px.bar(hic_counts, x="HIC", y="Volume", text="Volume", color_discrete_sequence=["#2563eb"], labels={"Volume": "Requests Count", "HIC": "Insurance Provider"})
-            fig_hic.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Requests Resolved: %{y:,}<extra></extra>")
-            fig_hic.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=500, xaxis_title="", yaxis_title="Total Handled Volume (Requests)", xaxis_tickangle=-45, legend_title_text="Insurance Provider")
+            fig_hic = px.bar(hic_counts, x="HIC", y="Volume", text="Volume", color_discrete_sequence=["#2563eb"], labels={"Volume": "Tickets Count", "HIC": "Insurance Provider"})
+            fig_hic.update_traces(textposition="outside", hovertemplate="<b>%{x}</b><br>Tickets Resolved: %{y:,}<extra></extra>")
+            fig_hic.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=500, xaxis_title="", yaxis_title="Total Handled Volume (Tickets)", xaxis_tickangle=-45, legend_title_text="Insurance Provider")
             st.plotly_chart(fig_hic, use_container_width=True)
         else: st.info("No insurance (HIC) records available for this period.")
 
@@ -961,7 +961,6 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             hrs_pass = hrs if 'hrs' in locals() else pd.DataFrame()
             dvol_pass = daily_vol if 'daily_vol' in locals() else pd.DataFrame()
 
-            # تشغيل الـ 7 شرائح الاحترافية التفصيلية لـ Tab 1 بالكامل
             ppt_file_data, err_msg = generate_pptx_summary(
                 d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct,
                 fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support,
@@ -1077,9 +1076,9 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             sc["_sort_cases"] = sc["Cases/Day"].astype(float)
             sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
-            sc["Rank"] = sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
+            sc.insert(1, "Rank", sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
             sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
-        else: sc["Rank"] = ""
+        else: sc.insert(1, "Rank", [])
             
         cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
         sc = sc[cols_sc]
