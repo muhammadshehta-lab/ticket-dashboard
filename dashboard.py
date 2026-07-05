@@ -363,6 +363,11 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
+# ── EXPLICIT SAFE INITIALIZATION OF GLOBALS TO PREVENT NAMERROR ──
+d_from = pd.Timestamp.today().date().replace(day=1)
+d_to = pd.Timestamp.today().date()
+PERIOD_KEY = f"{d_from}_{d_to}"
+
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -660,94 +665,6 @@ with st.sidebar:
             st.query_params.clear()
             for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
             st.rerun()
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  DATA FILTERING INFRASTRUCTURE
-# ══════════════════════════════════════════════════════════════════════════════════
-def get_roster_stats(roster_df, start_date, end_date):
-    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
-    if roster_df.empty: return counts
-    valid_cols = []
-    for col in roster_df.columns:
-        col_str = str(col).strip()
-        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
-        if match:
-            try:
-                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                if start_date <= col_date <= end_date: valid_cols.append(col)
-            except: pass
-
-    df_r_str = roster_df.astype(str)
-    for exp in OFFICIAL_EXPERTS:
-        exp_id = EXPERT_ID_MAP.get(exp, "")
-        if exp_id:
-            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
-            exp_rows = df_r_str[mask]
-            if not exp_rows.empty and valid_cols:
-                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
-                if safe_cols:
-                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
-                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
-                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
-                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
-                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
-    return counts
-
-curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
-prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
-
-out_req_dict, prev_out_req_dict = {}, {}
-global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
-
-if not df_out_req.empty and "Date" in df_out_req.columns:
-    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
-    df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
-    if "Source" in df_out_filtered.columns: global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    global_support = len(df_out_filtered) - global_jhah
-    if "Expert Name" in df_out_filtered.columns:
-        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-            
-    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
-    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    prev_global_support = len(df_out_prev) - prev_global_jhah
-    if "Expert Name" in df_out_prev.columns:
-        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-
-df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
-
-if sel_hic: 
-    df = df[df["HIC"].isin(sel_hic)]
-    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
-if sel_req_type: 
-    df = df[df["Request Type"].isin(sel_req_type)]
-    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
-
-expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
-if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
-    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
-    df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
-    def get_deduction(sev):
-        s = str(sev).strip().lower()
-        if s == 'critical': return 5.0
-        elif s == 'major': return 2.0
-        elif s == 'medium': return 1.0
-        elif s == 'minor': return 0.5
-        return 0.0
-    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
-    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
-    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
-    expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS / ADMIN CONTROL SINK
@@ -1184,8 +1101,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
             sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
             sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
-            sc_g.insert(0, "Rank", sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
-            sc_g.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True, errors="ignore")
+            sc_g["Rank"] = sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str)
             
             cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
             sc_g = sc_g[cols_order]
@@ -1365,7 +1281,16 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             return styles
 
         display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
-        html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900'}).to_html()
+        
+        styled_df = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'})
+        
+        try: 
+            html_table = styled_df.hide(axis="index").to_html()
+        except Exception: 
+            try: 
+                html_table = styled_df.hide_index().to_html()
+            except Exception: 
+                html_table = styled_df.to_html()
         
         st.markdown("### 📊 Expert Performance Scorecard Dashboard")
         st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
