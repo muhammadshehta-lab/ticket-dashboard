@@ -219,6 +219,39 @@ h4 { font-size: 1.35rem !important; font-weight: 800 !important; color: #334155 
 THEME = dict(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10))
 
 # ══════════════════════════════════════════════════════════════════════════════════
+#  GLOBALS & CONFIGURATIONS
+# ══════════════════════════════════════════════════════════════════════════════════
+DAYS_AR = {"Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"}
+OFFICIAL_EXPERTS = ["Ahmed El-Kholy", "Ahmed Kadry", "Amr El-Sayed", "Eslam Ramadan", "Mohamed Abdelmageed", "Mohamed Khalifa", "Yahia Ali Shafei"]
+EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
+AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
+EXCLUSION_LIST = ['off', 'اوف', 'أوف', 'راحة', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي', 'nan', 'none', '']
+
+def normalize_expert_name(name):
+    if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
+    n_lower = str(name).lower().strip()
+    if n_lower in AGENT_ALIASES: return AGENT_ALIASES[n_lower]
+    id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
+    if name in id_to_name: return id_to_name[name]
+    return str(name).strip()
+
+def time_to_minutes(s):
+    try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
+    except: return 0
+
+def fmt_m(v):
+    if pd.isna(v) or v <= 0: return "00:00:00"
+    t = int(round(v * 60))
+    return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
+
+def assign_time_tier(m):
+    if m <= 15: return "Under 15 Mins"
+    if m <= 30: return "15-30 Mins"
+    if m <= 45: return "30-45 Mins"
+    if m <= 60: return "45-60 Mins"
+    return "Over 1 Hour"
+
+# ══════════════════════════════════════════════════════════════════════════════════
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
 # ══════════════════════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=300, show_spinner="Syncing database tables…")
@@ -285,20 +318,6 @@ def load_data():
         for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
             if c not in df.columns: df[c] = np.nan
         if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
-        
-        def time_to_minutes(s):
-            try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
-            except: return 0
-            
-        def normalize_expert_name(name):
-            AGENT_ALIASES = {"mohamed abdelmajid": "Mohamed Abdelmageed", "mohamed el-sayed": "Mohamed Abdelmageed", "محمد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد عبد المجيد": "Mohamed Abdelmageed", "محمد السيد": "Mohamed Abdelmageed", "50274": "Mohamed Abdelmageed", "احمد الخولى": "Ahmed El-Kholy", "أحمد الخولي": "Ahmed El-Kholy", "احمد الخولي": "Ahmed El-Kholy", "50107": "Ahmed El-Kholy", "يحي علي شافعي": "Yahia Ali Shafei", "يحيي علي شافعي": "Yahia Ali Shafei", "50114": "Yahia Ali Shafei", "عمرو محمد السيد": "Amr El-Sayed", "50187": "Amr El-Sayed", "أحمد محمد قدري": "Ahmed Kadry", "احمد محمد قدري": "Ahmed Kadry", "احمد قدري": "Ahmed Kadry", "50399": "Ahmed Kadry", "إسلام رمضان خليل": "Eslam Ramadan", "أصلان رمضان خليل": "Eslam Ramadan", "اسلام رمضان": "Eslam Ramadan", "50461": "Eslam Ramadan", "محمد خليفة جاب الله": "Mohamed Khalifa", "محمد خليفه جاب الله": "Mohamed Khalifa", "محمد خليفة": "Mohamed Khalifa", "محمد خليفه": "Mohamed Khalifa", "50476": "Mohamed Khalifa", "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", "50228": "Muhammad Shehta"}
-            EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
-            if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
-            n_lower = str(name).lower().strip()
-            if n_lower in AGENT_ALIASES: return AGENT_ALIASES[n_lower]
-            id_to_name = {v: k for k, v in EXPERT_ID_MAP.items()}
-            if name in id_to_name: return id_to_name[name]
-            return str(name).strip()
 
         df["Status"]       = df["Status"].fillna("Unknown")
         df["Status Count"] = pd.to_numeric(df["Status Count"], errors="coerce").fillna(0).astype(int)
@@ -390,26 +409,6 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
         bg_color = color + "15"
         change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: {color}; background-color: {bg_color};">{arrow} {abs(change):.1f}%</div>'
     return (f'<div class="kpi-container {cls}"><div class="kpi-label">{label}</div><div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;">{value}</div>{change_html}</div>')
-
-def time_to_minutes(s):
-    try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
-    except: return 0
-
-def fmt_m(v):
-    if pd.isna(v) or v <= 0: return "00:00:00"
-    t = int(round(v * 60))
-    return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
-
-def assign_time_tier(m):
-    if m <= 15: return "Under 15 Mins"
-    if m <= 30: return "15-30 Mins"
-    if m <= 45: return "30-45 Mins"
-    if m <= 60: return "45-60 Mins"
-    return "Over 1 Hour"
-
-DAYS_AR = {"Saturday": "السبت", "Sunday": "الأحد", "Monday": "الإثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة"}
-OFFICIAL_EXPERTS = ["Ahmed El-Kholy", "Ahmed Kadry", "Amr El-Sayed", "Eslam Ramadan", "Mohamed Abdelmageed", "Mohamed Khalifa", "Yahia Ali Shafei"]
-EXPERT_ID_MAP = {"Ahmed El-Kholy": "50107", "Ahmed Kadry": "50399", "Amr El-Sayed": "50187", "Eslam Ramadan": "50461", "Mohamed Abdelmageed": "50274", "Mohamed Khalifa": "50476", "Yahia Ali Shafei": "50114"}
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  MASTER PPTX GENERATOR FUNCTION (ALL TAB 1 DATA MAPPED PROFESSIONALLY)
@@ -1133,7 +1132,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
