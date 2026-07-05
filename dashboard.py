@@ -411,6 +411,123 @@ def reject_request(req_id):
     return False
 
 # ══════════════════════════════════════════════════════════════════════════════════
+#  MASTER PPTX GENERATOR FUNCTION (ALL TAB 1 DATA MAPPED PROFESSIONALLY)
+# ══════════════════════════════════════════════════════════════════════════════════
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, hic_df, hrs_df, daily_vol_df, sc_g):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.enum.text import PP_ALIGN
+        from pptx.dml.color import RGBColor
+        from io import BytesIO
+
+        prs = Presentation()
+
+        # Slide 1: Executive Title Slide
+        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
+        slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
+        slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
+
+        # Slide 2: Core KPIs Table Matrix
+        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
+        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
+        for i in range(4):
+            table_shape.cell(0, i).text = "Metric Descriptor" if i % 2 == 0 else "System Value"
+            table_shape.cell(0, i).fill.solid(); table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            table_shape.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+            table_shape.cell(0, i).text_frame.paragraphs[0].font.bold = True
+        metrics = [
+            ("Tickets Count", f"{total_val:,}"), ("Total Actions", f"{actions_val:,}"),
+            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"), ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
+            ("AFR (Avg Response)", afr_str), ("TAT (Avg Service Time)", tat_str),
+            ("Stores Served", f"{stores_val:,}"), ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
+            ("JHAH Out Volumes", f"{jhah_val:,}"), ("Support Out Volumes", f"{support_val:,}")
+        ]
+        r, c = 1, 0
+        for m_name, m_val in metrics:
+            table_shape.cell(r, c).text = m_name
+            table_shape.cell(r, c+1).text = str(m_val)
+            table_shape.cell(r, c+1).text_frame.paragraphs[0].font.bold = True
+            c += 2
+            if c >= 4: c, r = 0, r + 1
+
+        # Slide 3: Request Type & Service Time Analysis
+        slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
+        rows_rt = min(9, len(req_counts_dict) + 1)
+        table_rt = slide_rt.shapes.add_table(rows_rt, 3, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_rt * 0.45)).table
+        headers_rt = ["Request Category Type", "Handled Volume Shares", "Percentage Split (%)"]
+        for idx, text in enumerate(headers_rt):
+            table_rt.cell(0, idx).text = text
+            table_rt.cell(0, idx).fill.solid(); table_rt.cell(0, idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+            table_rt.cell(0, idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+        for r_idx, (rt_name, rt_count) in enumerate(list(req_counts_dict.items())[:8]):
+            table_rt.cell(r_idx + 1, 0).text = str(rt_name)
+            table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
+            table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
+
+        # Slide 4: Health Insurance Distribution Share
+        slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
+        if not hic_df.empty:
+            rows_hic = min(7, len(hic_df) + 1)
+            table_hic = slide_hic.shapes.add_table(rows_hic, 2, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_hic * 0.5)).table
+            table_hic.cell(0, 0).text = "Insurance Provider"; table_hic.cell(0, 1).text = "Resolved Tickets Volume"
+            for i in range(2): 
+                table_hic.cell(0, i).fill.solid(); table_hic.cell(0, i).fill.fore_color.rgb = RGBColor(13, 148, 136)
+                table_hic.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+            for r_idx, row in hic_df.head(6).reset_index(drop=True).iterrows():
+                table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
+                table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
+
+        # Slide 5: Hourly Request Traffic Flow
+        slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
+        if not hrs_df.empty:
+            peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
+            tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
+            tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
+            tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
+            tx.add_paragraph().text = f"• Average Response Speed (FRT) during hourly shifts: {hrs_df['AR'].mean():.1f} minutes."
+            tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
+            for p in tx.paragraphs: p.font.size = Pt(16)
+
+        # Slide 6: Daily Workload & Agent Schedule Analysis
+        slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
+        if not daily_vol_df.empty:
+            tx = slide_wl.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
+            tx.add_paragraph().text = f"• Average Workload Ratio across selected cycle: {daily_vol_df['Tickets per Agent'].mean():.1f} tickets per Expert daily."
+            tx.add_paragraph().text = f"• Maximum surge Workload tracked at: {daily_vol_df['Tickets per Agent'].max():.1f} requests/agent."
+            tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
+            for p in tx.paragraphs: p.font.size = Pt(16)
+
+        # Slide 7: Team Leaderboard Scorecard
+        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
+        if not sc_g.empty:
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            rows = len(sc_g) + 1
+            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
+            for c_idx, col_name in enumerate(cols_to_show):
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
+                table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
+            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
+                for c_idx, col_name in enumerate(cols_to_show):
+                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
+                    table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(11)
+
+        ppt_stream = BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
+        return ppt_stream, None
+    except Exception as e:
+        return None, f"An error occurred while generating presentation: {str(e)}"
+
+# ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE WITH TOTAL BAN SINK
 # ══════════════════════════════════════════════════════════════════════════════════
 if not st.session_state.authenticated:
@@ -548,211 +665,6 @@ with st.sidebar:
             st.query_params.clear()
             for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
             st.rerun()
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  DATA FILTERING INFRASTRUCTURE
-# ══════════════════════════════════════════════════════════════════════════════════
-def get_roster_stats(roster_df, start_date, end_date):
-    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
-    if roster_df.empty: return counts
-    valid_cols = []
-    for col in roster_df.columns:
-        col_str = str(col).strip()
-        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
-        if match:
-            try:
-                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                if start_date <= col_date <= end_date: valid_cols.append(col)
-            except: pass
-
-    df_r_str = roster_df.astype(str)
-    for exp in OFFICIAL_EXPERTS:
-        exp_id = EXPERT_ID_MAP.get(exp, "")
-        if exp_id:
-            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
-            exp_rows = df_r_str[mask]
-            if not exp_rows.empty and valid_cols:
-                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
-                if safe_cols:
-                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
-                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
-                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
-                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
-                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
-    return counts
-
-curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
-prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
-
-out_req_dict, prev_out_req_dict = {}, {}
-global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
-
-if not df_out_req.empty and "Date" in df_out_req.columns:
-    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
-    df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
-    if "Source" in df_out_filtered.columns: global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    global_support = len(df_out_filtered) - global_jhah
-    if "Expert Name" in df_out_filtered.columns:
-        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-            
-    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
-    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    prev_global_support = len(df_out_prev) - prev_global_jhah
-    if "Expert Name" in df_out_prev.columns:
-        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-
-df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
-
-if sel_hic: 
-    df = df[df["HIC"].isin(sel_hic)]
-    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
-if sel_req_type: 
-    df = df[df["Request Type"].isin(sel_req_type)]
-    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
-
-expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
-if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
-    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
-    df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
-    def get_deduction(sev):
-        s = str(sev).strip().lower()
-        if s == 'critical': return 5.0
-        elif s == 'major': return 2.0
-        elif s == 'medium': return 1.0
-        elif s == 'minor': return 0.5
-        return 0.0
-    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
-    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
-    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
-    expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  MASTER PPTX GENERATOR FUNCTION (ALL TAB 1 DATA MAPPED PROFESSIONALLY)
-# ══════════════════════════════════════════════════════════════════════════════════
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, hic_df, hrs_df, daily_vol_df, sc_g):
-    try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt
-        from pptx.enum.text import PP_ALIGN
-        from pptx.dml.color import RGBColor
-        from io import BytesIO
-
-        prs = Presentation()
-
-        # Slide 1: Executive Title Slide
-        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
-        slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
-        slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
-
-        # Slide 2: Core KPIs Table Matrix
-        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
-        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
-        for i in range(4):
-            table_shape.cell(0, i).text = "Metric Descriptor" if i % 2 == 0 else "System Value"
-            table_shape.cell(0, i).fill.solid(); table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
-            table_shape.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-            table_shape.cell(0, i).text_frame.paragraphs[0].font.bold = True
-        metrics = [
-            ("Tickets Count", f"{total_val:,}"), ("Total Actions", f"{actions_val:,}"),
-            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"), ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
-            ("AFR (Avg Response)", afr_str), ("TAT (Avg Service Time)", tat_str),
-            ("Stores Served", f"{stores_val:,}"), ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
-            ("JHAH Out Volumes", f"{jhah_val:,}"), ("Support Out Volumes", f"{support_val:,}")
-        ]
-        r, c = 1, 0
-        for m_name, m_val in metrics:
-            table_shape.cell(r, c).text = m_name
-            table_shape.cell(r, c+1).text = str(m_val)
-            table_shape.cell(r, c+1).text_frame.paragraphs[0].font.bold = True
-            c += 2
-            if c >= 4: c, r = 0, r + 1
-
-        # Slide 3: Request Type & Service Time Analysis
-        slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
-        rows_rt = min(9, len(req_counts_dict) + 1)
-        table_rt = slide_rt.shapes.add_table(rows_rt, 3, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_rt * 0.45)).table
-        headers_rt = ["Request Category Type", "Handled Volume Shares", "Percentage Split (%)"]
-        for idx, text in enumerate(headers_rt):
-            table_rt.cell(0, idx).text = text
-            table_rt.cell(0, idx).fill.solid(); table_rt.cell(0, idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-            table_rt.cell(0, idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-        for r_idx, (rt_name, rt_count) in enumerate(list(req_counts_dict.items())[:8]):
-            table_rt.cell(r_idx + 1, 0).text = str(rt_name)
-            table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
-            table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
-
-        # Slide 4: Health Insurance Distribution Share
-        slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
-        if not hic_df.empty:
-            rows_hic = min(7, len(hic_df) + 1)
-            table_hic = slide_hic.shapes.add_table(rows_hic, 2, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_hic * 0.5)).table
-            table_hic.cell(0, 0).text = "Insurance Provider"; table_hic.cell(0, 1).text = "Resolved Tickets Volume"
-            for i in range(2): 
-                table_hic.cell(0, i).fill.solid(); table_hic.cell(0, i).fill.fore_color.rgb = RGBColor(13, 148, 136)
-                table_hic.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-            for r_idx, row in hic_df.head(6).reset_index(drop=True).iterrows():
-                table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
-                table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
-
-        # Slide 5: Hourly Request Traffic Flow
-        slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
-        if not hrs_df.empty:
-            peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
-            tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
-            tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
-            tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
-            tx.add_paragraph().text = f"• Average Response Speed (FRT) during hourly shifts: {hrs_df['AR'].mean():.1f} minutes."
-            tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
-            for p in tx.paragraphs: p.font.size = Pt(16)
-
-        # Slide 6: Daily Workload & Agent Schedule Analysis
-        slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
-        if not daily_vol_df.empty:
-            tx = slide_wl.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
-            tx.add_paragraph().text = f"• Average Workload Ratio across selected cycle: {daily_vol_df['Tickets per Agent'].mean():.1f} tickets per Expert daily."
-            tx.add_paragraph().text = f"• Maximum surge Workload tracked at: {daily_vol_df['Tickets per Agent'].max():.1f} requests/agent."
-            tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
-            for p in tx.paragraphs: p.font.size = Pt(16)
-
-        # Slide 7: Team Leaderboard Scorecard
-        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
-        if not sc_g.empty:
-            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
-            rows = len(sc_g) + 1
-            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
-            for c_idx, col_name in enumerate(cols_to_show):
-                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
-                table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
-            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
-                for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
-                    table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(11)
-
-        ppt_stream = BytesIO()
-        prs.save(ppt_stream)
-        ppt_stream.seek(0)
-        return ppt_stream, None
-    except Exception as e:
-        return None, f"An error occurred while generating presentation: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS / ADMIN CONTROL SINK
@@ -1366,67 +1278,117 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             elif "🥈" in exp: styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
             elif "🥉" in exp: styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
             if "Prospected Incentive" in row.index and exp != "🏆 Team AVG":
-                styles[row.index.get_loc("Prospected Incentive")] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900;'
+                inc_val = str(row["Prospected Incentive"]).replace(',', '').replace(' EGP', '').strip()
+                try:
+                    inc_num = float(inc_val)
+                    if inc_num < 3100:
+                        styles[row.index.get_loc("Prospected Incentive")] += '; background-color: #fef2f2; color: #dc2626; font-weight: 900; border: 2px solid #fca5a5;'
+                    else:
+                        styles[row.index.get_loc("Prospected Incentive")] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
+                except: pass
             return styles
 
         display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
-        html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900'}).to_html()
+        
+        try: 
+            html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
+        except Exception: 
+            try: 
+                html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide_index().to_html()
+            except Exception: 
+                html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).to_html()
         
         st.markdown("### 📊 Expert Performance Scorecard Dashboard")
         st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
-        
-        # ── EMAIL GENERATION WITH RANK & EMAILS EMBEDDED ──
-        sel_email_agent = st.selectbox("Select Agent for Email Draft", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
-        if sel_email_agent:
-            arow, trow = sc_final[sc_final["Expert"] == sel_email_agent].iloc[0], sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
-            a_tot = int(arow['Tickets Count'] + arow['JHAH Requests'] + arow['Support Requests'])
-            t_tot = int(trow['Tickets Count'] + trow['JHAH Requests'] + trow['Support Requests'])
-            
-            rank_str = str(arow.get('Rank', '-'))
-            rank_badge = "🥇 1st Place" if rank_str == "1" else ("🥈 2nd Place" if rank_str == "2" else ("🥉 3rd Place" if rank_str == "3" else f"#{rank_str} Place"))
-            rank_msg = f"<br><br>🏆 <b>Team Ranking:</b> I am proud to share that you have successfully secured <b>{rank_badge}</b> in the overall team leaderboard this period! 🌟"
+        st.divider()
 
-            email_html_table = f"""
-            <table style="width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif; font-size: 13px; border: 1px solid #e2e8f0; text-align:center;">
-                <thead>
-                    <tr style="background-color: #f8fafc; color: #0f172a; border-bottom: 2px solid #cbd5e1;">
-                        <th style="padding: 10px; text-align: left;">Metric</th>
-                        <th style="padding: 10px;">Rank</th>
-                        <th style="padding: 10px;">Tickets</th>
-                        <th style="padding: 10px;">Emails</th>
-                        <th style="padding: 10px;">Cases/Day</th>
-                        <th style="padding: 10px;">Achievement</th>
-                        <th style="padding: 10px;">Quality</th>
-                        <th style="padding: 10px;">Incentive</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td style="padding: 10px; text-align: left; font-weight: bold;">Your Score 👤</td>
-                        <td style="padding: 10px; color:#2563eb; font-weight:bold;">#{rank_str}</td>
-                        <td style="padding: 10px;">{arow['Tickets Count']}</td>
-                        <td style="padding: 10px; font-weight:bold; color:#0ea5e9;">{arow['Emails Count']}</td>
-                        <td style="padding: 10px;">{arow['Cases/Day']}</td>
-                        <td style="padding: 10px;">{arow['% Achievement from Target']}</td>
-                        <td style="padding: 10px;">{arow['Service Quality']}</td>
-                        <td style="padding: 10px; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
-                    </tr>
-                    <tr style="background-color: #fcfcfc; color: #475569;">
-                        <td style="padding: 10px; text-align: left; font-weight: bold;">Team Avg 🏆</td>
-                        <td style="padding: 10px;">-</td>
-                        <td style="padding: 10px;">{int(trow['Tickets Count'])}</td>
-                        <td style="padding: 10px;">{int(trow['Emails Count'])}</td>
-                        <td style="padding: 10px;">{trow['Cases/Day']}</td>
-                        <td style="padding: 10px;">{trow['% Achievement from Target']}</td>
-                        <td style="padding: 10px;">{trow['Service Quality']}</td>
-                        <td style="padding: 10px;">3,100 EGP</td>
-                    </tr>
-                </tbody>
-            </table>
-            """
-            st.markdown("##### 📝 Email Preview")
-            st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your contributions.{rank_msg}<br>{email_html_table}<br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
-            st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
+        st.markdown("### 🔍 Quality Issues Log (Current Period)")
+        if not df_q_filtered.empty:
+            q_view = df_q_filtered[df_q_filtered['Display_Expert'] == aname].copy() if is_exp else (df_q_filtered[df_q_filtered['Display_Expert'].isin([x for x in OFFICIAL_EXPERTS if x in sel_agents_t2])] if sel_agents_t2 else df_q_filtered.copy())
+            if q_view.empty: st.success("🎉 No quality issues recorded for the selected expert(s) in this period!")
+            else:
+                disp_q = q_view[['Date', 'Expert Name', 'Ticket ID', 'Severity', 'Reason', 'Deduction']].copy().rename(columns={'Deduction': 'Deduction (%)'})
+                disp_q['Deduction (%)'] = disp_q['Deduction (%)'].apply(lambda x: f"-{x}%")
+                disp_q['Severity'] = disp_q['Severity'].apply(lambda s: {'critical':'🔴 Critical','major':'🟠 Major','medium':'🟠 Medium','minor':'🔵 Minor'}.get(str(s).strip().lower(), s))
+                def style_q(row):
+                    sev, styles = str(row['Severity']).lower(), ['background-color: #ffffff; color: #1e293b; font-weight: 600'] * len(row)
+                    for i, col in enumerate(row.index):
+                        if col in ['Severity', 'Deduction (%)']: 
+                            if 'critical' in sev: styles[i] = 'background-color: #fef2f2; color: #7f1d1d; font-weight: 900;'
+                            elif 'major' in sev: styles[i] = 'background-color: #fee2e2; color: #b91c1c; font-weight: 900;'
+                            elif 'medium' in sev: styles[i] = 'background-color: #ffedd5; color: #c2410c; font-weight: 900;'
+                            elif 'minor' in sev: styles[i] = 'background-color: #dbeafe; color: #1d4ed8; font-weight: 900;'
+                    return styles
+                
+                styled_q = disp_q.style.apply(style_q, axis=1).set_properties(**{"text-align": "center"})
+                try: 
+                    html_q_table = styled_q.hide(axis="index").to_html()
+                except Exception: 
+                    try: 
+                        html_q_table = styled_q.hide_index().to_html()
+                    except Exception: 
+                        html_q_table = styled_q.to_html()
+                    
+                st.markdown(f'<div class="scorecard-container">{html_q_table}</div>', unsafe_allow_html=True)
+        else: st.info("No quality issues logged in the system for this specific period.")
+        
+        if is_admin():
+            st.divider(); st.markdown("#### 📥 Export Team Performance Report")
+            csv_sc = display_df.copy(); csv_sc["Expert"] = csv_sc["Expert"].apply(lambda x: re.sub(r'^[🥇🥈🥉]\s*', '', str(x)))
+            st.download_button("📥 Download Team Scorecard (CSV)", csv_sc.to_csv(index=False).encode('utf-8-sig'), f"Team_Scorecard_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
+            
+            st.divider(); st.markdown("#### ✉️ Performance Review Emails")
+            sel_email_agent = st.selectbox("Select Agent for Email Draft", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
+            if sel_email_agent:
+                arow, trow = sc_final[sc_final["Expert"] == sel_email_agent].iloc[0], sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
+                a_tot = int(arow['Tickets Count'] + arow['JHAH Requests'] + arow['Support Requests'])
+                t_tot = int(trow['Tickets Count'] + trow['JHAH Requests'] + trow['Support Requests'])
+                
+                rank_str = str(arow.get('Rank', '-'))
+                rank_badge = "🥇 1st Place" if rank_str == "1" else ("🥈 2nd Place" if rank_str == "2" else ("🥉 3rd Place" if rank_str == "3" else f"#{rank_str} Place"))
+                rank_msg = f"<br><br>🏆 <b>Team Ranking:</b> I am proud to share that you have successfully secured <b>{rank_badge}</b> in the overall team leaderboard this period! 🌟"
+
+                email_html_table = f"""
+                <table style="width:100%; border-collapse: collapse; margin: 20px 0; font-family: Arial, sans-serif; font-size: 13px; border: 1px solid #e2e8f0; text-align:center;">
+                    <thead>
+                        <tr style="background-color: #f8fafc; color: #0f172a; border-bottom: 2px solid #cbd5e1;">
+                            <th style="padding: 10px; text-align: left;">Metric</th>
+                            <th style="padding: 10px;">Rank</th>
+                            <th style="padding: 10px;">Tickets</th>
+                            <th style="padding: 10px;">Emails</th>
+                            <th style="padding: 10px;">Cases/Day</th>
+                            <th style="padding: 10px;">Achievement</th>
+                            <th style="padding: 10px;">Quality</th>
+                            <th style="padding: 10px;">Incentive</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 10px; text-align: left; font-weight: bold;">Your Score 👤</td>
+                            <td style="padding: 10px; color:#2563eb; font-weight:bold;">#{rank_str}</td>
+                            <td style="padding: 10px;">{arow['Tickets Count']}</td>
+                            <td style="padding: 10px; font-weight:bold; color:#0ea5e9;">{arow['Emails Count']}</td>
+                            <td style="padding: 10px;">{arow['Cases/Day']}</td>
+                            <td style="padding: 10px;">{arow['% Achievement from Target']}</td>
+                            <td style="padding: 10px;">{arow['Service Quality']}</td>
+                            <td style="padding: 10px; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
+                        </tr>
+                        <tr style="background-color: #fcfcfc; color: #475569;">
+                            <td style="padding: 10px; text-align: left; font-weight: bold;">Team Avg 🏆</td>
+                            <td style="padding: 10px;">-</td>
+                            <td style="padding: 10px;">{int(trow['Tickets Count'])}</td>
+                            <td style="padding: 10px;">{int(trow['Emails Count'])}</td>
+                            <td style="padding: 10px;">{trow['Cases/Day']}</td>
+                            <td style="padding: 10px;">{trow['% Achievement from Target']}</td>
+                            <td style="padding: 10px;">{trow['Service Quality']}</td>
+                            <td style="padding: 10px;">3,100 EGP</td>
+                        </tr>
+                    </tbody>
+                </table>
+                """
+                st.markdown("##### 📝 Email Preview")
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your contributions.{rank_msg}<br>{email_html_table}<br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
 if is_admin():
