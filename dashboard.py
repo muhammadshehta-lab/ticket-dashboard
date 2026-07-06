@@ -270,116 +270,6 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
     return (f'<div class="kpi-container {cls}"><div class="kpi-label">{label}</div><div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;">{value}</div>{change_html}</div>')
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  MASTER PPTX GENERATOR FUNCTION
-# ══════════════════════════════════════════════════════════════════════════════════
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, hic_df, hrs_df, daily_vol_df, sc_g):
-    try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt
-        from pptx.enum.text import PP_ALIGN
-        from pptx.dml.color import RGBColor
-        from io import BytesIO
-
-        prs = Presentation()
-
-        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
-        slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
-        slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
-
-        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
-        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
-        for i in range(4):
-            table_shape.cell(0, i).text = "Metric Descriptor" if i % 2 == 0 else "System Value"
-            table_shape.cell(0, i).fill.solid(); table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
-            table_shape.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-            table_shape.cell(0, i).text_frame.paragraphs[0].font.bold = True
-        metrics = [
-            ("Tickets Count", f"{total_val:,}"), ("Total Actions", f"{actions_val:,}"),
-            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"), ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
-            ("AFR (Avg Response)", afr_str), ("TAT (Avg Service Time)", tat_str),
-            ("Stores Served", f"{stores_val:,}"), ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
-            ("JHAH Out Volumes", f"{jhah_val:,}"), ("Support Out Volumes", f"{support_val:,}")
-        ]
-        r, c = 1, 0
-        for m_name, m_val in metrics:
-            table_shape.cell(r, c).text = m_name
-            table_shape.cell(r, c+1).text = str(m_val)
-            table_shape.cell(r, c+1).text_frame.paragraphs[0].font.bold = True
-            c += 2
-            if c >= 4: c, r = 0, r + 1
-
-        slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
-        rows_rt = min(9, len(req_counts_dict) + 1)
-        table_rt = slide_rt.shapes.add_table(rows_rt, 3, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_rt * 0.45)).table
-        headers_rt = ["Request Category Type", "Handled Volume Shares", "Percentage Split (%)"]
-        for idx, text in enumerate(headers_rt):
-            table_rt.cell(0, idx).text = text
-            table_rt.cell(0, idx).fill.solid(); table_rt.cell(0, idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-            table_rt.cell(0, idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-        for r_idx, (rt_name, rt_count) in enumerate(list(req_counts_dict.items())[:8]):
-            table_rt.cell(r_idx + 1, 0).text = str(rt_name)
-            table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
-            table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
-
-        slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
-        if not hic_df.empty:
-            rows_hic = min(7, len(hic_df) + 1)
-            table_hic = slide_hic.shapes.add_table(rows_hic, 2, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_hic * 0.5)).table
-            table_hic.cell(0, 0).text = "Insurance Provider"; table_hic.cell(0, 1).text = "Resolved Tickets Volume"
-            for i in range(2): 
-                table_hic.cell(0, i).fill.solid(); table_hic.cell(0, i).fill.fore_color.rgb = RGBColor(13, 148, 136)
-                table_hic.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-            for r_idx, row in hic_df.head(6).reset_index(drop=True).iterrows():
-                table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
-                table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
-
-        slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
-        if not hrs_df.empty:
-            peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
-            tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
-            tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
-            tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
-            tx.add_paragraph().text = f"• Average Response Speed (FRT) during hourly shifts: {hrs_df['AR'].mean():.1f} minutes."
-            tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
-            for p in tx.paragraphs: p.font.size = Pt(16)
-
-        slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
-        if not daily_vol_df.empty:
-            tx = slide_wl.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
-            tx.add_paragraph().text = f"• Average Workload Ratio across selected cycle: {daily_vol_df['Tickets per Agent'].mean():.1f} tickets per Expert daily."
-            tx.add_paragraph().text = f"• Maximum surge Workload tracked at: {daily_vol_df['Tickets per Agent'].max():.1f} requests/agent."
-            tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
-            for p in tx.paragraphs: p.font.size = Pt(16)
-
-        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
-        if not sc_g.empty:
-            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
-            rows = len(sc_g) + 1
-            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
-            for c_idx, col_name in enumerate(cols_to_show):
-                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
-                table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
-            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
-                for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
-                    table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(11)
-
-        ppt_stream = BytesIO()
-        prs.save(ppt_stream)
-        ppt_stream.seek(0)
-        return ppt_stream, None
-    except Exception as e:
-        return None, f"An error occurred while generating presentation: {str(e)}"
-
-# ══════════════════════════════════════════════════════════════════════════════════
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
 # ══════════════════════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=300, show_spinner="Syncing database tables…")
@@ -491,6 +381,11 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
+# ── EXPLICIT SAFE INITIALIZATION OF GLOBALS TO PREVENT NAMERROR ──
+d_from = pd.Timestamp.today().date().replace(day=1)
+d_to = pd.Timestamp.today().date()
+PERIOD_KEY = f"{d_from}_{d_to}"
+
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -514,6 +409,116 @@ def reject_request(req_id):
     for r in requests_list():
         if r["id"] == req_id and r["status"] == "pending": r["status"] = "rejected"; _save_store(); return True
     return False
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  MASTER PPTX GENERATOR FUNCTION
+# ══════════════════════════════════════════════════════════════════════════════════
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, hic_df, hrs_df, daily_vol_df, sc_g):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.enum.text import PP_ALIGN
+        from pptx.dml.color import RGBColor
+        from io import BytesIO
+
+        prs = Presentation()
+
+        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
+        slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
+        slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
+
+        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
+        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
+        for i in range(4):
+            table_shape.cell(0, i).text = "Metric Descriptor" if i % 2 == 0 else "System Value"
+            table_shape.cell(0, i).fill.solid(); table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            table_shape.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+            table_shape.cell(0, i).text_frame.paragraphs[0].font.bold = True
+        metrics = [
+            ("Tickets Count", f"{total_val:,}"), ("Total Actions", f"{actions_val:,}"),
+            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"), ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
+            ("AFR (Avg Response)", afr_str), ("TAT (Avg Service Time)", tat_str),
+            ("Stores Served", f"{stores_val:,}"), ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
+            ("JHAH Out Volumes", f"{jhah_val:,}"), ("Support Out Volumes", f"{support_val:,}")
+        ]
+        r, c = 1, 0
+        for m_name, m_val in metrics:
+            table_shape.cell(r, c).text = m_name
+            table_shape.cell(r, c+1).text = str(m_val)
+            table_shape.cell(r, c+1).text_frame.paragraphs[0].font.bold = True
+            c += 2
+            if c >= 4: c, r = 0, r + 1
+
+        slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
+        rows_rt = min(9, len(req_counts_dict) + 1)
+        table_rt = slide_rt.shapes.add_table(rows_rt, 3, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_rt * 0.45)).table
+        headers_rt = ["Request Category Type", "Handled Volume Shares", "Percentage Split (%)"]
+        for idx, text in enumerate(headers_rt):
+            table_rt.cell(0, idx).text = text
+            table_rt.cell(0, idx).fill.solid(); table_rt.cell(0, idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+            table_rt.cell(0, idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+        for r_idx, (rt_name, rt_count) in enumerate(list(req_counts_dict.items())[:8]):
+            table_rt.cell(r_idx + 1, 0).text = str(rt_name)
+            table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
+            table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
+
+        slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
+        if not hic_df.empty:
+            rows_hic = min(7, len(hic_df) + 1)
+            table_hic = slide_hic.shapes.add_table(rows_hic, 2, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_hic * 0.5)).table
+            table_hic.cell(0, 0).text = "Insurance Provider"; table_hic.cell(0, 1).text = "Resolved Tickets Volume"
+            for i in range(2): 
+                table_hic.cell(0, i).fill.solid(); table_hic.cell(0, i).fill.fore_color.rgb = RGBColor(13, 148, 136)
+                table_hic.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+            for r_idx, row in hic_df.head(6).reset_index(drop=True).iterrows():
+                table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
+                table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
+
+        slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
+        if not hrs_df.empty:
+            peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
+            tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
+            tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
+            tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
+            tx.add_paragraph().text = f"• Average Response Speed (FRT) during hourly shifts: {hrs_df['AR'].mean():.1f} minutes."
+            tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
+            for p in tx.paragraphs: p.font.size = Pt(16)
+
+        slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
+        if not daily_vol_df.empty:
+            tx = slide_wl.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
+            tx.add_paragraph().text = f"• Average Workload Ratio across selected cycle: {daily_vol_df['Tickets per Agent'].mean():.1f} tickets per Expert daily."
+            tx.add_paragraph().text = f"• Maximum surge Workload tracked at: {daily_vol_df['Tickets per Agent'].max():.1f} requests/agent."
+            tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
+            for p in tx.paragraphs: p.font.size = Pt(16)
+
+        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
+        if not sc_g.empty:
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            rows = len(sc_g) + 1
+            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
+            for c_idx, col_name in enumerate(cols_to_show):
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
+                table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
+            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
+                for c_idx, col_name in enumerate(cols_to_show):
+                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
+                    table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(11)
+
+        ppt_stream = BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
+        return ppt_stream, None
+    except Exception as e:
+        return None, f"An error occurred while generating presentation: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE WITH TOTAL BAN SINK
@@ -655,7 +660,7 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DATA FILTERING INFRASTRUCTURE (CRITICAL BLOCK)
+#  DATA FILTERING INFRASTRUCTURE
 # ══════════════════════════════════════════════════════════════════════════════════
 def get_roster_stats(roster_df, start_date, end_date):
     counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
@@ -1173,9 +1178,20 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             sc_g["% Achievement from Target"] = sc_g["Cases/Day"].apply(get_ach_g)
             sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
             
+            def calc_incentive_g(row):
+                try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
+                except: achiev = 0.0
+                count_inc = 1500 if achiev >= 0.97 else (1350 if achiev >= 0.95 else (1200 if achiev >= 0.90 else (1050 if achiev >= 0.85 else 0)))
+                try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
+                except: qual = 0.0
+                return f"{count_inc + (600 * qual) + 1000:,.0f} EGP"
+                
+            sc_g["Prospected Incentive"] = sc_g.apply(calc_incentive_g, axis=1)
+            
+            sc_g["_sort_inc"] = sc_g["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
             sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
-            sc_g["_rank_score"] = (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+            sc_g["_rank_score"] = (sc_g["_sort_inc"] * 100000) + (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
             sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
             sc_g.insert(0, "Rank", sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
             sc_g.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True, errors="ignore")
@@ -1293,7 +1309,16 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             return "0.0%"
         sc["% Achievement from Target"] = sc["Cases/Day"].apply(get_ach)
         sc["Service Quality"] = sc["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
-        sc["Prospected Incentive"] = sc.apply(lambda row: f"{1500 + (600 * (float(row['Service Quality'].replace('%',''))/100.0)) + 1000:,.0f} EGP", axis=1)
+        
+        def calc_incentive(row):
+            try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
+            except: achiev = 0.0
+            count_inc = 1500 if achiev >= 0.97 else (1350 if achiev >= 0.95 else (1200 if achiev >= 0.90 else (1050 if achiev >= 0.85 else 0)))
+            try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
+            except: qual = 0.0
+            return f"{count_inc + (600 * qual) + 1000:,.0f} EGP"
+            
+        sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
 
         # ── SMART RANKING SYSTEM ──
         if not sc.empty:
