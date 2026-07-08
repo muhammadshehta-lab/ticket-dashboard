@@ -381,11 +381,6 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
-# ── EXPLICIT SAFE INITIALIZATION OF GLOBALS TO PREVENT NAMERROR ──
-d_from = pd.Timestamp.today().date().replace(day=1)
-d_to = pd.Timestamp.today().date()
-PERIOD_KEY = f"{d_from}_{d_to}"
-
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -660,7 +655,7 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DATA FILTERING INFRASTRUCTURE
+#  DATA FILTERING INFRASTRUCTURE (CRITICAL BLOCK)
 # ══════════════════════════════════════════════════════════════════════════════════
 def get_roster_stats(roster_df, start_date, end_date):
     counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
@@ -756,7 +751,7 @@ if st.session_state.page == "settings":
 
     if is_admin():
         st.markdown("## ⚙️ Admin Control Panel")
-        atab1, atab2, atab3 = st.tabs(["👤 My Profile", "🔔 Requests Queue", "👥 Manage System Accounts"])
+        atab1, atab2, atab3, atab4 = st.tabs(["👤 My Profile", "🔔 Requests Queue", "👥 Manage System Accounts", "📜 Access Logs"])
 
         with atab1:
             st.markdown("<div class='section-card'>", unsafe_allow_html=True)
@@ -781,13 +776,13 @@ if st.session_state.page == "settings":
                         st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 New account request for: <b>{p_data.get('name')}</b> (ID: {p_data.get('id')})</div>", unsafe_allow_html=True)
                         rc1, rc2 = st.columns(2)
                         with rc1:
-                            if st.button("✅ Approve", key=f"apr_na_{req['id']}", use_container_width=True):
+                            if st.button("✅ Approve", key=f"apr_{req['id']}", use_container_width=True):
                                 add_user_to_sheet(p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'])
                                 req["status"] = "approved"; _save_store()
                                 send_approval_email(p_data['email'], p_data['name'], p_data['id'])
                                 st.success("Approved!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                         with rc2:
-                            if st.button("❌ Deny", key=f"rej_na_{req['id']}", use_container_width=True):
+                            if st.button("❌ Deny", key=f"rej_{req['id']}", use_container_width=True):
                                 reject_request(req["id"])
                                 st.warning("Rejected!"); time.sleep(1); st.rerun()
 
@@ -810,6 +805,18 @@ if st.session_state.page == "settings":
                         else:
                             delete_user_from_sheet(uname)
                             st.success("Deleted completely from Google Sheets!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+
+        with atab4:
+            st.markdown("### 📜 System Access Logs")
+            logs = st.session_state.store.get("login_logs", [])
+            if not logs: st.info("✅ No login records found.")
+            else:
+                df_logs = pd.DataFrame(logs)[::-1].reset_index(drop=True)
+                st.dataframe(df_logs, use_container_width=True)
+                if st.button("🗑️ Clear Logs", use_container_width=True):
+                    st.session_state.store["login_logs"] = []
+                    _save_store()
+                    st.success("Logs cleared successfully!"); time.sleep(1); st.rerun()
     else:
         with st.form("exp_profile_edit"):
             st.subheader("📋 Edit Profile")
@@ -873,7 +880,7 @@ with tabs[0]:
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in df_prev_all.columns and not df_prev_all.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
