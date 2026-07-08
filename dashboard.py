@@ -56,7 +56,7 @@ def parse_drive_link(raw_url):
     return raw_url
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  GOOGLE SHEETS SYNC HELPERS (THE ULTIMATE MASTER DATABASE)
+#  GOOGLE SHEETS SYNC HELPERS
 # ══════════════════════════════════════════════════════════════════════════════════
 def update_sheet_password(uname: str, new_pass: str):
     try:
@@ -122,9 +122,6 @@ def update_user_role_dname_aname_sheet(uname, role, dname, aname):
                 ws.update_cell(row, 3, str(role))
     except Exception: pass
 
-# ══════════════════════════════════════════════════════════════════════════════════
-#  NOTIFICATIONS & EMAILS
-# ══════════════════════════════════════════════════════════════════════════════════
 def notify_admin_whatsapp(logged_in_user):
     try:
         if "whatsapp" in st.secrets and "api_key" in st.secrets["whatsapp"]:
@@ -356,6 +353,18 @@ def load_data():
 
 df_raw, df_roster, df_out_req, df_quality, fetched_users = load_data()
 
+# ==========================================
+# FAILSAFE: Initialize core dataframes globally to prevent NameError
+# ==========================================
+df = pd.DataFrame()
+df_prev_all = pd.DataFrame()
+
+# Ensure mandatory columns exist to avoid KeyErrors during filtering
+mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email"]
+for col in mandatory_cols:
+    if col not in df_raw.columns:
+        df_raw[col] = np.nan
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SESSION STATE & SECURE PERSISTENT LOGIN
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -381,11 +390,6 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
-# ── EXPLICIT SAFE INITIALIZATION OF GLOBALS TO PREVENT NAMERROR ──
-d_from = pd.Timestamp.today().date().replace(day=1)
-d_to = pd.Timestamp.today().date()
-PERIOD_KEY = f"{d_from}_{d_to}"
-
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -409,116 +413,6 @@ def reject_request(req_id):
     for r in requests_list():
         if r["id"] == req_id and r["status"] == "pending": r["status"] = "rejected"; _save_store(); return True
     return False
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  MASTER PPTX GENERATOR FUNCTION
-# ══════════════════════════════════════════════════════════════════════════════════
-def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, hic_df, hrs_df, daily_vol_df, sc_g):
-    try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt
-        from pptx.enum.text import PP_ALIGN
-        from pptx.dml.color import RGBColor
-        from io import BytesIO
-
-        prs = Presentation()
-
-        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
-        slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
-        slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
-
-        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
-        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
-        for i in range(4):
-            table_shape.cell(0, i).text = "Metric Descriptor" if i % 2 == 0 else "System Value"
-            table_shape.cell(0, i).fill.solid(); table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
-            table_shape.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-            table_shape.cell(0, i).text_frame.paragraphs[0].font.bold = True
-        metrics = [
-            ("Tickets Count", f"{total_val:,}"), ("Total Actions", f"{actions_val:,}"),
-            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"), ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
-            ("AFR (Avg Response)", afr_str), ("TAT (Avg Service Time)", tat_str),
-            ("Stores Served", f"{stores_val:,}"), ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
-            ("JHAH Out Volumes", f"{jhah_val:,}"), ("Support Out Volumes", f"{support_val:,}")
-        ]
-        r, c = 1, 0
-        for m_name, m_val in metrics:
-            table_shape.cell(r, c).text = m_name
-            table_shape.cell(r, c+1).text = str(m_val)
-            table_shape.cell(r, c+1).text_frame.paragraphs[0].font.bold = True
-            c += 2
-            if c >= 4: c, r = 0, r + 1
-
-        slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
-        rows_rt = min(9, len(req_counts_dict) + 1)
-        table_rt = slide_rt.shapes.add_table(rows_rt, 3, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_rt * 0.45)).table
-        headers_rt = ["Request Category Type", "Handled Volume Shares", "Percentage Split (%)"]
-        for idx, text in enumerate(headers_rt):
-            table_rt.cell(0, idx).text = text
-            table_rt.cell(0, idx).fill.solid(); table_rt.cell(0, idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-            table_rt.cell(0, idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-        for r_idx, (rt_name, rt_count) in enumerate(list(req_counts_dict.items())[:8]):
-            table_rt.cell(r_idx + 1, 0).text = str(rt_name)
-            table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
-            table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
-
-        slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
-        if not hic_df.empty:
-            rows_hic = min(7, len(hic_df) + 1)
-            table_hic = slide_hic.shapes.add_table(rows_hic, 2, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_hic * 0.5)).table
-            table_hic.cell(0, 0).text = "Insurance Provider"; table_hic.cell(0, 1).text = "Resolved Tickets Volume"
-            for i in range(2): 
-                table_hic.cell(0, i).fill.solid(); table_hic.cell(0, i).fill.fore_color.rgb = RGBColor(13, 148, 136)
-                table_hic.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-            for r_idx, row in hic_df.head(6).reset_index(drop=True).iterrows():
-                table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
-                table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
-
-        slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
-        if not hrs_df.empty:
-            peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
-            tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
-            tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
-            tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
-            tx.add_paragraph().text = f"• Average Response Speed (FRT) during hourly shifts: {hrs_df['AR'].mean():.1f} minutes."
-            tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
-            for p in tx.paragraphs: p.font.size = Pt(16)
-
-        slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
-        if not daily_vol_df.empty:
-            tx = slide_wl.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
-            tx.add_paragraph().text = f"• Average Workload Ratio across selected cycle: {daily_vol_df['Tickets per Agent'].mean():.1f} tickets per Expert daily."
-            tx.add_paragraph().text = f"• Maximum surge Workload tracked at: {daily_vol_df['Tickets per Agent'].max():.1f} requests/agent."
-            tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
-            for p in tx.paragraphs: p.font.size = Pt(16)
-
-        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
-        slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
-        if not sc_g.empty:
-            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
-            rows = len(sc_g) + 1
-            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
-            for c_idx, col_name in enumerate(cols_to_show):
-                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
-                table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
-                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
-                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
-            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
-                for c_idx, col_name in enumerate(cols_to_show):
-                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
-                    table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(11)
-
-        ppt_stream = BytesIO()
-        prs.save(ppt_stream)
-        ppt_stream.seek(0)
-        return ppt_stream, None
-    except Exception as e:
-        return None, f"An error occurred while generating presentation: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  LOGIN GATE WITH TOTAL BAN SINK
@@ -642,8 +536,8 @@ with st.sidebar:
     prev_d_from, prev_d_to = d_from - timedelta(days=delta_days), d_from - timedelta(days=1)
     PERIOD_KEY = f"{d_from}_{d_to}"
     
-    sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().unique()))
-    sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().unique()))
+    sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().astype(str).unique()))
+    sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().astype(str).unique()))
 
     st.markdown("<br><br>", unsafe_allow_html=True); st.divider()
     if is_admin() and pending_count() > 0: st.warning(f"🔔 {pending_count()} pending requests")
@@ -662,6 +556,17 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DATA FILTERING INFRASTRUCTURE
 # ══════════════════════════════════════════════════════════════════════════════════
+if not df_raw.empty:
+    df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+    df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
+
+if sel_hic and not df.empty: 
+    df = df[df["HIC"].isin(sel_hic)]
+    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
+if sel_req_type and not df.empty: 
+    df = df[df["Request Type"].isin(sel_req_type)]
+    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+
 def get_roster_stats(roster_df, start_date, end_date):
     counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
     if roster_df.empty: return counts
@@ -721,16 +626,6 @@ if not df_out_req.empty and "Date" in df_out_req.columns:
             j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
             prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
 
-df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
-
-if sel_hic: 
-    df = df[df["HIC"].isin(sel_hic)]
-    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
-if sel_req_type: 
-    df = df[df["Request Type"].isin(sel_req_type)]
-    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
-
 expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
 if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
     df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
@@ -756,7 +651,7 @@ if st.session_state.page == "settings":
 
     if is_admin():
         st.markdown("## ⚙️ Admin Control Panel")
-        atab1, atab2, atab3 = st.tabs(["👤 My Profile", "🔔 Requests Queue", "👥 Manage System Accounts"])
+        atab1, atab2, atab3, atab4 = st.tabs(["👤 My Profile", "🔔 Requests Queue", "👥 Manage System Accounts", "📜 Access Logs"])
 
         with atab1:
             st.markdown("<div class='section-card'>", unsafe_allow_html=True)
@@ -810,6 +705,18 @@ if st.session_state.page == "settings":
                         else:
                             delete_user_from_sheet(uname)
                             st.success("Deleted completely from Google Sheets!"); time.sleep(1); st.cache_data.clear(); st.rerun()
+
+        with atab4:
+            st.markdown("### 📜 System Access Logs")
+            logs = st.session_state.store.get("login_logs", [])
+            if not logs: st.info("✅ No login records found.")
+            else:
+                df_logs = pd.DataFrame(logs)[::-1].reset_index(drop=True)
+                st.dataframe(df_logs, use_container_width=True)
+                if st.button("🗑️ Clear Logs", use_container_width=True):
+                    st.session_state.store["login_logs"] = []
+                    _save_store()
+                    st.success("Logs cleared successfully!"); time.sleep(1); st.rerun()
     else:
         with st.form("exp_profile_edit"):
             st.subheader("📋 Edit Profile")
@@ -820,6 +727,116 @@ if st.session_state.page == "settings":
                 update_sheet_profile(me(), urow)
                 st.success("Saved!"); time.sleep(1); st.cache_data.clear(); st.rerun()
     st.stop()
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  MASTER PPTX GENERATOR FUNCTION
+# ══════════════════════════════════════════════════════════════════════════════════
+def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_val, ok_pct_val, issue_val, issue_pct_val, afr_str, tat_str, stores_val, actions_val, jhah_val, support_val, req_counts_dict, req_pct_dict, hic_df, hrs_df, daily_vol_df, sc_g):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        from pptx.enum.text import PP_ALIGN
+        from pptx.dml.color import RGBColor
+        from io import BytesIO
+
+        prs = Presentation()
+
+        slide_title = prs.slides.add_slide(prs.slide_layouts[0])
+        slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
+        slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
+
+        slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
+        table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
+        for i in range(4):
+            table_shape.cell(0, i).text = "Metric Descriptor" if i % 2 == 0 else "System Value"
+            table_shape.cell(0, i).fill.solid(); table_shape.cell(0, i).fill.fore_color.rgb = RGBColor(37, 99, 235)
+            table_shape.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+            table_shape.cell(0, i).text_frame.paragraphs[0].font.bold = True
+        metrics = [
+            ("Tickets Count", f"{total_val:,}"), ("Total Actions", f"{actions_val:,}"),
+            ("Closed Completed", f"{ok_val:,} ({ok_pct_val:.1f}%)"), ("Closed with Issue", f"{issue_val:,} ({issue_pct_val:.1f}%)"),
+            ("AFR (Avg Response)", afr_str), ("TAT (Avg Service Time)", tat_str),
+            ("Stores Served", f"{stores_val:,}"), ("Avg Requests / Day", f"{avg_per_day_val:.1f}"),
+            ("JHAH Out Volumes", f"{jhah_val:,}"), ("Support Out Volumes", f"{support_val:,}")
+        ]
+        r, c = 1, 0
+        for m_name, m_val in metrics:
+            table_shape.cell(r, c).text = m_name
+            table_shape.cell(r, c+1).text = str(m_val)
+            table_shape.cell(r, c+1).text_frame.paragraphs[0].font.bold = True
+            c += 2
+            if c >= 4: c, r = 0, r + 1
+
+        slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
+        rows_rt = min(9, len(req_counts_dict) + 1)
+        table_rt = slide_rt.shapes.add_table(rows_rt, 3, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_rt * 0.45)).table
+        headers_rt = ["Request Category Type", "Handled Volume Shares", "Percentage Split (%)"]
+        for idx, text in enumerate(headers_rt):
+            table_rt.cell(0, idx).text = text
+            table_rt.cell(0, idx).fill.solid(); table_rt.cell(0, idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+            table_rt.cell(0, idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+        for r_idx, (rt_name, rt_count) in enumerate(list(req_counts_dict.items())[:8]):
+            table_rt.cell(r_idx + 1, 0).text = str(rt_name)
+            table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
+            table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
+
+        slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
+        if not hic_df.empty:
+            rows_hic = min(7, len(hic_df) + 1)
+            table_hic = slide_hic.shapes.add_table(rows_hic, 2, Inches(0.5), Inches(1.5), Inches(9), Inches(rows_hic * 0.5)).table
+            table_hic.cell(0, 0).text = "Insurance Provider"; table_hic.cell(0, 1).text = "Resolved Tickets Volume"
+            for i in range(2): 
+                table_hic.cell(0, i).fill.solid(); table_hic.cell(0, i).fill.fore_color.rgb = RGBColor(13, 148, 136)
+                table_hic.cell(0, i).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+            for r_idx, row in hic_df.head(6).reset_index(drop=True).iterrows():
+                table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
+                table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
+
+        slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
+        if not hrs_df.empty:
+            peak_row = hrs_df.loc[hrs_df['Volume'].idxmax()]
+            tx = slide_hr.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
+            tx.add_paragraph().text = f"• Total Operational Workload Curves tracked over full 24-Hour cycles."
+            tx.add_paragraph().text = f"• Busiest Hourly Traffic Peak discovered at: {peak_row.name if hasattr(peak_row, 'name') else 'Peak hour'} with a massive surge volume."
+            tx.add_paragraph().text = f"• Average Response Speed (FRT) during hourly shifts: {hrs_df['AR'].mean():.1f} minutes."
+            tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
+            for p in tx.paragraphs: p.font.size = Pt(16)
+
+        slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
+        if not daily_vol_df.empty:
+            tx = slide_wl.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(4)).text_frame
+            tx.add_paragraph().text = f"• Average Workload Ratio across selected cycle: {daily_vol_df['Tickets per Agent'].mean():.1f} tickets per Expert daily."
+            tx.add_paragraph().text = f"• Maximum surge Workload tracked at: {daily_vol_df['Tickets per Agent'].max():.1f} requests/agent."
+            tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
+            for p in tx.paragraphs: p.font.size = Pt(16)
+
+        slide_team = prs.slides.add_slide(prs.slide_layouts[5])
+        slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
+        if not sc_g.empty:
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            rows = len(sc_g) + 1
+            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
+            for c_idx, col_name in enumerate(cols_to_show):
+                table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
+                table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
+                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.color.rgb = RGBColor(255, 255, 255)
+                table_team.cell(0, c_idx).text_frame.paragraphs[0].font.bold = True
+            for r_idx, row in sc_g.reset_index(drop=True).iterrows():
+                for c_idx, col_name in enumerate(cols_to_show):
+                    table_team.cell(r_idx + 1, c_idx).text = str(row.get(col_name, ""))
+                    table_team.cell(r_idx + 1, c_idx).text_frame.paragraphs[0].font.size = Pt(11)
+
+        ppt_stream = BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
+        return ppt_stream, None
+    except Exception as e:
+        return None, f"An error occurred while generating presentation: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
@@ -873,7 +890,7 @@ with tabs[0]:
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in df_prev_all.columns and not df_prev_all.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1441,9 +1458,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             st.divider(); st.markdown("#### ✉️ Performance Review Emails")
             sel_email_agent = st.selectbox("Select Agent for Email Draft", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
             if sel_email_agent:
+                clean_agent_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 arow, trow = sc_final[sc_final["Expert"] == sel_email_agent].iloc[0], sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
-                a_tot = int(arow['Tickets Count'] + arow['JHAH Requests'] + arow['Support Requests'])
-                t_tot = int(trow['Tickets Count'] + trow['JHAH Requests'] + trow['Support Requests'])
                 
                 rank_str = str(arow.get('Rank', '-'))
                 rank_badge = "🥇 1st Place" if rank_str == "1" else ("🥈 2nd Place" if rank_str == "2" else ("🥉 3rd Place" if rank_str == "3" else f"#{rank_str} Place"))
@@ -1488,8 +1504,12 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 </table>
                 """
                 st.markdown("##### 📝 Email Preview")
-                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your contributions.{rank_msg}<br>{email_html_table}<br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
-                st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
+                st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{clean_agent_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your contributions.{rank_msg}<br>{email_html_table}<br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
+                
+                subj = f"Your Performance Review ({d_from} to {d_to}) - {clean_agent_name}"
+                safe_subj = urllib.parse.quote(subj)
+                mail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={safe_subj}"
+                st.markdown(f'<a href="{mail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
 if is_admin():
