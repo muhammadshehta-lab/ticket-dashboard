@@ -660,6 +660,94 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
+#  DATA FILTERING INFRASTRUCTURE
+# ══════════════════════════════════════════════════════════════════════════════════
+def get_roster_stats(roster_df, start_date, end_date):
+    counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
+    if roster_df.empty: return counts
+    valid_cols = []
+    for col in roster_df.columns:
+        col_str = str(col).strip()
+        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
+        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
+        if match:
+            try:
+                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
+                if start_date <= col_date <= end_date: valid_cols.append(col)
+            except: pass
+
+    df_r_str = roster_df.astype(str)
+    for exp in OFFICIAL_EXPERTS:
+        exp_id = EXPERT_ID_MAP.get(exp, "")
+        if exp_id:
+            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+            exp_rows = df_r_str[mask]
+            if not exp_rows.empty and valid_cols:
+                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
+                if safe_cols:
+                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
+                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
+                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
+                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                    counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
+                    counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
+    return counts
+
+curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
+prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
+
+out_req_dict, prev_out_req_dict = {}, {}
+global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
+
+if not df_out_req.empty and "Date" in df_out_req.columns:
+    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
+    df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
+    if "Source" in df_out_filtered.columns: global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    global_support = len(df_out_filtered) - global_jhah
+    if "Expert Name" in df_out_filtered.columns:
+        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+            
+    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
+    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+    prev_global_support = len(df_out_prev) - prev_global_jhah
+    if "Expert Name" in df_out_prev.columns:
+        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
+            if not exp_name or exp_name == "nan": continue 
+            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
+            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+
+df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
+
+if sel_hic: 
+    df = df[df["HIC"].isin(sel_hic)]
+    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
+if sel_req_type: 
+    df = df[df["Request Type"].isin(sel_req_type)]
+    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+
+expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
+if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
+    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
+    df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
+    def get_deduction(sev):
+        s = str(sev).strip().lower()
+        if s == 'critical': return 5.0
+        elif s == 'major': return 2.0
+        elif s == 'medium': return 1.0
+        elif s == 'minor': return 0.5
+        return 0.0
+    df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
+    df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
+    df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
+    expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
+
+# ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS / ADMIN CONTROL SINK
 # ══════════════════════════════════════════════════════════════════════════════════
 if st.session_state.page == "settings":
@@ -668,7 +756,7 @@ if st.session_state.page == "settings":
 
     if is_admin():
         st.markdown("## ⚙️ Admin Control Panel")
-        atab1, atab2, atab3, atab4 = st.tabs(["👤 My Profile", "🔔 Requests Queue", "👥 Manage System Accounts", "📜 Access Logs"])
+        atab1, atab2, atab3 = st.tabs(["👤 My Profile", "🔔 Requests Queue", "👥 Manage System Accounts"])
 
         with atab1:
             st.markdown("<div class='section-card'>", unsafe_allow_html=True)
@@ -722,19 +810,6 @@ if st.session_state.page == "settings":
                         else:
                             delete_user_from_sheet(uname)
                             st.success("Deleted completely from Google Sheets!"); time.sleep(1); st.cache_data.clear(); st.rerun()
-                            
-        with atab4:
-            st.markdown("### 📜 سجلات تسجيل الدخول (Access Logs)")
-            logs = st.session_state.store.get("login_logs", [])
-            if not logs:
-                st.info("✅ لا توجد سجلات دخول حتى الآن.")
-            else:
-                df_logs = pd.DataFrame(logs)[::-1].reset_index(drop=True)
-                st.dataframe(df_logs, use_container_width=True)
-                if st.button("🗑️ مسح السجلات", use_container_width=True):
-                    st.session_state.store["login_logs"] = []
-                    _save_store()
-                    st.success("تم مسح السجلات بنجاح!"); time.sleep(1); st.rerun()
     else:
         with st.form("exp_profile_edit"):
             st.subheader("📋 Edit Profile")
@@ -798,7 +873,7 @@ with tabs[0]:
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in df_prev_all.columns and not df_prev_all.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
