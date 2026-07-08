@@ -381,11 +381,6 @@ if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "force_onboard" not in st.session_state: st.session_state.force_onboard = False
 if "view_request_form" not in st.session_state: st.session_state.view_request_form = False
 
-# ── EXPLICIT SAFE INITIALIZATION OF GLOBALS TO PREVENT NAMERROR ──
-d_from = pd.Timestamp.today().date().replace(day=1)
-d_to = pd.Timestamp.today().date()
-PERIOD_KEY = f"{d_from}_{d_to}"
-
 if st.session_state.authenticated and st.session_state.username not in st.session_state.db_users:
     for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
     st.rerun()
@@ -423,12 +418,10 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
 
         prs = Presentation()
 
-        # Slide 1: Executive Title Slide
         slide_title = prs.slides.add_slide(prs.slide_layouts[0])
         slide_title.shapes.title.text = "In-Store Requests: Operational Summary Presentation"
         slide_title.placeholders[1].text = f"Performance Period: {d_from_str} to {d_to_str}\nAlDawaa Approvals Team Executive Board Review"
 
-        # Slide 2: Core KPIs Table Matrix
         slide_kpi = prs.slides.add_slide(prs.slide_layouts[5])
         slide_kpi.shapes.title.text = "1. Operational Excellence & Throughput KPIs"
         table_shape = slide_kpi.shapes.add_table(6, 4, Inches(0.5), Inches(1.5), Inches(9), Inches(3.2)).table
@@ -452,7 +445,6 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             c += 2
             if c >= 4: c, r = 0, r + 1
 
-        # Slide 3: Request Type & Service Time Analysis
         slide_rt = prs.slides.add_slide(prs.slide_layouts[5])
         slide_rt.shapes.title.text = "2. Service Resolution Speed (TAT) by Request Type"
         rows_rt = min(9, len(req_counts_dict) + 1)
@@ -467,7 +459,6 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             table_rt.cell(r_idx + 1, 1).text = f"{rt_count:,} tickets"
             table_rt.cell(r_idx + 1, 2).text = f"{req_pct_dict.get(rt_name, 0)}%"
 
-        # Slide 4: Health Insurance Distribution Share
         slide_hic = prs.slides.add_slide(prs.slide_layouts[5])
         slide_hic.shapes.title.text = "3. Health Insurance Providers (HIC) Shares"
         if not hic_df.empty:
@@ -481,7 +472,6 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
                 table_hic.cell(r_idx + 1, 0).text = str(row.get("HIC", "Unknown"))
                 table_hic.cell(r_idx + 1, 1).text = f"{int(row.get('Volume', 0)):,} tickets"
 
-        # Slide 5: Hourly Request Traffic Flow
         slide_hr = prs.slides.add_slide(prs.slide_layouts[5])
         slide_hr.shapes.title.text = "4. Hourly Traffic Curves & Response Flow Rate"
         if not hrs_df.empty:
@@ -493,7 +483,6 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             tx.add_paragraph().text = f"• Systemic Bottlenecks are mitigated via the updated Overlapping Schedule Matrix."
             for p in tx.paragraphs: p.font.size = Pt(16)
 
-        # Slide 6: Daily Workload & Agent Schedule Analysis
         slide_wl = prs.slides.add_slide(prs.slide_layouts[5])
         slide_wl.shapes.title.text = "5. Daily Workload & Resource Capacity Efficiency"
         if not daily_vol_df.empty:
@@ -503,7 +492,6 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
             tx.add_paragraph().text = f"• Agent Schedule Status: Linked directly to 'Working Days' Live Roster Matrix."
             for p in tx.paragraphs: p.font.size = Pt(16)
 
-        # Slide 7: Team Leaderboard Scorecard
         slide_team = prs.slides.add_slide(prs.slide_layouts[5])
         slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
         if not sc_g.empty:
@@ -601,6 +589,11 @@ if st.session_state.force_onboard:
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SIDEBAR MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
+# We declare dates first to prevent scope/NameError bugs later
+d_from = pd.Timestamp.today().date().replace(day=1)
+d_to = pd.Timestamp.today().date()
+PERIOD_KEY = f"{d_from}_{d_to}"
+
 with st.sidebar:
     st.markdown("## Approvals Team Dashboard")
     if is_admin(): badge_cls, badge_txt = "badge-admin", "ADMIN"
@@ -667,8 +660,20 @@ with st.sidebar:
             st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DATA FILTERING INFRASTRUCTURE (CRITICAL BLOCK)
+#  DATA FILTERING INFRASTRUCTURE (CRITICAL BLOCK - MUST NOT BE SKIPPED)
 # ══════════════════════════════════════════════════════════════════════════════════
+# 1. First, we guarantee `df` and `df_prev_all` are always created safely at the root level.
+df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
+
+if sel_hic: 
+    df = df[df["HIC"].isin(sel_hic)]
+    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
+if sel_req_type: 
+    df = df[df["Request Type"].isin(sel_req_type)]
+    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+
+# 2. Process Roster Stats safely
 def get_roster_stats(roster_df, start_date, end_date):
     counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
     if roster_df.empty: return counts
@@ -703,6 +708,7 @@ def get_roster_stats(roster_df, start_date, end_date):
 curr_roster_counts = get_roster_stats(df_roster, d_from, d_to)
 prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
 
+# 3. Process Out Requests safely
 out_req_dict, prev_out_req_dict = {}, {}
 global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
 
@@ -728,16 +734,7 @@ if not df_out_req.empty and "Date" in df_out_req.columns:
             j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
             prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
 
-df = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
-df_prev_all = df_raw[(df_raw["Date Only"] >= prev_d_from) & (df_raw["Date Only"] <= prev_d_to)].copy()
-
-if sel_hic: 
-    df = df[df["HIC"].isin(sel_hic)]
-    df_prev_all = df_prev_all[df_prev_all["HIC"].isin(sel_hic)]
-if sel_req_type: 
-    df = df[df["Request Type"].isin(sel_req_type)]
-    df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
-
+# 4. Process Quality Data safely
 expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
 if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
     df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
@@ -788,13 +785,13 @@ if st.session_state.page == "settings":
                         st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 New account request for: <b>{p_data.get('name')}</b> (ID: {p_data.get('id')})</div>", unsafe_allow_html=True)
                         rc1, rc2 = st.columns(2)
                         with rc1:
-                            if st.button("✅ Approve", key=f"apr_{req['id']}", use_container_width=True):
+                            if st.button("✅ Approve", key=f"apr_na_{req['id']}", use_container_width=True):
                                 add_user_to_sheet(p_data['id'], p_data['id'], "expert", p_data['name'], p_data['name'])
                                 req["status"] = "approved"; _save_store()
                                 send_approval_email(p_data['email'], p_data['name'], p_data['id'])
                                 st.success("Approved!"); time.sleep(1); st.cache_data.clear(); st.rerun()
                         with rc2:
-                            if st.button("❌ Deny", key=f"rej_{req['id']}", use_container_width=True):
+                            if st.button("❌ Deny", key=f"rej_na_{req['id']}", use_container_width=True):
                                 reject_request(req["id"])
                                 st.warning("Rejected!"); time.sleep(1); st.rerun()
 
@@ -892,7 +889,7 @@ with tabs[0]:
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
     
     prev_afr_val = dfm_prev["Response Take (min)"].mean() if "Response Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
-    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in dfm_prev.columns and not dfm_prev.empty else 0
+    prev_tat_val = dfm_prev["Request Take (min)"].mean() if "Request Take (min)" in df_prev_all.columns and not df_prev_all.empty else 0
     
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
@@ -1462,8 +1459,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             if sel_email_agent:
                 clean_agent_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 arow, trow = sc_final[sc_final["Expert"] == sel_email_agent].iloc[0], sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
-                a_tot = int(arow['Tickets Count'] + arow['JHAH Requests'] + arow['Support Requests'])
-                t_tot = int(trow['Tickets Count'] + trow['JHAH Requests'] + trow['Support Requests'])
                 
                 rank_str = str(arow.get('Rank', '-'))
                 rank_badge = "🥇 1st Place" if rank_str == "1" else ("🥈 2nd Place" if rank_str == "2" else ("🥉 3rd Place" if rank_str == "3" else f"#{rank_str} Place"))
@@ -1509,7 +1504,11 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 """
                 st.markdown("##### 📝 Email Preview")
                 st.markdown(f"<div style='background:#ffffff; padding:2rem; border-radius:12px; border:1px solid #cbd5e1; font-size:1.1rem; color:#334155;'>Dear **{clean_agent_name}**,<br><br>As we review the performance for the period from **{d_from}** to **{d_to}**, I wanted to share your metrics and highlight your contributions.{rank_msg}<br>{email_html_table}<br>Thank you for your hard work!<br><br>Best regards,<br><b>Mohammed Shehta</b><br>Team Leader</div>", unsafe_allow_html=True)
-                st.markdown(f'<a href="https://mail.google.com/mail/?view=cm&fs=1&to=&su={urllib.parse.quote(f"Your Performance Review ({d_from} to {d_to}) - {clean_agent_name}")}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
+                
+                subj = f"Your Performance Review ({d_from} to {d_to}) - {clean_agent_name}"
+                safe_subj = urllib.parse.quote(subj)
+                mail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to=&su={safe_subj}"
+                st.markdown(f'<a href="{mail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
 if is_admin():
