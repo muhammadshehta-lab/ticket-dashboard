@@ -319,11 +319,11 @@ def load_data():
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
             creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
         else:
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
         
         client = gspread.authorize(creds)
         sheet = client.open("AlDawaa Tickets Data")
-        all_dfs, roster_df, out_req_df, df_quality = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        all_dfs, roster_df, out_req_df, df_quality, df_bonus_raw = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         fetched_users = {}
         
         for ws in sheet.worksheets():
@@ -333,6 +333,7 @@ def load_data():
             if title == "Working Days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif title == "Out Requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif title == "Quality Issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif title == "Users":
                 df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
@@ -370,7 +371,7 @@ def load_data():
             dft.rename(columns=mp, inplace=True)
             all_dfs.append(dft)
         
-        if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, fetched_users
+        if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), fetched_users
             
         df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
         for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
@@ -390,11 +391,11 @@ def load_data():
         if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["Is Email"] = (df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
-        return df, roster_df, out_req_df, df_quality, fetched_users
+        return df, roster_df, out_req_df, df_quality, df_bonus_raw, fetched_users
     except Exception:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
 
-df_raw, df_roster, df_out_req, df_quality, fetched_users = load_data()
+df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, fetched_users = load_data()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
@@ -685,6 +686,25 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
     df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
     expert_quality_deductions = df_q_filtered.groupby('Norm_Expert')['Deduction'].sum().to_dict()
 
+# ── تقسيم البونص لـ جودة وإنتاجية ──
+expert_bonus_qty, expert_bonus_qual = {}, {}
+df_b_filtered = pd.DataFrame()
+if 'df_bonus_raw' in globals() and not df_bonus_raw.empty and "Date" in df_bonus_raw.columns:
+    df_bonus_raw['Parsed_Date'] = pd.to_datetime(df_bonus_raw['Date'], errors='coerce').dt.date
+    df_b_filtered = df_bonus_raw[(df_bonus_raw['Parsed_Date'] >= d_from) & (df_bonus_raw['Parsed_Date'] <= d_to)].copy()
+    
+    if not df_b_filtered.empty:
+        if "Bouns Score" in df_b_filtered.columns: df_b_filtered.rename(columns={"Bouns Score": "Bonus Score"}, inplace=True)
+        df_b_filtered['Bonus Score'] = pd.to_numeric(df_b_filtered['Bonus Score'], errors='coerce').fillna(0)
+        df_b_filtered['Norm_Expert'] = df_b_filtered['Agent_Name'].astype(str).apply(normalize_expert_name).str.lower()
+        
+        if 'Bonus Category' not in df_b_filtered.columns: df_b_filtered['Bonus Category'] = 'Quantity'
+        
+        qual_mask = df_b_filtered['Bonus Category'].astype(str).str.lower().str.contains('quality|جودة|كواليت', na=False)
+        
+        expert_bonus_qty = df_b_filtered[~qual_mask].groupby('Norm_Expert')['Bonus Score'].sum().to_dict()
+        expert_bonus_qual = df_b_filtered[qual_mask].groupby('Norm_Expert')['Bonus Score'].sum().to_dict()
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SETTINGS / ADMIN CONTROL SINK
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -735,7 +755,7 @@ if st.session_state.page == "settings":
                 with st.expander(f"👤 {u_data['display_name']} (@{uname}) — [{u_data['role'].upper()}]"):
                     with st.form(f"f_edit_{uname}"):
                         eu_dn = st.text_input("Display Name", value=u_data["display_name"])
-                        eu_role = st.selectbox("Role", ["expert", "supervisor", "admin"], index=["expert", "supervisor", "admin"].index(u_data["role"]))
+                        eu_role = st.selectbox("Role", ["expert", "supervisor", "admin"], index=["expert", "supervisor", "admin"].index(u_data["role"]) if u_data["role"] in ["expert", "supervisor", "admin"] else 0)
                         eu_an = st.text_input("Agent Key Mapping", value=u_data["agent_name"] or "")
                         c_sav, c_del = st.columns([3, 1])
                         with c_sav: saved = st.form_submit_button("💾 Update Account", use_container_width=True)
@@ -861,9 +881,9 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
         slide_team = prs.slides.add_slide(prs.slide_layouts[5])
         slide_team.shapes.title.text = "6. Team Performance Leaderboard Scorecard Matrix"
         if not sc_g.empty:
-            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "% Achievement from Target", "Service Quality"]
+            cols_to_show = ["Rank", "Expert", "Tickets Count", "Emails Count", "Cases/Day", "Bonus Score", "% Achievement from Target", "Service Quality"]
             rows = len(sc_g) + 1
-            table_team = slide_team.shapes.add_table(rows, 7, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
+            table_team = slide_team.shapes.add_table(rows, 8, Inches(0.5), Inches(1.5), Inches(9), Inches(rows * 0.45)).table
             for c_idx, col_name in enumerate(cols_to_show):
                 table_team.cell(0, c_idx).text = str(col_name).replace('% Achievement from Target', 'Target %').replace('Tickets Count', 'Tickets').replace('Emails Count', 'Emails')
                 table_team.cell(0, c_idx).fill.solid(); table_team.cell(0, c_idx).fill.fore_color.rgb = RGBColor(15, 23, 42)
@@ -1230,13 +1250,20 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             
             def get_ach_g(val):
                 try: v = float(val)
-                except: return "0.0%"
-                if global_target > 0: return f"{(v / global_target * 100):.1f}%"
-                if mean_cases_g > 0: return f"{(v / mean_cases_g * 100):.1f}%"
-                return "0.0%"
+                except: return "0.0"
+                if global_target > 0: return f"{(v / global_target * 100):.1f}"
+                if mean_cases_g > 0: return f"{(v / mean_cases_g * 100):.1f}"
+                return "0.0"
                 
-            sc_g["% Achievement from Target"] = sc_g["Cases/Day"].apply(get_ach_g)
-            sc_g["Service Quality"] = sc_g["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
+            sc_g["Qty Bonus"] = sc_g["Expert"].apply(lambda x: float(expert_bonus_qty.get(str(x).strip().lower(), 0.0)))
+            sc_g["Qual Bonus"] = sc_g["Expert"].apply(lambda x: float(expert_bonus_qual.get(str(x).strip().lower(), 0.0)))
+            
+            sc_g["Bonus Score"] = sc_g["Qty Bonus"] + sc_g["Qual Bonus"]
+            
+            sc_g["Base Achievement"] = sc_g["Cases/Day"].apply(get_ach_g).astype(float)
+            sc_g["% Achievement from Target"] = sc_g.apply(lambda row: f"{row['Base Achievement'] + row['Qty Bonus']:.1f}%", axis=1)
+            
+            sc_g["Service Quality"] = sc_g.apply(lambda row: f"{100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']:.1f}%", axis=1)
             
             def calc_incentive_g(row):
                 try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
@@ -1250,11 +1277,11 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             
             sc_g["_sort_inc"] = sc_g["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc_g["_sort_qual"] = sc_g["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
-            sc_g["_sort_cases"] = sc_g["Cases/Day"].astype(float)
-            sc_g["_rank_score"] = (sc_g["_sort_inc"] * 100000) + (sc_g["_sort_qual"] * 1000) + sc_g["_sort_cases"]
+            sc_g["_sort_achiev"] = sc_g["% Achievement from Target"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc_g["_rank_score"] = (sc_g["_sort_inc"] * 100000) + (sc_g["_sort_qual"] * 1000) + (sc_g["_sort_achiev"] * 10)
             sc_g.sort_values(by="_rank_score", ascending=False, inplace=True)
             sc_g.insert(0, "Rank", sc_g["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
-            sc_g.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True, errors="ignore")
+            sc_g.drop(columns=["_sort_inc", "_sort_qual", "_sort_achiev", "_rank_score", "Base Achievement", "Qty Bonus", "Qual Bonus"], inplace=True, errors="ignore")
             
             cols_order = ["Rank"] + [c for c in sc_g.columns if c != "Rank"]
             sc_g = sc_g[cols_order]
@@ -1301,6 +1328,24 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 </div>
             </div>
             ''', unsafe_allow_html=True)
+            
+            if target_agent_photo and 'df_b_filtered' in globals() and not df_b_filtered.empty:
+                my_bonus = df_b_filtered[df_b_filtered['Norm_Expert'] == normalize_expert_name(target_agent_photo).lower()].copy()
+                if not my_bonus.empty:
+                    total_qty = my_bonus[~my_bonus['Bonus Category'].astype(str).str.lower().str.contains('quality|جودة|كواليت', na=False)]['Bonus Score'].sum()
+                    total_qual = my_bonus[my_bonus['Bonus Category'].astype(str).str.lower().str.contains('quality|جودة|كواليت', na=False)]['Bonus Score'].sum()
+                    
+                    msg = "🌟 مجهود رائع! تمت إضافة "
+                    if total_qty > 0: msg += f"({total_qty}) نقطة للإنتاجية "
+                    if total_qty > 0 and total_qual > 0: msg += "و "
+                    if total_qual > 0: msg += f"({total_qual}) نقطة للجودة "
+                    msg += "هذا الشهر."
+                    
+                    st.success(msg, icon="🏆")
+                    with st.expander("📋 عرض تفاصيل نقاط البونص", expanded=False):
+                        disp_bonus = my_bonus[['Date', 'Bonus Category', 'Bonus Score', 'Note']].copy()
+                        disp_bonus.rename(columns={'Date': 'التاريخ', 'Bonus Category': 'فئة البونص', 'Bonus Score': 'النقاط', 'Note': 'ملاحظات'}, inplace=True)
+                        st.dataframe(disp_bonus, use_container_width=True, hide_index=True)
         
         scope_agents = [aname] if is_exp else (sel_agents_t2 if sel_agents_t2 else OFFICIAL_EXPERTS)
         period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
@@ -1361,14 +1406,22 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             
         mean_cases_val = float(sc["Cases/Day"].mean()) if not sc["Cases/Day"].empty else 0.0
         if pd.isna(mean_cases_val): mean_cases_val = 0.0
+        
         def get_ach(val):
             try: v = float(val)
-            except: return "0.0%"
-            if global_target > 0: return f"{(v / global_target * 100):.1f}%"
-            if mean_cases_val > 0: return f"{(v / mean_cases_val * 100):.1f}%"
-            return "0.0%"
-        sc["% Achievement from Target"] = sc["Cases/Day"].apply(get_ach)
-        sc["Service Quality"] = sc["Expert"].apply(lambda x: f"{100.0 - float(expert_quality_deductions.get(str(x).strip().lower(), 0.0)):.1f}%")
+            except: return "0.0"
+            if global_target > 0: return f"{(v / global_target * 100):.1f}"
+            if mean_cases_val > 0: return f"{(v / mean_cases_val * 100):.1f}"
+            return "0.0"
+            
+        sc["Qty Bonus"] = sc["Expert"].apply(lambda x: float(expert_bonus_qty.get(str(x).strip().lower(), 0.0)))
+        sc["Qual Bonus"] = sc["Expert"].apply(lambda x: float(expert_bonus_qual.get(str(x).strip().lower(), 0.0)))
+
+        sc["Bonus Score"] = sc["Qty Bonus"] + sc["Qual Bonus"]
+        sc["Base Achievement"] = sc["Cases/Day"].apply(get_ach).astype(float)
+        sc["% Achievement from Target"] = sc.apply(lambda row: f"{row['Base Achievement'] + row['Qty Bonus']:.1f}%", axis=1)
+        
+        sc["Service Quality"] = sc.apply(lambda row: f"{100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']:.1f}%", axis=1)
         
         def calc_incentive(row):
             try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
@@ -1384,11 +1437,11 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         if not sc.empty:
             sc["_sort_inc"] = sc["Prospected Incentive"].astype(str).str.replace(',', '', regex=False).str.replace(' EGP', '', regex=False).astype(float)
             sc["_sort_qual"] = sc["Service Quality"].astype(str).str.replace('%', '', regex=False).astype(float)
-            sc["_sort_cases"] = sc["Cases/Day"].astype(float)
-            sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + sc["_sort_cases"]
+            sc["_sort_achiev"] = sc["% Achievement from Target"].astype(str).str.replace('%', '', regex=False).astype(float)
+            sc["_rank_score"] = (sc["_sort_inc"] * 100000) + (sc["_sort_qual"] * 1000) + (sc["_sort_achiev"] * 10)
             sc.sort_values(by="_rank_score", ascending=False, inplace=True)
             sc.insert(0, "Rank", sc["_rank_score"].rank(method="min", ascending=False).astype(int).astype(str))
-            sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_cases", "_rank_score"], inplace=True)
+            sc.drop(columns=["_sort_inc", "_sort_qual", "_sort_achiev", "_rank_score", "Base Achievement", "Qty Bonus", "Qual Bonus"], inplace=True)
         else: sc.insert(0, "Rank", [])
             
         cols_sc = ["Rank"] + [col for col in sc.columns if col != "Rank"]
@@ -1396,7 +1449,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
         kpi_curr_avg_per_day = (pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()) / pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() if pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() > 0 else 0
-        prev_sum_wd = sum(prev_roster_counts[exp]["wd"] for exp in scope_agents)
+        prev_sum_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in scope_agents)
         prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin([a.lower() for a in scope_agents])] if scope_agents else df_kpi_prev
         prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
 
@@ -1419,6 +1472,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Cases/Day": round((round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0) / (team_wd if team_wd > 0 else 1), 1),
+            "Bonus Score": "-",
             "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0, "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "% Achievement from Target": "100.0%", "AFR": fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0), "Service Time": fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0),
             "Service Quality": f"{sc['Service Quality'].apply(lambda p: float(str(p).replace('%', '')) if pd.notnull(p) else 0.0).mean() if not sc.empty else 0:.1f}%", "Prospected Incentive": "3,100 EGP"
@@ -1428,7 +1482,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         gold_exp, silver_exp, bronze_exp = top_exps[0] if len(top_exps) > 0 else None, top_exps[1] if len(top_exps) > 1 else None, top_exps[2] if len(top_exps) > 2 else None
 
         display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
-        for c in ["Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves"]:
+        for c in ["Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
             if c in display_df.columns: display_df[c] = display_df[c].apply(lambda x: "-" if x == "-" else (str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))))
         display_df["Expert"] = display_df["Expert"].apply(lambda v: f"🥇 {v}" if v == gold_exp else (f"🥈 {v}" if v == silver_exp else (f"🥉 {v}" if v == bronze_exp else v)))
 
@@ -1449,7 +1503,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 except: pass
             return styles
 
-        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         
         try: 
             html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
@@ -1517,6 +1571,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                             <th style="padding: 10px;">Tickets</th>
                             <th style="padding: 10px;">Emails</th>
                             <th style="padding: 10px;">Cases/Day</th>
+                            <th style="padding: 10px;">Bonus</th>
                             <th style="padding: 10px;">Achievement</th>
                             <th style="padding: 10px;">Quality</th>
                             <th style="padding: 10px;">Incentive</th>
@@ -1529,6 +1584,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                             <td style="padding: 10px;">{arow['Tickets Count']}</td>
                             <td style="padding: 10px; font-weight:bold; color:#0ea5e9;">{arow['Emails Count']}</td>
                             <td style="padding: 10px;">{arow['Cases/Day']}</td>
+                            <td style="padding: 10px;">{arow['Bonus Score']}</td>
                             <td style="padding: 10px;">{arow['% Achievement from Target']}</td>
                             <td style="padding: 10px;">{arow['Service Quality']}</td>
                             <td style="padding: 10px; color: #16a34a; font-weight: bold;">{arow['Prospected Incentive']}</td>
@@ -1539,6 +1595,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                             <td style="padding: 10px;">{int(trow['Tickets Count'])}</td>
                             <td style="padding: 10px;">{int(trow['Emails Count'])}</td>
                             <td style="padding: 10px;">{trow['Cases/Day']}</td>
+                            <td style="padding: 10px;">-</td>
                             <td style="padding: 10px;">{trow['% Achievement from Target']}</td>
                             <td style="padding: 10px;">{trow['Service Quality']}</td>
                             <td style="padding: 10px;">3,100 EGP</td>
