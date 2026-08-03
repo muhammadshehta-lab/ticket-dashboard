@@ -330,11 +330,13 @@ def load_data():
             title = ws.title.strip()
             data = ws.get_all_values()
             if len(data) < 2: continue
-            if title == "Working Days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Out Requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Quality Issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Users":
+            
+            t_lower = title.lower()
+            if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "users":
                 df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
                     if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
@@ -566,6 +568,10 @@ with st.sidebar:
     min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
     if pd.isna(min_d): min_d = default_from
     if pd.isna(max_d): max_d = default_to
+
+    # 🛡️ حماية التواريخ
+    if default_from < min_d: min_d = default_from
+    if default_to > max_d: max_d = default_to
 
     date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
     
@@ -945,7 +951,13 @@ with tabs[0]:
     issue_pct = (issue / total * 100) if total > 0 else 0
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
-    curr_avg_per_day = (total + global_jhah + global_support) / delta_days if delta_days > 0 else 0
+    
+    team_actual_wd = sum(curr_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
+    curr_avg_per_day = (total + global_jhah + global_support) / team_actual_wd if team_actual_wd > 0 else 0
+    
+    # ── حساب الـ Reopen Rate ──
+    reopened_cases = dfm[dfm["Status"].astype(str).str.lower().str.contains('reopen|re-open', na=False)].shape[0]
+    reopen_rate = (reopened_cases / total * 100) if total > 0 else 0
     
     prev_total = len(dfm_prev) + global_prev_adj_total
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
@@ -958,12 +970,16 @@ with tabs[0]:
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
-    prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
-    prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / delta_days if delta_days > 0 else 0
+    
+    team_prev_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
+    prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / team_prev_wd if team_prev_wd > 0 else 0
+
+    prev_reopened_cases = dfm_prev[dfm_prev["Status"].astype(str).str.lower().str.contains('reopen|re-open', na=False)].shape[0]
+    prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
 
     chg_total = calc_change(total, prev_total)
     chg_stores = calc_change(stores_count, prev_stores_count)
-    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
+    chg_reopen = reopen_rate - prev_reopen_rate
     chg_ok = ok_pct - prev_ok_pct  
     chg_issue = issue_pct - prev_issue_pct 
     chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
@@ -974,7 +990,7 @@ with tabs[0]:
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
-    r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Reopen Rate",      f"{reopen_rate:.1f}%", "card-danger", chg_reopen, inverse=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
     r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
@@ -1263,7 +1279,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             sc_g["Base Achievement"] = sc_g["Cases/Day"].apply(get_ach_g).astype(float)
             sc_g["% Achievement from Target"] = sc_g.apply(lambda row: f"{row['Base Achievement'] + row['Qty Bonus']:.1f}%", axis=1)
             
-            sc_g["Service Quality"] = sc_g.apply(lambda row: f"{100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']:.1f}%", axis=1)
+            sc_g["Service Quality"] = sc_g.apply(lambda row: f"{min(100.0, 100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']):.1f}%", axis=1)
             
             def calc_incentive_g(row):
                 try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
@@ -1421,7 +1437,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc["Base Achievement"] = sc["Cases/Day"].apply(get_ach).astype(float)
         sc["% Achievement from Target"] = sc.apply(lambda row: f"{row['Base Achievement'] + row['Qty Bonus']:.1f}%", axis=1)
         
-        sc["Service Quality"] = sc.apply(lambda row: f"{100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']:.1f}%", axis=1)
+        sc["Service Quality"] = sc.apply(lambda row: f"{min(100.0, 100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']):.1f}%", axis=1)
         
         def calc_incentive(row):
             try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
@@ -1448,20 +1464,45 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
-        kpi_curr_avg_per_day = (pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()) / pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() if pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() > 0 else 0
+        
+        # ── حساب إجمالي الطلبات وأيام العمل للموظفين المحددين في التاب 2 ──
+        scope_total_req = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
+        scope_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
+        scope_ann = pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum()
+        scope_cas = pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum()
+        scope_sick = pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum()
+        
+        kpi_curr_avg_per_day = scope_total_req / scope_wd if scope_wd > 0 else 0
+        
         prev_sum_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in scope_agents)
         prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin([a.lower() for a in scope_agents])] if scope_agents else df_kpi_prev
-        prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
+        prev_scope_total_req = len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)
+        
+        prev_kpi_avg_per_day = prev_scope_total_req / prev_sum_wd if prev_sum_wd > 0 else 0
 
-        chg_kpi_total = calc_change(total_kpi, prev_kpi_total); chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct; chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct; chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day); chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val); chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+        chg_kpi_total_req = calc_change(scope_total_req, prev_scope_total_req)
+        chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct
+        chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct
+        chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
+        chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
+        chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(kpi_colored("Tickets Count", f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True), unsafe_allow_html=True)
+        k1.markdown(kpi_colored("Total Requests", f"{int(scope_total_req):,}", "card-primary", chg_kpi_total_req, neutral=True), unsafe_allow_html=True)
         k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True), unsafe_allow_html=True)
         k3.markdown(kpi_colored("Closed Completed", f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>", "card-success", chg_kpi_ok), unsafe_allow_html=True)
         k4.markdown(kpi_colored("Closed with Issue", f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>", "card-danger", chg_kpi_iss, inverse=True), unsafe_allow_html=True)
         k5.markdown(kpi_colored("AFR (Avg First Response)", fmt_m(kpi_curr_afr_val), "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
         k6.markdown(kpi_colored("Avg Service (TAT)", fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
+        
+        st.write("")
+        # ── إضافة فلاش كاردز للإجازات ──
+        l1, l2, l3, l4 = st.columns(4)
+        l1.markdown(kpi_colored("Working Days", f"{int(scope_wd)}", "card-success"), unsafe_allow_html=True)
+        l2.markdown(kpi_colored("Annual Leaves", f"{int(scope_ann)}", "card-neutral"), unsafe_allow_html=True)
+        l3.markdown(kpi_colored("Casual Leaves", f"{int(scope_cas)}", "card-neutral"), unsafe_allow_html=True)
+        l4.markdown(kpi_colored("Sick Leaves", f"{int(scope_sick)}", "card-danger"), unsafe_allow_html=True)
+        
         st.write(""); st.divider()
 
         team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
