@@ -956,7 +956,8 @@ with tabs[0]:
     curr_avg_per_day = (total + global_jhah + global_support) / team_actual_wd if team_actual_wd > 0 else 0
     
     # ── حساب الـ Reopen Rate ──
-    reopened_cases = dfm[dfm["Status"].astype(str).str.lower().str.contains('reopen|re-open', na=False)].shape[0]
+    reopen_mask = dfm["Status"].astype(str).str.lower().str.contains('reopen|re-open|معاد', na=False)
+    reopened_cases = dfm[reopen_mask]['Status Count'].sum() if 'Status Count' in dfm.columns and dfm[reopen_mask]['Status Count'].sum() > 0 else dfm[reopen_mask].shape[0]
     reopen_rate = (reopened_cases / total * 100) if total > 0 else 0
     
     prev_total = len(dfm_prev) + global_prev_adj_total
@@ -970,14 +971,17 @@ with tabs[0]:
     prev_ok_pct = (prev_ok / prev_total * 100) if prev_total > 0 else 0
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
-    
+    prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
+
     team_prev_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
     prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / team_prev_wd if team_prev_wd > 0 else 0
 
-    prev_reopened_cases = dfm_prev[dfm_prev["Status"].astype(str).str.lower().str.contains('reopen|re-open', na=False)].shape[0]
+    prev_reopen_mask = dfm_prev["Status"].astype(str).str.lower().str.contains('reopen|re-open|معاد', na=False)
+    prev_reopened_cases = dfm_prev[prev_reopen_mask]['Status Count'].sum() if 'Status Count' in dfm_prev.columns and dfm_prev[prev_reopen_mask]['Status Count'].sum() > 0 else dfm_prev[prev_reopen_mask].shape[0]
     prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
 
     chg_total = calc_change(total, prev_total)
+    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_reopen = reopen_rate - prev_reopen_rate
     chg_ok = ok_pct - prev_ok_pct  
@@ -986,14 +990,15 @@ with tabs[0]:
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
-    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
-    r1c2.markdown(kpi_colored("Reopen Rate",      f"{reopen_rate:.1f}%", "card-danger", chg_reopen, inverse=True),  unsafe_allow_html=True)
-    r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Reopen Rate",        f"{reopen_rate:.1f}%", "card-danger", chg_reopen, inverse=True),  unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c6.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1468,6 +1473,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         # ── حساب إجمالي الطلبات وأيام العمل للموظفين المحددين في التاب 2 ──
         scope_total_req = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
         scope_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
+        scope_off = pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum()
         scope_ann = pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum()
         scope_cas = pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum()
         scope_sick = pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum()
@@ -1497,11 +1503,12 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         
         st.write("")
         # ── إضافة فلاش كاردز للإجازات ──
-        l1, l2, l3, l4 = st.columns(4)
+        l1, l2, l3, l4, l5 = st.columns(5)
         l1.markdown(kpi_colored("Working Days", f"{int(scope_wd)}", "card-success"), unsafe_allow_html=True)
-        l2.markdown(kpi_colored("Annual Leaves", f"{int(scope_ann)}", "card-neutral"), unsafe_allow_html=True)
-        l3.markdown(kpi_colored("Casual Leaves", f"{int(scope_cas)}", "card-neutral"), unsafe_allow_html=True)
-        l4.markdown(kpi_colored("Sick Leaves", f"{int(scope_sick)}", "card-danger"), unsafe_allow_html=True)
+        l2.markdown(kpi_colored("Off Days", f"{int(scope_off)}", "card-neutral"), unsafe_allow_html=True)
+        l3.markdown(kpi_colored("Annual Leaves", f"{int(scope_ann)}", "card-neutral"), unsafe_allow_html=True)
+        l4.markdown(kpi_colored("Casual Leaves", f"{int(scope_cas)}", "card-neutral"), unsafe_allow_html=True)
+        l5.markdown(kpi_colored("Sick Leaves", f"{int(scope_sick)}", "card-danger"), unsafe_allow_html=True)
         
         st.write(""); st.divider()
 
