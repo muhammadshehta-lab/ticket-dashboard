@@ -369,6 +369,7 @@ def load_data():
                 elif "email" in cl or "special" in cl: t = "Is Special Request(By Email)"
                 elif "hic" in cl or "insurance" in cl: t = "HIC"
                 elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
+                elif "reopen" in cl: t = "Is Reopen"
                 if t and t not in seen: mp[col] = t; seen.add(t)
             dft.rename(columns=mp, inplace=True)
             all_dfs.append(dft)
@@ -376,7 +377,7 @@ def load_data():
         if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), fetched_users
             
         df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
-        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
+        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Is Reopen"]:
             if c not in df.columns: df[c] = np.nan
         if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
 
@@ -406,7 +407,7 @@ df = pd.DataFrame()
 df_prev_all = pd.DataFrame()
 
 # Ensure mandatory columns exist to avoid KeyErrors during filtering
-mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email"]
+mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email", "Is Reopen"]
 for col in mandatory_cols:
     if col not in df_raw.columns:
         df_raw[col] = np.nan
@@ -940,6 +941,7 @@ with tabs[0]:
     global_prev_adj_total = sum(int(v) for v in global_prev_adjs.values()) if not esc and not nesc else 0
 
     total = len(dfm) + global_adj_total
+    total_all_req_curr = total + global_jhah + global_support
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0] + global_adj_total
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
@@ -953,14 +955,14 @@ with tabs[0]:
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
     
     team_actual_wd = sum(curr_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
-    curr_avg_per_day = (total + global_jhah + global_support) / team_actual_wd if team_actual_wd > 0 else 0
+    curr_avg_per_day = total_all_req_curr / team_actual_wd if team_actual_wd > 0 else 0
     
     # ── حساب الـ Reopen Rate ──
-    reopen_mask = dfm["Status"].astype(str).str.lower().str.contains('reopen|re-open|معاد', na=False)
-    reopened_cases = dfm[reopen_mask]['Status Count'].sum() if 'Status Count' in dfm.columns and dfm[reopen_mask]['Status Count'].sum() > 0 else dfm[reopen_mask].shape[0]
+    reopened_cases = dfm[dfm["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm.columns else 0
     reopen_rate = (reopened_cases / total * 100) if total > 0 else 0
     
     prev_total = len(dfm_prev) + global_prev_adj_total
+    prev_total_all_req = prev_total + prev_global_jhah + prev_global_support
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
@@ -974,10 +976,9 @@ with tabs[0]:
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
     team_prev_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
-    prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / team_prev_wd if team_prev_wd > 0 else 0
+    prev_avg_per_day = prev_total_all_req / team_prev_wd if team_prev_wd > 0 else 0
 
-    prev_reopen_mask = dfm_prev["Status"].astype(str).str.lower().str.contains('reopen|re-open|معاد', na=False)
-    prev_reopened_cases = dfm_prev[prev_reopen_mask]['Status Count'].sum() if 'Status Count' in dfm_prev.columns and dfm_prev[prev_reopen_mask]['Status Count'].sum() > 0 else dfm_prev[prev_reopen_mask].shape[0]
+    prev_reopened_cases = dfm_prev[dfm_prev["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm_prev.columns else 0
     prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
 
     chg_total = calc_change(total, prev_total)
