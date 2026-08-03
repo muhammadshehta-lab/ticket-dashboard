@@ -954,8 +954,7 @@ with tabs[0]:
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
     
-    team_actual_wd = sum(curr_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
-    curr_avg_per_day = total_all_req_curr / team_actual_wd if team_actual_wd > 0 else 0
+    curr_avg_per_day = total_all_req_curr / delta_days if delta_days > 0 else 0
     
     # ── حساب الـ Reopen Rate ──
     reopened_cases = dfm[dfm["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm.columns else 0
@@ -975,8 +974,7 @@ with tabs[0]:
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
 
-    team_prev_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in OFFICIAL_EXPERTS)
-    prev_avg_per_day = prev_total_all_req / team_prev_wd if team_prev_wd > 0 else 0
+    prev_avg_per_day = prev_total_all_req / delta_days if delta_days > 0 else 0
 
     prev_reopened_cases = dfm_prev[dfm_prev["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm_prev.columns else 0
     prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
