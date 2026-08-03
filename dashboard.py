@@ -979,7 +979,7 @@ with tabs[0]:
     prev_reopened_cases = dfm_prev[dfm_prev["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm_prev.columns else 0
     prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
 
-    chg_total_all = calc_change(total_all_req_curr, prev_total_all_req)
+    chg_total = calc_change(total, prev_total)
     chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_stores = calc_change(stores_count, prev_stores_count)
     chg_reopen = reopen_rate - prev_reopen_rate
@@ -992,7 +992,7 @@ with tabs[0]:
     r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
-    r1c1.markdown(kpi_colored("Total Requests",     f"{int(total_all_req_curr):,}", "card-primary", chg_total_all, neutral=True),     unsafe_allow_html=True)
+    r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Reopen Rate",        f"{reopen_rate:.1f}%", "card-danger", chg_reopen, inverse=True),  unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
@@ -1229,7 +1229,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Total Requests", "Value": int(total_all_req_curr)}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
@@ -1311,7 +1311,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             dvol_pass = daily_vol if 'daily_vol' in locals() else pd.DataFrame()
 
             ppt_file_data, err_msg = generate_pptx_summary(
-                d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), int(total_all_req_curr), curr_avg_per_day, ok, ok_pct, issue, issue_pct,
+                d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct,
                 fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support,
                 req_counts.to_dict(), req_pct.to_dict(), hic_pass, hrs_pass, dvol_pass, sc_g
             )
