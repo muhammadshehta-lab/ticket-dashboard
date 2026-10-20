@@ -141,7 +141,7 @@ def send_approval_email(to_email, name, uid):
             msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
             msg['From'] = f"Mohammed Shehta <{sender_email}>"
             msg['To'] = to_email
-            dashboard_url = "https://approvals-team.streamlit.app" 
+            dashboard_url = "https://aldawaa-requests.streamlit.app" 
             body = f"Dear {name},\n\nYour request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.\n\nHere are your login credentials:\n- Username / ID: {uid}\n- Temporary Password: {uid}\n\n(Note: You will be required to set a new, secure password upon your first login).\n\nYou can access the dashboard via the link below:\n{dashboard_url}\n\nBest regards,\nMohammed Shehta"
             msg.set_content(body)
             with smtplib.SMTP('smtp.gmail.com', 587) as server:
@@ -319,7 +319,7 @@ def load_data():
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
             creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
         else:
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+            raise RuntimeError("gspread credentials missing in st.secrets")
         
         client = gspread.authorize(creds)
         sheet = client.open("AlDawaa Tickets Data")
@@ -330,13 +330,11 @@ def load_data():
             title = ws.title.strip()
             data = ws.get_all_values()
             if len(data) < 2: continue
-            
-            t_lower = title.lower()
-            if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif t_lower == "users":
+            if title == "Working Days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Out Requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Quality Issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Users":
                 df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
                     if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
@@ -369,7 +367,6 @@ def load_data():
                 elif "email" in cl or "special" in cl: t = "Is Special Request(By Email)"
                 elif "hic" in cl or "insurance" in cl: t = "HIC"
                 elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
-                elif "reopen" in cl: t = "Is Reopen"
                 if t and t not in seen: mp[col] = t; seen.add(t)
             dft.rename(columns=mp, inplace=True)
             all_dfs.append(dft)
@@ -377,7 +374,7 @@ def load_data():
         if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), fetched_users
             
         df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
-        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Is Reopen"]:
+        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
             if c not in df.columns: df[c] = np.nan
         if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
 
@@ -396,9 +393,13 @@ def load_data():
             
         return df, roster_df, out_req_df, df_quality, df_bonus_raw, fetched_users
     except Exception:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+        raise
 
-df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, fetched_users = load_data()
+try:
+    df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, fetched_users = load_data()
+except Exception as e:
+    st.error(f"❌ Failed to load data: {type(e).__name__}: {e}")
+    st.stop()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
@@ -407,7 +408,7 @@ df = pd.DataFrame()
 df_prev_all = pd.DataFrame()
 
 # Ensure mandatory columns exist to avoid KeyErrors during filtering
-mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email", "Is Reopen"]
+mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email"]
 for col in mandatory_cols:
     if col not in df_raw.columns:
         df_raw[col] = np.nan
@@ -569,10 +570,6 @@ with st.sidebar:
     min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
     if pd.isna(min_d): min_d = default_from
     if pd.isna(max_d): max_d = default_to
-
-    # 🛡️ حماية التواريخ
-    if default_from < min_d: min_d = default_from
-    if default_to > max_d: max_d = default_to
 
     date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
     
@@ -941,7 +938,6 @@ with tabs[0]:
     global_prev_adj_total = sum(int(v) for v in global_prev_adjs.values()) if not esc and not nesc else 0
 
     total = len(dfm) + global_adj_total
-    total_all_req_curr = total + global_jhah + global_support
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0] + global_adj_total
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
@@ -953,15 +949,9 @@ with tabs[0]:
     issue_pct = (issue / total * 100) if total > 0 else 0
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
-    
-    curr_avg_per_day = total_all_req_curr / delta_days if delta_days > 0 else 0
-    
-    # ── حساب الـ Reopen Rate ──
-    reopened_cases = dfm[dfm["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm.columns else 0
-    reopen_rate = (reopened_cases / total * 100) if total > 0 else 0
+    curr_avg_per_day = (total + global_jhah + global_support) / delta_days if delta_days > 0 else 0
     
     prev_total = len(dfm_prev) + global_prev_adj_total
-    prev_total_all_req = prev_total + prev_global_jhah + prev_global_support
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
@@ -973,31 +963,25 @@ with tabs[0]:
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
-
-    prev_avg_per_day = prev_total_all_req / delta_days if delta_days > 0 else 0
-
-    prev_reopened_cases = dfm_prev[dfm_prev["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm_prev.columns else 0
-    prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
+    prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / delta_days if delta_days > 0 else 0
 
     chg_total = calc_change(total, prev_total)
-    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_stores = calc_change(stores_count, prev_stores_count)
-    chg_reopen = reopen_rate - prev_reopen_rate
+    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_ok = ok_pct - prev_ok_pct  
     chg_issue = issue_pct - prev_issue_pct 
     chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
-    r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
-    r1c3.markdown(kpi_colored("Reopen Rate",        f"{reopen_rate:.1f}%", "card-danger", chg_reopen, inverse=True),  unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
-    r1c6.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1229,7 +1213,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": int(total)}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
@@ -1283,7 +1267,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             sc_g["Base Achievement"] = sc_g["Cases/Day"].apply(get_ach_g).astype(float)
             sc_g["% Achievement from Target"] = sc_g.apply(lambda row: f"{row['Base Achievement'] + row['Qty Bonus']:.1f}%", axis=1)
             
-            sc_g["Service Quality"] = sc_g.apply(lambda row: f"{min(100.0, 100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']):.1f}%", axis=1)
+            sc_g["Service Quality"] = sc_g.apply(lambda row: f"{100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']:.1f}%", axis=1)
             
             def calc_incentive_g(row):
                 try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
@@ -1311,7 +1295,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             dvol_pass = daily_vol if 'daily_vol' in locals() else pd.DataFrame()
 
             ppt_file_data, err_msg = generate_pptx_summary(
-                d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), int(total), curr_avg_per_day, ok, ok_pct, issue, issue_pct,
+                d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct,
                 fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support,
                 req_counts.to_dict(), req_pct.to_dict(), hic_pass, hrs_pass, dvol_pass, sc_g
             )
@@ -1441,7 +1425,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc["Base Achievement"] = sc["Cases/Day"].apply(get_ach).astype(float)
         sc["% Achievement from Target"] = sc.apply(lambda row: f"{row['Base Achievement'] + row['Qty Bonus']:.1f}%", axis=1)
         
-        sc["Service Quality"] = sc.apply(lambda row: f"{min(100.0, 100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']):.1f}%", axis=1)
+        sc["Service Quality"] = sc.apply(lambda row: f"{100.0 - float(expert_quality_deductions.get(str(row['Expert']).strip().lower(), 0.0)) + row['Qual Bonus']:.1f}%", axis=1)
         
         def calc_incentive(row):
             try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
@@ -1468,47 +1452,20 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
-        
-        # ── حساب إجمالي الطلبات وأيام العمل للموظفين المحددين في التاب 2 ──
-        scope_total_req = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
-        scope_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
-        scope_off = pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum()
-        scope_ann = pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum()
-        scope_cas = pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum()
-        scope_sick = pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum()
-        
-        kpi_curr_avg_per_day = scope_total_req / scope_wd if scope_wd > 0 else 0
-        
+        kpi_curr_avg_per_day = (pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()) / pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() if pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() > 0 else 0
         prev_sum_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in scope_agents)
         prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin([a.lower() for a in scope_agents])] if scope_agents else df_kpi_prev
-        prev_scope_total_req = len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)
-        
-        prev_kpi_avg_per_day = prev_scope_total_req / prev_sum_wd if prev_sum_wd > 0 else 0
+        prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
 
-        chg_kpi_total_req = calc_change(scope_total_req, prev_scope_total_req)
-        chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct
-        chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct
-        chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
-        chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
-        chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+        chg_kpi_total = calc_change(total_kpi, prev_kpi_total); chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct; chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct; chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day); chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val); chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(kpi_colored("Total Requests", f"{int(scope_total_req):,}", "card-primary", chg_kpi_total_req, neutral=True), unsafe_allow_html=True)
+        k1.markdown(kpi_colored("Tickets Count", f"{total_kpi:,}", "card-primary", chg_kpi_total, neutral=True), unsafe_allow_html=True)
         k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True), unsafe_allow_html=True)
         k3.markdown(kpi_colored("Closed Completed", f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>", "card-success", chg_kpi_ok), unsafe_allow_html=True)
         k4.markdown(kpi_colored("Closed with Issue", f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>", "card-danger", chg_kpi_iss, inverse=True), unsafe_allow_html=True)
         k5.markdown(kpi_colored("AFR (Avg First Response)", fmt_m(kpi_curr_afr_val), "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
         k6.markdown(kpi_colored("Avg Service (TAT)", fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
-        
-        st.write("")
-        # ── إضافة فلاش كاردز للإجازات ──
-        l1, l2, l3, l4, l5 = st.columns(5)
-        l1.markdown(kpi_colored("Working Days", f"{int(scope_wd)}", "card-success"), unsafe_allow_html=True)
-        l2.markdown(kpi_colored("Off Days", f"{int(scope_off)}", "card-neutral"), unsafe_allow_html=True)
-        l3.markdown(kpi_colored("Annual Leaves", f"{int(scope_ann)}", "card-neutral"), unsafe_allow_html=True)
-        l4.markdown(kpi_colored("Casual Leaves", f"{int(scope_cas)}", "card-neutral"), unsafe_allow_html=True)
-        l5.markdown(kpi_colored("Sick Leaves", f"{int(scope_sick)}", "card-danger"), unsafe_allow_html=True)
-        
         st.write(""); st.divider()
 
         team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
@@ -1550,12 +1507,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 except: pass
             return styles
 
-        # إخفاء عمود الحوافز عن أي حد مش Admin
-        cols_to_display = ["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
-        if is_admin():
-            cols_to_display.append("Prospected Incentive")
-            
-        display_df = display_df[cols_to_display]
+        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         
         try: 
             html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
