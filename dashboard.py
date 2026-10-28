@@ -309,10 +309,18 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
         change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: {color}; background-color: {bg_color};">{arrow} {abs(change):.1f}%</div>'
     return (f'<div class="kpi-container {cls}"><div class="kpi-label">{label}</div><div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;">{value}</div>{change_html}</div>')
 
+def get_deduction(sev):
+    s = str(sev).strip().lower()
+    if s == 'critical': return 5.0
+    elif s == 'major': return 2.0
+    elif s == 'medium': return 1.0
+    elif s == 'minor': return 0.5
+    return 0.0
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET) - FIX FOR DUPLICATE COLS
 # ══════════════════════════════════════════════════════════════════════════════════
-@st.cache_data(ttl=300, show_spinner="Syncing database tables…")
+@st.cache_data(ttl=43200, show_spinner="Syncing database tables…")
 def load_data():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -338,7 +346,6 @@ def load_data():
             data = ws.get_all_values()
             if len(data) < 2: continue
             
-            # --- سحر حل مشكلة تكرار أسماء الأعمدة ---
             raw_cols = [str(c).strip() for c in data[0]]
             new_cols = []
             seen_cols = set()
@@ -350,7 +357,6 @@ def load_data():
                     counter += 1
                 seen_cols.add(c)
                 new_cols.append(c)
-            # ----------------------------------------
             
             t_lower = title.lower()
             if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=new_cols); continue
@@ -706,13 +712,6 @@ expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
 if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
     df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
     df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
-    def get_deduction(sev):
-        s = str(sev).strip().lower()
-        if s == 'critical': return 5.0
-        elif s == 'major': return 2.0
-        elif s == 'medium': return 1.0
-        elif s == 'minor': return 0.5
-        return 0.0
     df_q_filtered['Deduction'] = df_q_filtered['Severity'].apply(get_deduction)
     df_q_filtered['Norm_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name).str.lower()
     df_q_filtered['Display_Expert'] = df_q_filtered['Expert Name'].apply(normalize_expert_name)
@@ -1556,6 +1555,66 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
         for c in ["Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
             if c in display_df.columns: display_df[c] = display_df[c].apply(lambda x: "-" if x == "-" else (str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))))
+        
+        # ── حساب أسهم المقارنة مع نفس الفترة الشهر السابق ──
+        try:
+            prev_m_from = (pd.to_datetime(d_from) - pd.DateOffset(months=1)).date()
+            prev_m_to = (pd.to_datetime(d_to) - pd.DateOffset(months=1)).date()
+            df_prev_m = df_raw[(df_raw["Date Only"] >= prev_m_from) & (df_raw["Date Only"] <= prev_m_to)]
+            
+            temp_prev_tickets = df_prev_m.groupby(df_prev_m["Assigned By"].astype(str).str.lower())["Request ID"].count().to_dict()
+            
+            p_qual_deduct = {}
+            if not df_quality.empty:
+                df_q_p = df_quality[(pd.to_datetime(df_quality['Date'], errors='coerce').dt.date >= prev_m_from) & (pd.to_datetime(df_quality['Date'], errors='coerce').dt.date <= prev_m_to)].copy()
+                if not df_q_p.empty:
+                    df_q_p['D'] = df_q_p['Severity'].apply(get_deduction)
+                    p_qual_deduct = df_q_p.groupby(df_q_p['Expert Name'].apply(normalize_expert_name).str.lower())['D'].sum().to_dict()
+            
+            p_qual_bonus = {}
+            if 'df_bonus_raw' in globals() and not df_bonus_raw.empty:
+                df_b_p = df_bonus_raw[(pd.to_datetime(df_bonus_raw['Date'], errors='coerce').dt.date >= prev_m_from) & (pd.to_datetime(df_bonus_raw['Date'], errors='coerce').dt.date <= prev_m_to)].copy()
+                if not df_b_p.empty:
+                    df_b_p['B'] = pd.to_numeric(df_b_p['Bonus Score'], errors='coerce').fillna(0)
+                    m = df_b_p['Bonus Category'].astype(str).str.lower().str.contains('quality|جودة|كواليت', na=False)
+                    p_qual_bonus = df_b_p[m].groupby(df_b_p['Agent_Name'].astype(str).apply(normalize_expert_name).str.lower())['B'].sum().to_dict()
+
+            def get_p_qual(e):
+                return min(100.0, 100.0 - float(p_qual_deduct.get(e, 0.0)) + float(p_qual_bonus.get(e, 0.0)))
+
+            def add_arrow(curr_str, curr_v, prev_v, is_p=False):
+                if pd.isna(prev_v) or prev_v == 0 or curr_v == '-': return str(curr_str)
+                diff = float(curr_v) - float(prev_v)
+                if abs(diff) < 0.1: return str(curr_str)
+                arr = "⬆️" if diff > 0 else "⬇️"
+                sign = "+" if diff > 0 else ""
+                d_str = f"{sign}{diff:.1f}%" if is_p else f"{sign}{int(diff)}"
+                return f"{curr_str} {arr}({d_str})"
+
+            for idx, row in display_df.iterrows():
+                raw_exp = str(row['Expert']).strip()
+                if raw_exp == "🏆 Team AVG":
+                    exps = [e.lower() for e in display_df['Expert'] if e != "🏆 Team AVG"]
+                    if not exps: exps = [e.lower() for e in OFFICIAL_EXPERTS]
+                    p_t = np.mean([temp_prev_tickets.get(e, 0) for e in exps])
+                    p_q = np.mean([get_p_qual(e) for e in exps])
+                else:
+                    exp_l = raw_exp.lower()
+                    p_t = temp_prev_tickets.get(exp_l, 0)
+                    p_q = get_p_qual(exp_l)
+                
+                try: c_t = float(str(row['Tickets Count']).replace(',', ''))
+                except: c_t = 0
+                try: c_q = float(str(row['Service Quality']).replace('%', ''))
+                except: c_q = 100
+
+                if row['Tickets Count'] != '-':
+                    display_df.at[idx, 'Tickets Count'] = add_arrow(row['Tickets Count'], c_t, p_t)
+                if row['Service Quality'] != '-':
+                    display_df.at[idx, 'Service Quality'] = add_arrow(row['Service Quality'], c_q, p_q, is_p=True)
+        except Exception:
+            pass 
+        
         display_df["Expert"] = display_df["Expert"].apply(lambda v: f"🥇 {v}" if v == gold_exp else (f"🥈 {v}" if v == silver_exp else (f"🥉 {v}" if v == bronze_exp else v)))
 
         def style_performers(row):
