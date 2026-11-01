@@ -1756,5 +1756,3 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
-```eof
-
