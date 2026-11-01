@@ -141,7 +141,7 @@ def send_approval_email(to_email, name, uid):
             msg['Subject'] = "✅ AlDawaa Dashboard Access Approved"
             msg['From'] = f"Mohammed Shehta <{sender_email}>"
             msg['To'] = to_email
-            dashboard_url = "https://approvals-team.streamlit.app" 
+            dashboard_url = "https://aldawaa-requests.streamlit.app" 
             body = f"Dear {name},\n\nYour request to access the AlDawaa In-Store Requests Dashboard has been successfully approved.\n\nHere are your login credentials:\n- Username / ID: {uid}\n- Temporary Password: {uid}\n\n(Note: You will be required to set a new, secure password upon your first login).\n\nYou can access the dashboard via the link below:\n{dashboard_url}\n\nBest regards,\nMohammed Shehta"
             msg.set_content(body)
             with smtplib.SMTP('smtp.gmail.com', 587) as server:
@@ -318,7 +318,7 @@ def get_deduction(sev):
     return 0.0
 
 # ══════════════════════════════════════════════════════════════════════════════════
-#  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET) - FIX FOR DUPLICATE COLS
+#  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
 # ══════════════════════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=43200, show_spinner="Syncing database tables…")
 def load_data():
@@ -327,45 +327,23 @@ def load_data():
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
             creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
         else:
-            st.error("🚨 ملفات الربط (Secrets) غير موجودة أو غير صحيحة.")
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
         
         client = gspread.authorize(creds)
-        
-        try:
-            sheet = client.open("AlDawaa Tickets Data")
-        except Exception as sheet_err:
-            st.error(f"🚨 غير قادر على الوصول لملف جوجل شيت (تأكد من اسم الملف ومن مشاركته مع الإيميل). التفاصيل: {sheet_err}")
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
-            
-        all_dfs, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        sheet = client.open("AlDawaa Tickets Data")
+        all_dfs, roster_df, out_req_df, df_quality, df_bonus_raw = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         fetched_users = {}
         
         for ws in sheet.worksheets():
             title = ws.title.strip()
             data = ws.get_all_values()
             if len(data) < 2: continue
-            
-            raw_cols = [str(c).strip() for c in data[0]]
-            new_cols = []
-            seen_cols = set()
-            for c in raw_cols:
-                original_c = c
-                counter = 1
-                while c in seen_cols:
-                    c = f"{original_c}_{counter}"
-                    counter += 1
-                seen_cols.add(c)
-                new_cols.append(c)
-            
-            t_lower = title.lower()
-            if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=new_cols); continue
-            elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=new_cols); continue
-            elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=new_cols); continue
-            elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=new_cols); continue
-            elif t_lower in ["achievements", "great achievements", "الإنجازات"]: df_achievements = pd.DataFrame(data[1:], columns=new_cols); continue
-            elif t_lower == "users":
-                df_u = pd.DataFrame(data[1:], columns=new_cols)
+            if title == "Working Days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Out Requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Quality Issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif title == "Users":
+                df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
                     if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
                         u_key = str(row.iloc[0]).strip().lower()
@@ -382,8 +360,8 @@ def load_data():
                         }
                 continue
             
-            dft = pd.DataFrame(data[1:], columns=new_cols)
-            mp = {}; seen_rename = set()
+            dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+            mp = {}; seen = set()
             for col in dft.columns:
                 cl = col.lower(); t = None
                 if "id" in cl and "req" in cl: t = "Request ID"
@@ -397,15 +375,14 @@ def load_data():
                 elif "email" in cl or "special" in cl: t = "Is Special Request(By Email)"
                 elif "hic" in cl or "insurance" in cl: t = "HIC"
                 elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
-                elif "reopen" in cl: t = "Is Reopen"
-                if t and t not in seen_rename: mp[col] = t; seen_rename.add(t)
+                if t and t not in seen: mp[col] = t; seen.add(t)
             dft.rename(columns=mp, inplace=True)
             all_dfs.append(dft)
         
-        if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), pd.DataFrame(), fetched_users
+        if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), fetched_users
             
         df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
-        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Is Reopen"]:
+        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
             if c not in df.columns: df[c] = np.nan
         if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
 
@@ -422,23 +399,20 @@ def load_data():
         if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["Is Email"] = (df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
-        return df, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements, fetched_users
-        
-    except Exception as e:
-        st.error(f"🚨 حدث خطأ غير متوقع أثناء سحب البيانات: {str(e)}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+        return df, roster_df, out_req_df, df_quality, df_bonus_raw, fetched_users
+    except Exception:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
 
-df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
+df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, fetched_users = load_data()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
 # ==========================================
 df = pd.DataFrame()
 df_prev_all = pd.DataFrame()
-df_achievements = pd.DataFrame() if 'df_achievements' not in locals() else df_achievements
 
 # Ensure mandatory columns exist to avoid KeyErrors during filtering
-mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email", "Is Reopen"]
+mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email"]
 for col in mandatory_cols:
     if col not in df_raw.columns:
         df_raw[col] = np.nan
@@ -600,10 +574,6 @@ with st.sidebar:
     min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
     if pd.isna(min_d): min_d = default_from
     if pd.isna(max_d): max_d = default_to
-
-    # 🛡️ حماية التواريخ
-    if default_from < min_d: min_d = default_from
-    if default_to > max_d: max_d = default_to
 
     date_range = st.date_input("Date Range", value=(default_from, default_to), min_value=min_d, max_value=max_d)
     
@@ -943,8 +913,8 @@ st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
 
 tabs_list = ["📈 Operational Insights"]
-if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
-elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
+if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles"])
+elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles"])
 
 tabs = st.tabs(tabs_list)
 
@@ -965,7 +935,6 @@ with tabs[0]:
     global_prev_adj_total = sum(int(v) for v in global_prev_adjs.values()) if not esc and not nesc else 0
 
     total = len(dfm) + global_adj_total
-    total_all_req_curr = total + global_jhah + global_support
     ss    = dfm["Status"].astype(str).str.strip()
     ok    = dfm[ss.str.contains("Closed", na=False, case=False) & ~ss.str.contains("issue", na=False, case=False)].shape[0] + global_adj_total
     issue = dfm[ss.str.contains("Closed", na=False, case=False) & ss.str.contains("issue", na=False, case=False)].shape[0]
@@ -977,15 +946,9 @@ with tabs[0]:
     issue_pct = (issue / total * 100) if total > 0 else 0
     stores_count = dfm[dfm["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm.empty else 0
     status_actions_sum = int(dfm["Status Count"].sum()) if not dfm.empty else 0
-    
-    curr_avg_per_day = total_all_req_curr / delta_days if delta_days > 0 else 0
-    
-    # ── حساب الـ Reopen Rate ──
-    reopened_cases = dfm[dfm["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm.columns else 0
-    reopen_rate = (reopened_cases / total * 100) if total > 0 else 0
+    curr_avg_per_day = (total + global_jhah + global_support) / delta_days if delta_days > 0 else 0
     
     prev_total = len(dfm_prev) + global_prev_adj_total
-    prev_total_all_req = prev_total + prev_global_jhah + prev_global_support
     ss_prev    = dfm_prev["Status"].astype(str).str.strip()
     prev_ok    = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ~ss_prev.str.contains("issue", na=False, case=False)].shape[0] + global_prev_adj_total
     prev_issue = dfm_prev[ss_prev.str.contains("Closed", na=False, case=False) & ss_prev.str.contains("issue", na=False, case=False)].shape[0]
@@ -997,31 +960,25 @@ with tabs[0]:
     prev_issue_pct = (prev_issue / prev_total * 100) if prev_total > 0 else 0
     prev_stores_count = dfm_prev[dfm_prev["Store ID"] != "Unknown"]["Store ID"].nunique() if not dfm_prev.empty else 0
     prev_status_actions_sum = int(dfm_prev["Status Count"].sum()) if not dfm_prev.empty else 0
-
-    prev_avg_per_day = prev_total_all_req / delta_days if delta_days > 0 else 0
-
-    prev_reopened_cases = dfm_prev[dfm_prev["Is Reopen"].astype(str).str.strip().str.lower().isin(['yes', 'y', 'true', 'نعم', '1'])].shape[0] if "Is Reopen" in dfm_prev.columns else 0
-    prev_reopen_rate = (prev_reopened_cases / prev_total * 100) if prev_total > 0 else 0
+    prev_avg_per_day = (prev_total + prev_global_jhah + prev_global_support) / delta_days if delta_days > 0 else 0
 
     chg_total = calc_change(total, prev_total)
-    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_stores = calc_change(stores_count, prev_stores_count)
-    chg_reopen = reopen_rate - prev_reopen_rate
+    chg_actions = calc_change(status_actions_sum, prev_status_actions_sum)
     chg_ok = ok_pct - prev_ok_pct  
     chg_issue = issue_pct - prev_issue_pct 
     chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
 
-    r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
-    r1c3.markdown(kpi_colored("Reopen Rate",        f"{reopen_rate:.1f}%", "card-danger", chg_reopen, inverse=True),  unsafe_allow_html=True)
-    r1c4.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
-    r1c6.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
+    r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
@@ -1040,6 +997,29 @@ with tabs[0]:
         bar_palette = ["#1e40af", "#3b82f6", "#0ea5e9", "#0284c7", "#0d9488", "#14b8a6", "#475569", "#64748b", "#8b5cf6", "#a855f7"]
         bar_labels, bar_values, bar_counts = list(req_pct.index), list(req_pct.values), [int(x) for x in req_counts.values]
         bar_colors  = [bar_palette[i % len(bar_palette)] for i in range(len(req_pct))]
+        
+        # ── حساب المقارنة مع الشهر السابق للرسم البياني ──
+        try:
+            prev_m_from_rt = (pd.to_datetime(d_from) - pd.DateOffset(months=1)).date()
+            prev_m_to_rt = (pd.to_datetime(d_to) - pd.DateOffset(months=1)).date()
+            df_prev_m_rt = df_raw[(df_raw["Date Only"] >= prev_m_from_rt) & (df_raw["Date Only"] <= prev_m_to_rt)].copy()
+            if esc and not nesc: df_prev_m_rt = df_prev_m_rt[df_prev_m_rt["Is Email"] == True]
+            elif nesc and not esc: df_prev_m_rt = df_prev_m_rt[df_prev_m_rt["Is Email"] == False]
+            prev_req_counts = df_prev_m_rt['Request Type'].value_counts() if not df_prev_m_rt.empty else pd.Series(dtype=int)
+        except:
+            prev_req_counts = pd.Series(dtype=int)
+            
+        bar_trends = []
+        for rt in bar_labels:
+            c_val = req_counts.get(rt, 0)
+            p_val = prev_req_counts.get(rt, 0)
+            diff = c_val - p_val
+            if pd.isna(p_val) or p_val == 0: bar_trends.append("")
+            elif diff > 0: bar_trends.append(f"▲ (+{int(diff)})")
+            elif diff < 0: bar_trends.append(f"▼ ({int(diff)})")
+            else: bar_trends.append("")
+        # ---------------------------------------------------
+        
         SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 15 Mins": "#22c55e", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
         tier_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
         sb_payloads = {}   
@@ -1068,7 +1048,8 @@ with tabs[0]:
             sb_payloads[rt] = {"ids": ids, "labels": lbl, "parents": par, "values": val, "colors": col}
 
         import json as _json
-        sb_payloads_json, bar_data_json = _json.dumps(sb_payloads), _json.dumps({"labels": bar_labels, "values": bar_values, "counts": bar_counts, "colors": bar_colors})
+        sb_payloads_json = _json.dumps(sb_payloads)
+        bar_data_json = _json.dumps({"labels": bar_labels, "values": bar_values, "counts": bar_counts, "colors": bar_colors, "trends": bar_trends})
         component_height = max(650, len(bar_labels) * 55 + 100)
 
         html_component = f"""
@@ -1090,7 +1071,19 @@ with tabs[0]:
 <script>
 const SB_PAYLOADS = {sb_payloads_json}; const BAR_DATA = {bar_data_json};
 let selectedRt = "All Types"; let selectedBarIdx = null;
-const barTrace = {{ type: "bar", orientation: "h", x: BAR_DATA.values, y: BAR_DATA.labels, customdata: BAR_DATA.counts, text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " (" + v.toFixed(1) + "%)"), textposition: "inside", insidetextanchor: "middle", textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" }};
+const barTrace = {{ 
+    type: "bar", 
+    orientation: "h", 
+    x: BAR_DATA.values, 
+    y: BAR_DATA.labels, 
+    customdata: BAR_DATA.counts.map((c, i) => c + " " + (BAR_DATA.trends[i] || "")), 
+    text: BAR_DATA.values.map((v, i) => BAR_DATA.counts[i] + " " + (BAR_DATA.trends[i] || "") + " (" + v.toFixed(1) + "%)"), 
+    textposition: "inside", 
+    insidetextanchor: "middle", 
+    textfont: {{ color: "#ffffff", size: 13, weight: "bold" }}, 
+    marker: {{ color: BAR_DATA.colors, opacity: BAR_DATA.colors.map(() => 1), line: {{ color: 'rgba(0,0,0,0.1)', width: 1 }} }}, 
+    hovertemplate: "<b>%{{y}}</b><br>Tickets: %{{customdata}}<br>Share: %{{x:.1f}}%<extra></extra>" 
+}};
 const barLayout = {{ margin: {{ l: 8, r: 8, t: 10, b: 10 }}, bargap: 0.3, xaxis: {{ visible: false }}, yaxis: {{ autorange: "reversed", tickfont: {{ size: 12, color: "#334155", weight: "bold" }}, fixedrange: true, automargin: true }}, plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)", font: {{ color: "#1e293b" }}, autosize: true }};
 Plotly.newPlot("bar-div", [barTrace], barLayout, {{ displayModeBar: false, responsive: true }});
 function buildTrace(rt) {{
@@ -1253,7 +1246,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         st.divider(); st.markdown("#### 📥 Export Operational Report")
         c_exp1, c_exp2 = st.columns(2)
         with c_exp1:
-            base_metrics = [{"Metric": "Tickets Count", "Value": int(total)}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
+            base_metrics = [{"Metric": "Tickets Count", "Value": total}, {"Metric": "Stores Served", "Value": stores_count}, {"Metric": "Total Actions", "Value": status_actions_sum}, {"Metric": "Closed Completed", "Value": ok}, {"Metric": "Closed with Issue", "Value": issue}, {"Metric": "Avg Requests / Day", "Value": round(curr_avg_per_day, 1)}, {"Metric": "AFR", "Value": fmt_m(curr_afr_val)}, {"Metric": "TAT", "Value": fmt_m(curr_tat_val)}, {"Metric": "JHAH Requests", "Value": global_jhah}, {"Metric": "Support Requests", "Value": global_support}]
             if not dfm.empty:
                 base_metrics.append({"Metric": "--- AVG REQUESTS PER WEEKDAY ---", "Value": ""})
                 avg_per_weekday = dfm.groupby(['Date Only', 'Day Name']).size().reset_index(name='Tickets').groupby('Day Name')['Tickets'].mean().round(1)
@@ -1335,7 +1328,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             dvol_pass = daily_vol if 'daily_vol' in locals() else pd.DataFrame()
 
             ppt_file_data, err_msg = generate_pptx_summary(
-                d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), int(total), curr_avg_per_day, ok, ok_pct, issue, issue_pct,
+                d_from.strftime('%Y-%m-%d'), d_to.strftime('%Y-%m-%d'), total, curr_avg_per_day, ok, ok_pct, issue, issue_pct,
                 fmt_m(curr_afr_val), fmt_m(curr_tat_val), stores_count, status_actions_sum, global_jhah, global_support,
                 req_counts.to_dict(), req_pct.to_dict(), hic_pass, hrs_pass, dvol_pass, sc_g
             )
@@ -1492,47 +1485,20 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         sc = sc[cols_sc]
 
         kpi_scope_df = sc[sc["Expert"] == aname] if is_exp else (sc[sc["Expert"].isin(sel_agents_t2)] if sel_agents_t2 else sc.copy())
-        
-        # ── حساب إجمالي الطلبات وأيام العمل للموظفين المحددين في التاب 2 ──
-        scope_total_req = pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()
-        scope_wd = pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum()
-        scope_off = pd.to_numeric(kpi_scope_df["Off Days"], errors='coerce').fillna(0).sum()
-        scope_ann = pd.to_numeric(kpi_scope_df["Annual Leaves"], errors='coerce').fillna(0).sum()
-        scope_cas = pd.to_numeric(kpi_scope_df["Casual Leaves"], errors='coerce').fillna(0).sum()
-        scope_sick = pd.to_numeric(kpi_scope_df["Sick Leaves"], errors='coerce').fillna(0).sum()
-        
-        kpi_curr_avg_per_day = scope_total_req / scope_wd if scope_wd > 0 else 0
-        
+        kpi_curr_avg_per_day = (pd.to_numeric(kpi_scope_df["Tickets Count"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["JHAH Requests"], errors='coerce').fillna(0).sum() + pd.to_numeric(kpi_scope_df["Support Requests"], errors='coerce').fillna(0).sum()) / pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() if pd.to_numeric(kpi_scope_df["Working Days"], errors='coerce').fillna(0).sum() > 0 else 0
         prev_sum_wd = sum(prev_roster_counts.get(exp, {}).get("wd", 0) for exp in scope_agents)
         prev_kpi_scope_df = df_kpi_prev[df_kpi_prev["Assigned By"].str.lower().isin([a.lower() for a in scope_agents])] if scope_agents else df_kpi_prev
-        prev_scope_total_req = len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)
-        
-        prev_kpi_avg_per_day = prev_scope_total_req / prev_sum_wd if prev_sum_wd > 0 else 0
+        prev_kpi_avg_per_day = (len(prev_kpi_scope_df) + prev_total_kpi_adj + sum(prev_out_req_dict.get(e.lower(), {}).get("JHAH", 0) for e in scope_agents) + sum(prev_out_req_dict.get(e.lower(), {}).get("Support Req", 0) for e in scope_agents)) / prev_sum_wd if prev_sum_wd > 0 else 0
 
-        chg_kpi_total_req = calc_change(scope_total_req, prev_scope_total_req)
-        chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct
-        chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct
-        chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day)
-        chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val)
-        chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
+        chg_kpi_total = calc_change(total_kpi, prev_kpi_total); chg_kpi_ok = kpi_ok_pct - prev_kpi_ok_pct; chg_kpi_iss = kpi_iss_pct - prev_kpi_iss_pct; chg_kpi_avg_per_day = calc_change(kpi_curr_avg_per_day, prev_kpi_avg_per_day); chg_kpi_afr = calc_change(kpi_curr_afr_val, prev_kpi_afr_val); chg_kpi_tat = calc_change(kpi_curr_tat_val, prev_kpi_tat_val)
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(kpi_colored("Total Requests", f"{int(scope_total_req):,}", "card-primary", chg_kpi_total_req, neutral=True), unsafe_allow_html=True)
+        k1.markdown(kpi_colored("Total Requests", f"{int(total_kpi):,}", "card-primary", chg_kpi_total, neutral=True), unsafe_allow_html=True)
         k2.markdown(kpi_colored("Avg Requests / Day", f"{kpi_curr_avg_per_day:.1f}", "card-neutral", chg_kpi_avg_per_day, neutral=True), unsafe_allow_html=True)
         k3.markdown(kpi_colored("Closed Completed", f"{kpi_ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_ok_pct:.1f}%)</span>", "card-success", chg_kpi_ok), unsafe_allow_html=True)
         k4.markdown(kpi_colored("Closed with Issue", f"{kpi_iss:,} <span style='font-size:1.15rem; opacity:0.8;'>({kpi_iss_pct:.1f}%)</span>", "card-danger", chg_kpi_iss, inverse=True), unsafe_allow_html=True)
         k5.markdown(kpi_colored("AFR (Avg First Response)", fmt_m(kpi_curr_afr_val), "card-neutral", chg_kpi_afr, inverse=True), unsafe_allow_html=True)
         k6.markdown(kpi_colored("Avg Service (TAT)", fmt_m(kpi_curr_tat_val), "card-neutral", chg_kpi_tat, inverse=True), unsafe_allow_html=True)
-        
-        st.write("")
-        # ── إضافة فلاش كاردز للإجازات ──
-        l1, l2, l3, l4, l5 = st.columns(5)
-        l1.markdown(kpi_colored("Working Days", f"{int(scope_wd)}", "card-success"), unsafe_allow_html=True)
-        l2.markdown(kpi_colored("Off Days", f"{int(scope_off)}", "card-neutral"), unsafe_allow_html=True)
-        l3.markdown(kpi_colored("Annual Leaves", f"{int(scope_ann)}", "card-neutral"), unsafe_allow_html=True)
-        l4.markdown(kpi_colored("Casual Leaves", f"{int(scope_cas)}", "card-neutral"), unsafe_allow_html=True)
-        l5.markdown(kpi_colored("Sick Leaves", f"{int(scope_sick)}", "card-danger"), unsafe_allow_html=True)
-        
         st.write(""); st.divider()
 
         team_wd = round(pd.to_numeric(sc["Working Days"], errors='coerce').mean(), 1) if not sc.empty else 0
@@ -1586,10 +1552,10 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 if pd.isna(prev_v) or prev_v == 0 or curr_v == '-': return str(curr_str)
                 diff = float(curr_v) - float(prev_v)
                 if abs(diff) < 0.1: return str(curr_str)
-                arr = "⬆️" if diff > 0 else "⬇️"
+                arr = "▲" if diff > 0 else "▼"
                 sign = "+" if diff > 0 else ""
                 d_str = f"{sign}{diff:.1f}%" if is_p else f"{sign}{int(diff)}"
-                return f"{curr_str} {arr}({d_str})"
+                return f"{curr_str} {arr} ({d_str})"
 
             for idx, row in display_df.iterrows():
                 raw_exp = str(row['Expert']).strip()
@@ -1634,7 +1600,6 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 except: pass
             return styles
 
-        # إخفاء عمود الحوافز عن أي حد مش Admin
         cols_to_display = ["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality"]
         if is_admin():
             cols_to_display.append("Prospected Incentive")
@@ -1769,7 +1734,7 @@ if is_admin():
 
 # ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
 if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
-    with tabs[3 if is_admin() else 2]:
+    with tabs[-1]:
         st.markdown("### 🧑‍🤝‍🧑 Approvals Team Profiles")
         team_members = [u for uid, u in st.session_state.db_users.items() if u["role"] in ["expert", "admin", "supervisor"]]
         cols = st.columns(3)
@@ -1789,41 +1754,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             """
             cols[i % 3].markdown(card_html, unsafe_allow_html=True)
 
-# ── TAB 5 — Great Achievements (Admin & Expert) ────────────────────────────────────────
-if "🌟 Great Achievements" in tabs_list:
-    achiev_tab_idx = tabs_list.index("🌟 Great Achievements")
-    with tabs[achiev_tab_idx]:
-        st.markdown("### 🌟 حائط الإنجازات (Wall of Fame)")
-        st.markdown("هنا بنسجل كل المشاكل المعقدة اللي اتحلت بشكل جذري والأفكار اللي طورت الشغل، عشان نفضل فاكرين ومقدرين مجهود التيم 👏")
-        st.divider()
-        
-        if not df_achievements.empty:
-            if 'Date' in df_achievements.columns:
-                df_achievements['Parsed_Date'] = pd.to_datetime(df_achievements['Date'], errors='coerce')
-                df_achievements = df_achievements.sort_values(by='Parsed_Date', ascending=False).fillna("")
-            
-            for _, row in df_achievements.iterrows():
-                title = row.get("Title", "إنجاز جديد") if "Title" in df_achievements.columns else "إنجاز بدون عنوان"
-                date_str = row.get("Date", "") if "Date" in df_achievements.columns else ""
-                expert = row.get("Expert Name", "") if "Expert Name" in df_achievements.columns else ""
-                desc = row.get("Description", "") if "Description" in df_achievements.columns else ""
-                link = row.get("Link", "") if "Link" in df_achievements.columns else ""
-                
-                link_html = f'<a href="{link}" target="_blank" style="background:#2563eb; color:white; padding:8px 16px; border-radius:6px; text-decoration:none; font-weight:bold; font-size:0.9rem; display:inline-block; margin-top:10px;">🔗 عرض التفاصيل</a>' if str(link).strip() and str(link).strip() != "nan" else ""
-                exp_html = f'<span style="color:#0ea5e9; font-weight:bold; margin-left:15px;">👤 {expert}</span>' if str(expert).strip() and str(expert).strip() != "nan" else ""
-                date_html = f'<span style="color:#64748b; font-size:0.9rem;">📅 {date_str}</span>' if str(date_str).strip() and str(date_str).strip() != "nan" else ""
-                
-                card = f"""
-                <div dir="auto" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-right: 5px solid #f59e0b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); margin-bottom: 1.5rem; transition: transform 0.2s;">
-                    <h3 style="margin-top:0; margin-bottom: 8px; color:#0f172a; font-size:1.4rem;">🚀 {title}</h3>
-                    <div style="margin-bottom: 12px;">{date_html} {exp_html}</div>
-                    <p style="color:#334155; font-size:1.05rem; line-height:1.5;">{desc}</p>
-                    {link_html}
-                </div>
-                """
-                st.markdown(card, unsafe_allow_html=True)
-        else:
-            st.info("لم يتم تسجيل أي إنجازات حتى الآن. أضف شيت باسم 'Achievements' في جوجل شيتس (الأعمدة: Date, Title, Description, Expert Name, Link) لتبدأ!")
-
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
+```eof
+
+بعد ما تنقل الكود، اعمل Reboot واعمل تحديث للصفحة. هتلاقي الأسهم ظهرت بشكل احترافي وبتعكس أداء التيم بكل وضوح!
