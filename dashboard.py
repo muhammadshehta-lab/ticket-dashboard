@@ -1758,4 +1758,3 @@ st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(
 # --- END OF SCRIPT ---
 ```eof
 
-بعد ما تنقل الكود، اعمل Reboot واعمل تحديث للصفحة. هتلاقي الأسهم ظهرت بشكل احترافي وبتعكس أداء التيم بكل وضوح!
