@@ -1736,8 +1736,8 @@ if is_admin():
                 st.success("Secret adjustment applied!"); st.rerun()
 
 # ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
-if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
-    with tabs[-1]:
+if "🧑‍🤝‍🧑 Team Profiles" in tabs_list:
+    with tabs[tabs_list.index("🧑‍🤝‍🧑 Team Profiles")]:
         st.markdown("### 🧑‍🤝‍🧑 Approvals Team Profiles")
         team_members = [u for uid, u in st.session_state.db_users.items() if u["role"] in ["expert", "admin", "supervisor"]]
         cols = st.columns(3)
