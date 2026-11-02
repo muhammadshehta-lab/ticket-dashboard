@@ -915,6 +915,9 @@ caption_text = f"Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).da
 st.markdown("## 💊 In-Store Requests Matrix")
 st.caption(caption_text)
 
+if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type)"):
+    st.dataframe(df_raw[df_raw["Request Type"] == "Unknown Type"])
+
 tabs_list = ["📈 Operational Insights"]
 if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles"])
 elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles"])
