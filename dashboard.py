@@ -320,22 +320,24 @@ def load_data():
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
             creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
         else:
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
         
         client = gspread.authorize(creds)
         sheet = client.open("AlDawaa Tickets Data")
-        all_dfs, roster_df, out_req_df, df_quality, df_bonus_raw = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        all_dfs, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         fetched_users = {}
         
         for ws in sheet.worksheets():
             title = ws.title.strip()
             data = ws.get_all_values()
             if len(data) < 2: continue
-            if title == "Working Days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Out Requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Quality Issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif title == "Users":
+            t_lower = title.lower()
+            if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower in ["achievements", "great achievements", "الإنجازات"]: df_achievements = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif t_lower == "users":
                 df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
                     if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
@@ -373,7 +375,7 @@ def load_data():
             dft.rename(columns=mp, inplace=True)
             all_dfs.append(dft)
         
-        if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), fetched_users
+        if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), pd.DataFrame(), fetched_users
             
         df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
         for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
@@ -393,11 +395,11 @@ def load_data():
         if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
         df["Is Email"] = (df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
-        return df, roster_df, out_req_df, df_quality, df_bonus_raw, fetched_users
+        return df, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements, fetched_users
     except Exception:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
 
-df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, fetched_users = load_data()
+df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
@@ -919,8 +921,8 @@ if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type
     st.dataframe(df_raw[df_raw["Request Type"] == "Unknown Type"])
 
 tabs_list = ["📈 Operational Insights"]
-if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles"])
-elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles"])
+if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
+elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
 
 tabs = st.tabs(tabs_list)
 
@@ -1754,6 +1756,43 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             </div>
             """
             cols[i % 3].markdown(card_html, unsafe_allow_html=True)
+
+
+# ── TAB 5 — Great Achievements (Admin & Expert) ────────────────────────────────────────
+if "🌟 Great Achievements" in tabs_list:
+    achiev_tab_idx = tabs_list.index("🌟 Great Achievements")
+    with tabs[achiev_tab_idx]:
+        st.markdown("### 🌟 حائط الإنجازات (Wall of Fame)")
+        st.markdown("هنا بنسجل كل المشاكل المعقدة اللي اتحلت بشكل جذري والأفكار اللي طورت الشغل، عشان نفضل فاكرين ومقدرين مجهود التيم 👏")
+        st.divider()
+        
+        if 'df_achievements' in globals() and not df_achievements.empty:
+            if 'Date' in df_achievements.columns:
+                df_achievements['Parsed_Date'] = pd.to_datetime(df_achievements['Date'], errors='coerce')
+                df_achievements = df_achievements.sort_values(by='Parsed_Date', ascending=False).fillna("")
+            
+            for _, row in df_achievements.iterrows():
+                title = row.get("Title", "إنجاز جديد") if "Title" in df_achievements.columns else "إنجاز بدون عنوان"
+                date_str = row.get("Date", "") if "Date" in df_achievements.columns else ""
+                expert = row.get("Expert Name", "") if "Expert Name" in df_achievements.columns else ""
+                desc = row.get("Description", "") if "Description" in df_achievements.columns else ""
+                link = row.get("Link", "") if "Link" in df_achievements.columns else ""
+                
+                link_html = f'<a href="{link}" target="_blank" style="background:#2563eb; color:white; padding:8px 16px; border-radius:6px; text-decoration:none; font-weight:bold; font-size:0.9rem; display:inline-block; margin-top:10px;">🔗 عرض التفاصيل</a>' if str(link).strip() and str(link).strip() != "nan" else ""
+                exp_html = f'<span style="color:#0ea5e9; font-weight:bold; margin-left:15px;">👤 {expert}</span>' if str(expert).strip() and str(expert).strip() != "nan" else ""
+                date_html = f'<span style="color:#64748b; font-size:0.9rem;">📅 {date_str}</span>' if str(date_str).strip() and str(date_str).strip() != "nan" else ""
+                
+                card = f"""
+                <div dir="auto" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-right: 5px solid #f59e0b; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); margin-bottom: 1.5rem; transition: transform 0.2s;">
+                    <h3 style="margin-top:0; margin-bottom: 8px; color:#0f172a; font-size:1.4rem;">🚀 {title}</h3>
+                    <div style="margin-bottom: 12px;">{date_html} {exp_html}</div>
+                    <p style="color:#334155; font-size:1.05rem; line-height:1.5;">{desc}</p>
+                    {link_html}
+                </div>
+                """
+                st.markdown(card, unsafe_allow_html=True)
+        else:
+            st.info("لم يتم تسجيل أي إنجازات حتى الآن. تأكد من وجود شيت 'Achievements' في جوجل شيتس لتظهر هنا!")
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
