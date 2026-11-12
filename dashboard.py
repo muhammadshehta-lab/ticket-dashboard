@@ -399,6 +399,71 @@ def load_data():
     except Exception:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
 
+
+# ══════════════════════════════════════════════════════════════════════════════════
+#  ARCHIVE LOADER (FOR 2025 DATA - MULTIPLE SHEETS SUPPORT)
+# ══════════════════════════════════════════════════════════════════════════════════
+@st.cache_data(ttl=86400, show_spinner=False)
+def load_archive_2025():
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            sheet = client.open("AlDawaa Tickets Data")
+            
+            archive_dfs = []
+            for ws in sheet.worksheets():
+                title = ws.title.strip()
+                if title.lower().startswith("archive 2025"):
+                    data = ws.get_all_values()
+                    if len(data) > 1:
+                        df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                        mp = {}; seen = set()
+                        for col in df.columns:
+                            cl = str(col).lower(); t = None
+                            if "id" in cl and "req" in cl: t = "Request ID"
+                            elif "date" in cl: t = "Request Date"
+                            elif "type" in cl: t = "Request Type"
+                            elif "status" in cl and "count" in cl: t = "Status Count"
+                            elif "status" in cl: t = "Status"
+                            elif "assigned" in cl or "agent" in cl: t = "Assigned By"
+                            elif "response" in cl and "take" in cl: t = "Response Take"
+                            elif "request" in cl and "take" in cl: t = "Request Take"
+                            elif "email" in cl or "special" in cl: t = "Is Special Request(By Email)"
+                            elif "hic" in cl or "insurance" in cl: t = "HIC"
+                            elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
+                            if t and t not in seen: mp[col] = t; seen.add(t)
+                        df.rename(columns=mp, inplace=True)
+                        archive_dfs.append(df)
+            
+            if not archive_dfs:
+                return pd.DataFrame()
+                
+            df25 = pd.concat(archive_dfs, ignore_index=True, sort=False).replace("", np.nan)
+            
+            for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
+                if c not in df25.columns: df25[c] = np.nan
+            if "Store ID" not in df25.columns: df25["Store ID"] = "Unknown"
+            
+            df25["Status"]       = df25["Status"].fillna("Unknown")
+            df25["Status Count"] = pd.to_numeric(df25["Status Count"], errors="coerce").fillna(0).astype(int)
+            df25["Request Type"] = df25["Request Type"].fillna("Unknown Type")
+            df25["HIC"]          = df25["HIC"].fillna("Unknown")
+            df25["Assigned By"]  = df25["Assigned By"].fillna("Unassigned").astype(str).str.strip().apply(normalize_expert_name)
+            df25["Store ID"]     = df25["Store ID"].fillna("Unknown").astype(str).str.strip()
+            
+            dp25 = pd.to_datetime(df25["Request Date"], errors="coerce")
+            df25["Request Date"], df25["Date Only"], df25["Hour"], df25["Day Name"] = dp25, dp25.dt.date, dp25.dt.hour.fillna(0).astype(int), dp25.dt.day_name().fillna("Unknown")
+            if "Request Take" in df25.columns: df25["Request Take (min)"] = df25["Request Take"].apply(time_to_minutes).fillna(0)
+            if "Response Take" in df25.columns: df25["Response Take (min)"] = df25["Response Take"].apply(time_to_minutes).fillna(0)
+            df25["Is Email"] = (df25["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
+            
+            return df25
+    except Exception:
+        pass
+    return pd.DataFrame()
+
 df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
 
 # ==========================================
