@@ -567,7 +567,9 @@ with st.sidebar:
         default_from = pd.Timestamp.today().date().replace(day=1)
         default_to = pd.Timestamp.today().date()
         
-    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
+    import datetime
+    min_d = datetime.date(2025, 1, 1)
+    max_d = df_raw["Date Only"].dropna().max() if not df_raw.empty else default_to
     if pd.isna(min_d): min_d = default_from
     if pd.isna(max_d): max_d = default_to
 
@@ -576,13 +578,21 @@ with st.sidebar:
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         d_from, d_to = date_range
     else:
-        d_from, d_to = min_d, max_d
+        d_from, d_to = default_from, default_to
         
     if d_from == d_to: st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
         
     delta_days = (d_to - d_from).days + 1
     prev_d_from, prev_d_to = d_from - timedelta(days=delta_days), d_from - timedelta(days=1)
+    
     PERIOD_KEY = f"{d_from}_{d_to}"
+    
+    if d_from.year <= 2025 or prev_d_from.year <= 2025:
+        with st.spinner("📦 جاري جلب أرشيف 2025 (لأول مرة فقط)..."):
+            df_2025_archive = load_archive_2025()
+            if not df_2025_archive.empty:
+                df_raw = pd.concat([df_raw, df_2025_archive], ignore_index=True)
+
     
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().astype(str).unique()))
     sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().astype(str).unique()))
