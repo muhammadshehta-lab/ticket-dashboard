@@ -329,14 +329,9 @@ def load_data():
         
         for ws in sheet.worksheets():
             title = ws.title.strip()
-            t_lower = title.lower()
-            
-            # 🛑 Skip Archive 2025 to prevent lag (Lazy Loading takes care of this later)
-            if t_lower.startswith("archive 2025"):
-                continue
-                
             data = ws.get_all_values()
             if len(data) < 2: continue
+            t_lower = title.lower()
             if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
@@ -403,71 +398,6 @@ def load_data():
         return df, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements, fetched_users
     except Exception:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
-
-
-# ══════════════════════════════════════════════════════════════════════════════════
-#  ARCHIVE LOADER (FOR 2025 DATA - MULTIPLE SHEETS SUPPORT)
-# ══════════════════════════════════════════════════════════════════════════════════
-@st.cache_data(ttl=86400, show_spinner=False)
-def load_archive_2025():
-    try:
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
-            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
-            client = gspread.authorize(creds)
-            sheet = client.open("AlDawaa Tickets Data")
-            
-            archive_dfs = []
-            for ws in sheet.worksheets():
-                title = ws.title.strip()
-                if title.lower().startswith("archive 2025"):
-                    data = ws.get_all_values()
-                    if len(data) > 1:
-                        df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
-                        mp = {}; seen = set()
-                        for col in df.columns:
-                            cl = str(col).lower(); t = None
-                            if "id" in cl and "req" in cl: t = "Request ID"
-                            elif "date" in cl: t = "Request Date"
-                            elif "type" in cl: t = "Request Type"
-                            elif "status" in cl and "count" in cl: t = "Status Count"
-                            elif "status" in cl: t = "Status"
-                            elif "assigned" in cl or "agent" in cl: t = "Assigned By"
-                            elif "response" in cl and "take" in cl: t = "Response Take"
-                            elif "request" in cl and "take" in cl: t = "Request Take"
-                            elif "email" in cl or "special" in cl: t = "Is Special Request(By Email)"
-                            elif "hic" in cl or "insurance" in cl: t = "HIC"
-                            elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
-                            if t and t not in seen: mp[col] = t; seen.add(t)
-                        df.rename(columns=mp, inplace=True)
-                        archive_dfs.append(df)
-            
-            if not archive_dfs:
-                return pd.DataFrame()
-                
-            df25 = pd.concat(archive_dfs, ignore_index=True, sort=False).replace("", np.nan)
-            
-            for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
-                if c not in df25.columns: df25[c] = np.nan
-            if "Store ID" not in df25.columns: df25["Store ID"] = "Unknown"
-            
-            df25["Status"]       = df25["Status"].fillna("Unknown")
-            df25["Status Count"] = pd.to_numeric(df25["Status Count"], errors="coerce").fillna(0).astype(int)
-            df25["Request Type"] = df25["Request Type"].fillna("Unknown Type")
-            df25["HIC"]          = df25["HIC"].fillna("Unknown")
-            df25["Assigned By"]  = df25["Assigned By"].fillna("Unassigned").astype(str).str.strip().apply(normalize_expert_name)
-            df25["Store ID"]     = df25["Store ID"].fillna("Unknown").astype(str).str.strip()
-            
-            dp25 = pd.to_datetime(df25["Request Date"], errors="coerce")
-            df25["Request Date"], df25["Date Only"], df25["Hour"], df25["Day Name"] = dp25, dp25.dt.date, dp25.dt.hour.fillna(0).astype(int), dp25.dt.day_name().fillna("Unknown")
-            if "Request Take" in df25.columns: df25["Request Take (min)"] = df25["Request Take"].apply(time_to_minutes).fillna(0)
-            if "Response Take" in df25.columns: df25["Response Take (min)"] = df25["Response Take"].apply(time_to_minutes).fillna(0)
-            df25["Is Email"] = (df25["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
-            
-            return df25
-    except Exception:
-        pass
-    return pd.DataFrame()
 
 df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
 
@@ -637,9 +567,7 @@ with st.sidebar:
         default_from = pd.Timestamp.today().date().replace(day=1)
         default_to = pd.Timestamp.today().date()
         
-    import datetime
-    min_d = datetime.date(2025, 1, 1)
-    max_d = df_raw["Date Only"].dropna().max() if not df_raw.empty else default_to
+    min_d, max_d = df_raw["Date Only"].dropna().min(), df_raw["Date Only"].dropna().max()
     if pd.isna(min_d): min_d = default_from
     if pd.isna(max_d): max_d = default_to
 
@@ -648,21 +576,13 @@ with st.sidebar:
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         d_from, d_to = date_range
     else:
-        d_from, d_to = default_from, default_to
+        d_from, d_to = min_d, max_d
         
     if d_from == d_to: st.caption(f"📅 {DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')}")
         
     delta_days = (d_to - d_from).days + 1
     prev_d_from, prev_d_to = d_from - timedelta(days=delta_days), d_from - timedelta(days=1)
-    
     PERIOD_KEY = f"{d_from}_{d_to}"
-    
-    if d_from.year <= 2025 or prev_d_from.year <= 2025:
-        with st.spinner("📦 جاري جلب أرشيف 2025 (لأول مرة فقط)..."):
-            df_2025_archive = load_archive_2025()
-            if not df_2025_archive.empty:
-                df_raw = pd.concat([df_raw, df_2025_archive], ignore_index=True)
-
     
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().astype(str).unique()))
     sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().astype(str).unique()))
@@ -1001,8 +921,8 @@ if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type
     st.dataframe(df_raw[df_raw["Request Type"] == "Unknown Type"])
 
 tabs_list = ["📈 Operational Insights"]
-if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
-elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
+if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
+elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
 
 tabs = st.tabs(tabs_list)
 
@@ -1873,76 +1793,6 @@ if "🌟 Great Achievements" in tabs_list:
                 st.markdown(card, unsafe_allow_html=True)
         else:
             st.info("لم يتم تسجيل أي إنجازات حتى الآن. تأكد من وجود شيت 'Achievements' في جوجل شيتس لتظهر هنا!")
-
-
-# ── TAB 6 — Period Comparison ────────────────────────────────────────
-if "⚖️ Period Comparison" in tabs_list:
-    comp_tab_idx = tabs_list.index("⚖️ Period Comparison")
-    with tabs[comp_tab_idx]:
-        st.markdown("### ⚖️ Period-over-Period (PoP) Comparison")
-        st.markdown("قارن أداء الفريق بين فترتين زمنيتين مختلفتين لمعرفة معدلات التطور وتغيرات حجم العمل.")
-        st.divider()
-        
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            st.info("📅 الفترة الأولى (فترة الأساس)")
-            p1_dates = st.date_input("حدد الفترة الأولى", value=(d_from - timedelta(days=30), d_from - timedelta(days=1)), key="p1_dates")
-        with col_p2:
-            st.success("📅 الفترة الثانية (فترة المقارنة)")
-            p2_dates = st.date_input("حدد الفترة الثانية", value=(d_from, d_to), key="p2_dates")
-            
-        if isinstance(p1_dates, (list, tuple)) and len(p1_dates) == 2 and isinstance(p2_dates, (list, tuple)) and len(p2_dates) == 2:
-            p1_from, p1_to = p1_dates
-            p2_from, p2_to = p2_dates
-            
-            # فلترة الداتا
-            df_p1 = df_raw[(df_raw["Date Only"] >= p1_from) & (df_raw["Date Only"] <= p1_to)].copy()
-            df_p2 = df_raw[(df_raw["Date Only"] >= p2_from) & (df_raw["Date Only"] <= p2_to)].copy()
-            
-            # حساب الأيام
-            days_p1 = max(1, (p2_to - p1_from).days + 1 if p1_from == p1_to else (p1_to - p1_from).days + 1)
-            days_p2 = max(1, (p2_to - p2_from).days + 1 if p2_from == p2_to else (p2_to - p2_from).days + 1)
-            
-            # حساب الماتريكس
-            p1_total = len(df_p1); p2_total = len(df_p2)
-            p1_avg = p1_total / days_p1; p2_avg = p2_total / days_p2
-            p1_afr = df_p1["Response Take (min)"].mean() if not df_p1.empty and "Response Take (min)" in df_p1.columns else 0
-            p2_afr = df_p2["Response Take (min)"].mean() if not df_p2.empty and "Response Take (min)" in df_p2.columns else 0
-            p1_tat = df_p1["Request Take (min)"].mean() if not df_p1.empty and "Request Take (min)" in df_p1.columns else 0
-            p2_tat = df_p2["Request Take (min)"].mean() if not df_p2.empty and "Request Take (min)" in df_p2.columns else 0
-            
-            st.markdown("<br>#### 📊 ملخص مقارنة الأداء", unsafe_allow_html=True)
-            cc1, cc2, cc3, cc4 = st.columns(4)
-            cc1.markdown(kpi_colored("إجمالي التيكتات", f"{p2_total:,}", "card-primary", calc_change(p2_total, p1_total)), unsafe_allow_html=True)
-            cc2.markdown(kpi_colored("المتوسط اليومي", f"{p2_avg:.1f}", "card-neutral", calc_change(p2_avg, p1_avg)), unsafe_allow_html=True)
-            cc3.markdown(kpi_colored("AFR (متوسط سرعة الرد)", fmt_m(p2_afr), "card-neutral", calc_change(p2_afr, p1_afr), inverse=True), unsafe_allow_html=True)
-            cc4.markdown(kpi_colored("TAT (متوسط سرعة الحل)", fmt_m(p2_tat), "card-neutral", calc_change(p2_tat, p1_tat), inverse=True), unsafe_allow_html=True)
-            
-            # رسم بياني لمقارنة أنواع الطلبات
-            st.divider()
-            st.markdown("#### 📈 مقارنة أنواع الطلبات بين الفترتين")
-            
-            p1_counts = df_p1['Request Type'].value_counts().reset_index()
-            p1_counts.columns = ['Request Type', 'Volume']
-            p1_counts['Period'] = 'الفترة الأولى'
-            
-            p2_counts = df_p2['Request Type'].value_counts().reset_index()
-            p2_counts.columns = ['Request Type', 'Volume']
-            p2_counts['Period'] = 'الفترة الثانية'
-            
-            comp_df = pd.concat([p1_counts, p2_counts], ignore_index=True)
-            
-            if not comp_df.empty:
-                fig_comp = px.bar(comp_df, x="Request Type", y="Volume", color="Period", barmode="group", 
-                                  color_discrete_sequence=["#94a3b8", "#2563eb"])
-                fig_comp.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
-                                       font_color="#1e293b", margin=dict(l=10, r=10, t=30, b=10), height=450, 
-                                       legend_title_text="الفترة الزمنية", xaxis_title="", yaxis_title="حجم الطلبات")
-                st.plotly_chart(fig_comp, use_container_width=True)
-            else:
-                st.info("لا توجد بيانات متاحة للمقارنة في هذه الفترات.")
-        else:
-            st.warning("رجاءً تأكد من اختيار فترة زمنية صحيحة (تاريخ بداية ونهاية) لكل من الفترتين.")
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
