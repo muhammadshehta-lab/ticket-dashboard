@@ -329,9 +329,14 @@ def load_data():
         
         for ws in sheet.worksheets():
             title = ws.title.strip()
+            t_lower = title.lower()
+            
+            # 🛑 Skip Archive 2025 to prevent lag (Lazy Loading takes care of this later)
+            if t_lower.startswith("archive 2025"):
+                continue
+                
             data = ws.get_all_values()
             if len(data) < 2: continue
-            t_lower = title.lower()
             if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
