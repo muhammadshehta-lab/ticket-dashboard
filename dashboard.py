@@ -1,4 +1,4 @@
-import pandas as pd
+ِimport pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -996,8 +996,8 @@ if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type
     st.dataframe(df_raw[df_raw["Request Type"] == "Unknown Type"])
 
 tabs_list = ["📈 Operational Insights"]
-if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
-elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements"])
+if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
+elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
 
 tabs = st.tabs(tabs_list)
 
@@ -1868,6 +1868,76 @@ if "🌟 Great Achievements" in tabs_list:
                 st.markdown(card, unsafe_allow_html=True)
         else:
             st.info("لم يتم تسجيل أي إنجازات حتى الآن. تأكد من وجود شيت 'Achievements' في جوجل شيتس لتظهر هنا!")
+
+
+# ── TAB 6 — Period Comparison ────────────────────────────────────────
+if "⚖️ Period Comparison" in tabs_list:
+    comp_tab_idx = tabs_list.index("⚖️ Period Comparison")
+    with tabs[comp_tab_idx]:
+        st.markdown("### ⚖️ Period-over-Period (PoP) Comparison")
+        st.markdown("قارن أداء الفريق بين فترتين زمنيتين مختلفتين لمعرفة معدلات التطور وتغيرات حجم العمل.")
+        st.divider()
+        
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.info("📅 الفترة الأولى (فترة الأساس)")
+            p1_dates = st.date_input("حدد الفترة الأولى", value=(d_from - timedelta(days=30), d_from - timedelta(days=1)), key="p1_dates")
+        with col_p2:
+            st.success("📅 الفترة الثانية (فترة المقارنة)")
+            p2_dates = st.date_input("حدد الفترة الثانية", value=(d_from, d_to), key="p2_dates")
+            
+        if isinstance(p1_dates, (list, tuple)) and len(p1_dates) == 2 and isinstance(p2_dates, (list, tuple)) and len(p2_dates) == 2:
+            p1_from, p1_to = p1_dates
+            p2_from, p2_to = p2_dates
+            
+            # فلترة الداتا
+            df_p1 = df_raw[(df_raw["Date Only"] >= p1_from) & (df_raw["Date Only"] <= p1_to)].copy()
+            df_p2 = df_raw[(df_raw["Date Only"] >= p2_from) & (df_raw["Date Only"] <= p2_to)].copy()
+            
+            # حساب الأيام
+            days_p1 = max(1, (p2_to - p1_from).days + 1 if p1_from == p1_to else (p1_to - p1_from).days + 1)
+            days_p2 = max(1, (p2_to - p2_from).days + 1 if p2_from == p2_to else (p2_to - p2_from).days + 1)
+            
+            # حساب الماتريكس
+            p1_total = len(df_p1); p2_total = len(df_p2)
+            p1_avg = p1_total / days_p1; p2_avg = p2_total / days_p2
+            p1_afr = df_p1["Response Take (min)"].mean() if not df_p1.empty and "Response Take (min)" in df_p1.columns else 0
+            p2_afr = df_p2["Response Take (min)"].mean() if not df_p2.empty and "Response Take (min)" in df_p2.columns else 0
+            p1_tat = df_p1["Request Take (min)"].mean() if not df_p1.empty and "Request Take (min)" in df_p1.columns else 0
+            p2_tat = df_p2["Request Take (min)"].mean() if not df_p2.empty and "Request Take (min)" in df_p2.columns else 0
+            
+            st.markdown("<br>#### 📊 ملخص مقارنة الأداء", unsafe_allow_html=True)
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.markdown(kpi_colored("إجمالي التيكتات", f"{p2_total:,}", "card-primary", calc_change(p2_total, p1_total)), unsafe_allow_html=True)
+            cc2.markdown(kpi_colored("المتوسط اليومي", f"{p2_avg:.1f}", "card-neutral", calc_change(p2_avg, p1_avg)), unsafe_allow_html=True)
+            cc3.markdown(kpi_colored("AFR (متوسط سرعة الرد)", fmt_m(p2_afr), "card-neutral", calc_change(p2_afr, p1_afr), inverse=True), unsafe_allow_html=True)
+            cc4.markdown(kpi_colored("TAT (متوسط سرعة الحل)", fmt_m(p2_tat), "card-neutral", calc_change(p2_tat, p1_tat), inverse=True), unsafe_allow_html=True)
+            
+            # رسم بياني لمقارنة أنواع الطلبات
+            st.divider()
+            st.markdown("#### 📈 مقارنة أنواع الطلبات بين الفترتين")
+            
+            p1_counts = df_p1['Request Type'].value_counts().reset_index()
+            p1_counts.columns = ['Request Type', 'Volume']
+            p1_counts['Period'] = 'الفترة الأولى'
+            
+            p2_counts = df_p2['Request Type'].value_counts().reset_index()
+            p2_counts.columns = ['Request Type', 'Volume']
+            p2_counts['Period'] = 'الفترة الثانية'
+            
+            comp_df = pd.concat([p1_counts, p2_counts], ignore_index=True)
+            
+            if not comp_df.empty:
+                fig_comp = px.bar(comp_df, x="Request Type", y="Volume", color="Period", barmode="group", 
+                                  color_discrete_sequence=["#94a3b8", "#2563eb"])
+                fig_comp.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                                       font_color="#1e293b", margin=dict(l=10, r=10, t=30, b=10), height=450, 
+                                       legend_title_text="الفترة الزمنية", xaxis_title="", yaxis_title="حجم الطلبات")
+                st.plotly_chart(fig_comp, use_container_width=True)
+            else:
+                st.info("لا توجد بيانات متاحة للمقارنة في هذه الفترات.")
+        else:
+            st.warning("رجاءً تأكد من اختيار فترة زمنية صحيحة (تاريخ بداية ونهاية) لكل من الفترتين.")
 
 st.info(f"⏱️ Operational Sync Status: Metrics loaded completely across {len(df)} synced records.")
 # --- END OF SCRIPT ---
