@@ -342,7 +342,7 @@ def load_data():
             elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower in ["achievements", "great achievements", "الإنجازات"]: df_achievements = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif t_lower == "analysis": continue # 🛑 Ignore ANALYSIS tab completely
+            elif "analysis" in t_lower: continue # 🛑 Ignore ANALYSIS tab completely
             elif t_lower == "users":
                 df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
@@ -1876,6 +1876,7 @@ if "🌟 Great Achievements" in tabs_list:
             st.info("لم يتم تسجيل أي إنجازات حتى الآن. تأكد من وجود شيت 'Achievements' في جوجل شيتس لتظهر هنا!")
 
 
+
 # ── TAB 6 — Period Comparison ────────────────────────────────────────
 if "⚖️ Period Comparison" in tabs_list:
     comp_tab_idx = tabs_list.index("⚖️ Period Comparison")
@@ -1896,15 +1897,19 @@ if "⚖️ Period Comparison" in tabs_list:
             p1_from, p1_to = p1_dates
             p2_from, p2_to = p2_dates
             
-            # فلترة الداتا
             df_p1 = df_raw[(df_raw["Date Only"] >= p1_from) & (df_raw["Date Only"] <= p1_to)].copy()
             df_p2 = df_raw[(df_raw["Date Only"] >= p2_from) & (df_raw["Date Only"] <= p2_to)].copy()
             
-            # حساب الأيام
-            days_p1 = max(1, (p2_to - p1_from).days + 1 if p1_from == p1_to else (p1_to - p1_from).days + 1)
-            days_p2 = max(1, (p2_to - p2_from).days + 1 if p2_from == p2_to else (p2_to - p2_from).days + 1)
+            if sel_hic:
+                df_p1 = df_p1[df_p1["HIC"].isin(sel_hic)]
+                df_p2 = df_p2[df_p2["HIC"].isin(sel_hic)]
+            if sel_req_type:
+                df_p1 = df_p1[df_p1["Request Type"].isin(sel_req_type)]
+                df_p2 = df_p2[df_p2["Request Type"].isin(sel_req_type)]
+                
+            days_p1 = max(1, (p1_to - p1_from).days + 1)
+            days_p2 = max(1, (p2_to - p2_from).days + 1)
             
-            # حساب الماتريكس
             p1_total = len(df_p1); p2_total = len(df_p2)
             p1_avg = p1_total / days_p1; p2_avg = p2_total / days_p2
             p1_afr = df_p1["Response Take (min)"].mean() if not df_p1.empty and "Response Take (min)" in df_p1.columns else 0
@@ -1912,14 +1917,44 @@ if "⚖️ Period Comparison" in tabs_list:
             p1_tat = df_p1["Request Take (min)"].mean() if not df_p1.empty and "Request Take (min)" in df_p1.columns else 0
             p2_tat = df_p2["Request Take (min)"].mean() if not df_p2.empty and "Request Take (min)" in df_p2.columns else 0
             
-            st.markdown("<br>#### 📊 ملخص مقارنة الأداء", unsafe_allow_html=True)
-            cc1, cc2, cc3, cc4 = st.columns(4)
-            cc1.markdown(kpi_colored("إجمالي التيكتات", f"{p2_total:,}", "card-primary", calc_change(p2_total, p1_total)), unsafe_allow_html=True)
-            cc2.markdown(kpi_colored("المتوسط اليومي", f"{p2_avg:.1f}", "card-neutral", calc_change(p2_avg, p1_avg)), unsafe_allow_html=True)
-            cc3.markdown(kpi_colored("AFR (متوسط سرعة الرد)", fmt_m(p2_afr), "card-neutral", calc_change(p2_afr, p1_afr), inverse=True), unsafe_allow_html=True)
-            cc4.markdown(kpi_colored("TAT (متوسط سرعة الحل)", fmt_m(p2_tat), "card-neutral", calc_change(p2_tat, p1_tat), inverse=True), unsafe_allow_html=True)
+            st.markdown("<br>#### 📊 ملخص مقارنة الأداء (الفترة 2 مقارنة بـ الفترة 1)", unsafe_allow_html=True)
             
-            # رسم بياني لمقارنة أنواع الطلبات
+            def dual_kpi(label, v1, v2, is_time=False, inverse=False):
+                val1_str = fmt_m(v1) if is_time else (f"{v1:.1f}" if isinstance(v1, float) else f"{v1:,}")
+                val2_str = fmt_m(v2) if is_time else (f"{v2:.1f}" if isinstance(v2, float) else f"{v2:,}")
+                chg = calc_change(v2, v1)
+                
+                if chg > 0: arrow, color = "▲", ("#dc2626" if inverse else "#16a34a")
+                elif chg < 0: arrow, color = "▼", ("#16a34a" if inverse else "#dc2626")
+                else: arrow, color = "−", "#94a3b8"
+                bg_color = color + "15"
+                
+                return f'''
+                <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.2rem; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02); position:relative; margin-bottom: 15px;">
+                    <div style="font-size:1.05rem; color:#64748b; font-weight:800; margin-bottom:12px;">{label}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; padding: 0 10px;">
+                        <div style="text-align:center;">
+                            <div style="font-size:0.8rem; color:#94a3b8; font-weight:bold; margin-bottom:4px;">الفترة 1</div>
+                            <div style="font-size:1.45rem; font-weight:800; color:#475569;">{val1_str}</div>
+                        </div>
+                        <div style="font-size:1.6rem; color:#cbd5e1; font-weight:bold;">➔</div>
+                        <div style="text-align:center;">
+                            <div style="font-size:0.8rem; color:#2563eb; font-weight:bold; margin-bottom:4px;">الفترة 2</div>
+                            <div style="font-size:1.6rem; font-weight:900; color:#0f172a;">{val2_str}</div>
+                        </div>
+                    </div>
+                    <div style="display:inline-block; font-size: 0.95rem; padding: 4px 12px; border-radius: 12px; font-weight: 800; color: {color}; background-color: {bg_color}; border: 1px solid {color}40;">
+                        {arrow} {abs(chg):.1f}%
+                    </div>
+                </div>
+                '''
+                
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.markdown(dual_kpi("إجمالي التيكتات", p1_total, p2_total), unsafe_allow_html=True)
+            cc2.markdown(dual_kpi("المتوسط اليومي", p1_avg, p2_avg), unsafe_allow_html=True)
+            cc3.markdown(dual_kpi("AFR (متوسط سرعة الرد)", p1_afr, p2_afr, is_time=True, inverse=True), unsafe_allow_html=True)
+            cc4.markdown(dual_kpi("TAT (متوسط سرعة الحل)", p1_tat, p2_tat, is_time=True, inverse=True), unsafe_allow_html=True)
+            
             st.divider()
             st.markdown("#### 📈 مقارنة أنواع الطلبات بين الفترتين")
             
@@ -1936,6 +1971,7 @@ if "⚖️ Period Comparison" in tabs_list:
             if not comp_df.empty:
                 fig_comp = px.bar(comp_df, x="Request Type", y="Volume", color="Period", barmode="group", 
                                   color_discrete_sequence=["#94a3b8", "#2563eb"])
+                fig_comp.update_traces(texttemplate='%{y}', textposition='outside')
                 fig_comp.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
                                        font_color="#1e293b", margin=dict(l=10, r=10, t=30, b=10), height=450, 
                                        legend_title_text="الفترة الزمنية", xaxis_title="", yaxis_title="حجم الطلبات")
