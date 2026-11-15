@@ -314,7 +314,7 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
 # ══════════════════════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=300, show_spinner="Syncing database tables…")
-def load_data():
+def load_data_master():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
@@ -338,7 +338,7 @@ def load_data():
             data = ws.get_all_values()
             if len(data) < 2: continue
             if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif "out request" in t_lower: out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif "out" in t_lower and "req" in t_lower: out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower in ["achievements", "great achievements", "الإنجازات"]: df_achievements = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
@@ -473,7 +473,7 @@ def load_archive_2025():
         pass
     return pd.DataFrame()
 
-df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
+df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data_master()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
@@ -737,7 +737,7 @@ out_req_dict, prev_out_req_dict = {}, {}
 global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
 
 if not df_out_req.empty:
-    date_col = next((c for c in df_out_req.columns if "date" in c.lower() or "تاريخ" in c), None)
+    date_col = next((c for c in df_out_req.columns if "date" in c.lower() or "تاريخ" in c or "time" in c.lower() or "يوم" in c), df_out_req.columns[0] if not df_out_req.empty else None)
     source_col = next((c for c in df_out_req.columns if "source" in c.lower() or "مصدر" in c), None)
     expert_col = next((c for c in df_out_req.columns if "expert" in c.lower() or "agent" in c.lower() or "اسم" in c), None)
     
@@ -1093,6 +1093,18 @@ with tabs[0]:
     r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
     r2c6.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
     st.write("")
+
+
+    st.write("")
+    
+    if is_admin():
+        with st.expander("🛠️ System Debug Info (Admin Only)"):
+            st.code(f"df_out_req Shape: {df_out_req.shape}")
+            if not df_out_req.empty:
+                st.write("Columns found:", df_out_req.columns.tolist())
+                st.write("First 3 Parsed Dates:", df_out_req["Parsed_Date"].head(3).tolist() if "Parsed_Date" in df_out_req.columns else "Not parsed")
+                st.write("Active Filter:", d_from, "to", d_to)
+                st.write("Filtered rows count:", len(df_out_filtered) if 'df_out_filtered' in locals() else 0)
 
     req_counts, req_pct = pd.Series(dtype=int), pd.Series(dtype=float)
     if not dfm.empty:
