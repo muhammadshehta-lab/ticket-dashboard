@@ -286,9 +286,7 @@ def fmt_m(v):
     return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
 
 def assign_time_tier(m):
-    if m <= 5: return "Under 5 Mins"
-    if m <= 10: return "5-10 Mins"
-    if m <= 15: return "10-15 Mins"
+    if m <= 15: return "Under 15 Mins"
     if m <= 30: return "15-30 Mins"
     if m <= 45: return "30-45 Mins"
     if m <= 60: return "45-60 Mins"
@@ -316,7 +314,7 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
 # ══════════════════════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=300, show_spinner="Syncing database tables…")
-def load_data():
+def load_data_master():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
@@ -475,7 +473,7 @@ def load_archive_2025():
         pass
     return pd.DataFrame()
 
-df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
+df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data_master()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
@@ -1014,7 +1012,7 @@ st.caption(caption_text)
 if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type)"):
     st.dataframe(df_raw[df_raw["Request Type"] == "Unknown Type"])
 
-tabs_list = ["📈 Operational Insights"]
+tabs_list = ["📈 Operational Insights", "🏪 Stores Analysis", "🔮 Workload Forecast"]
 if is_admin(): tabs_list.extend(["👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
 elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
 
@@ -1079,22 +1077,34 @@ with tabs[0]:
     prev_reopen_pct = (prev_reopened_count / prev_total * 100) if prev_total > 0 else 0
     chg_reopen = reopen_pct - prev_reopen_pct
 
-    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5, r2c6 = st.columns(6)
+    r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
+    r1c6.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
-    r2c6.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
     st.write("")
+
+
+    st.write("")
+    
+    if is_admin():
+        with st.expander("🛠️ System Debug Info (Admin Only)"):
+            st.code(f"df_out_req Shape: {df_out_req.shape}")
+            if not df_out_req.empty:
+                st.write("Columns found:", df_out_req.columns.tolist())
+                st.write("First 3 Parsed Dates:", df_out_req["Parsed_Date"].head(3).tolist() if "Parsed_Date" in df_out_req.columns else "Not parsed")
+                st.write("Active Filter:", d_from, "to", d_to)
+                st.write("Filtered rows count:", len(df_out_filtered) if 'df_out_filtered' in locals() else 0)
 
     req_counts, req_pct = pd.Series(dtype=int), pd.Series(dtype=float)
     if not dfm.empty:
@@ -1129,8 +1139,8 @@ with tabs[0]:
             else: bar_trends.append("")
         # ---------------------------------------------------
         
-        SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 5 Mins": "#059669", "5-10 Mins": "#10b981", "10-15 Mins": "#34d399", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
-        tier_order = ["Under 5 Mins", "5-10 Mins", "10-15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+        SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 15 Mins": "#22c55e", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
+        tier_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
         sb_payloads = {}   
         
         for rt in ["All Types"] + bar_labels:
@@ -1425,7 +1435,106 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
                 st.download_button("📊 Export to PowerPoint (PPTX)", data=ppt_file_data.getvalue(), file_name=f"Operational_Summary_{d_from}_to_{d_to}.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
             else: st.warning(f"⚠️ {err_msg}")
 
+
+# ── NEW TAB — Stores Analysis ────────────────────────────────────────
+if "🏪 Stores Analysis" in tabs_list:
+    st_idx = tabs_list.index("🏪 Stores Analysis")
+    with tabs[st_idx]:
+        st.markdown("### 🏪 Stores Performance & Bottlenecks Analysis")
+        st.markdown("تحليل ذكي لأكثر الفروع نشاطاً والفروع التي تعاني من مشاكل متكررة (Reopens / Issues) لتوجيه التدريب المباشر.")
+        st.divider()
+        
+        df_stores = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
+        df_stores = df_stores[df_stores["Store ID"].astype(str).str.lower() != "unknown"]
+        
+        if not df_stores.empty:
+            df_stores["Is Issue"] = df_stores["Status"].astype(str).str.lower().str.contains("issue", na=False).astype(int)
+            df_stores["Is Reopen Int"] = df_stores["Is Reopen"].fillna(False).astype(int)
+            
+            store_stats = df_stores.groupby("Store ID").agg(
+                Volume=("Request ID", "count"),
+                Reopens=("Is Reopen Int", "sum"),
+                Issues=("Is Issue", "sum")
+            ).reset_index()
+            
+            store_stats["Reopen Rate (%)"] = (store_stats["Reopens"] / store_stats["Volume"] * 100).round(1)
+            
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                st.markdown("#### 🔝 أكثر 10 فروع فتحاً للطلبات (High Volume)")
+                top_vol = store_stats.sort_values(by="Volume", ascending=False).head(10)
+                fig_vol = px.bar(top_vol, x="Store ID", y="Volume", text="Volume", color_discrete_sequence=["#3b82f6"])
+                fig_vol.update_traces(textposition="outside", hovertemplate="Store: %{x}<br>Requests: %{y}<extra></extra>")
+                fig_vol.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_type='category')
+                st.plotly_chart(fig_vol, use_container_width=True)
+                
+            with sc2:
+                st.markdown("#### ⚠️ أكثر 10 فروع إرجاعاً للطلبات (High Reopens)")
+                top_reopen = store_stats[store_stats["Reopens"] > 0].sort_values(by="Reopens", ascending=False).head(10)
+                if not top_reopen.empty:
+                    fig_ro = px.bar(top_reopen, x="Store ID", y="Reopens", text="Reopens", color_discrete_sequence=["#ef4444"])
+                    fig_ro.update_traces(textposition="outside", hovertemplate="Store: %{x}<br>Reopened: %{y}<extra></extra>")
+                    fig_ro.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_type='category')
+                    st.plotly_chart(fig_ro, use_container_width=True)
+                else:
+                    st.success("لا توجد أي طلبات معادة (Reopens) في هذه الفترة!")
+                    
+            st.markdown("#### 📋 كشف تفصيلي بالفروع")
+            st.dataframe(store_stats.sort_values(by="Volume", ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("لا توجد بيانات للفروع في هذه الفترة.")
+
+# ── NEW TAB — Workload Forecast ────────────────────────────────────────
+if "🔮 Workload Forecast" in tabs_list:
+    wf_idx = tabs_list.index("🔮 Workload Forecast")
+    with tabs[wf_idx]:
+        st.markdown("### 🔮 Workload Forecasting (7-Day Projection)")
+        st.markdown("تحليل ذكي يعتمد على الأنماط التاريخية لتوقع حجم العمل خلال الـ 7 أيام القادمة، مما يساعد في تخطيط الشيفتات والإجازات بكفاءة.")
+        st.divider()
+        
+        if not df_raw.empty:
+            # Calculate historical average per Day Name
+            daily_counts = df_raw.groupby("Date Only").size().reset_index(name="Tickets")
+            daily_counts["Day Name"] = pd.to_datetime(daily_counts["Date Only"]).dt.day_name()
+            day_avg = daily_counts.groupby("Day Name")["Tickets"].mean().to_dict()
+            
+            last_date = df_raw["Date Only"].max()
+            if pd.isna(last_date): last_date = pd.Timestamp.today().date()
+            
+            future_dates = [last_date + timedelta(days=i) for i in range(1, 8)]
+            forecast_data = []
+            for d in future_dates:
+                d_name = pd.to_datetime(d).day_name()
+                pred = int(day_avg.get(d_name, 0))
+                forecast_data.append({"Date": d, "Day Name": DAYS_AR.get(d_name, d_name), "Predicted Volume": pred})
+                
+            df_forecast = pd.DataFrame(forecast_data)
+            df_forecast["Date Label"] = df_forecast.apply(lambda r: f"{r['Date'].strftime('%b %d')}<br><b>({r['Day Name']})</b>", axis=1)
+            
+            c_f1, c_f2 = st.columns([2, 1])
+            with c_f1:
+                fig_f = go.Figure()
+                fig_f.add_trace(go.Scatter(
+                    x=df_forecast["Date Label"], y=df_forecast["Predicted Volume"],
+                    mode="lines+markers+text", text=df_forecast["Predicted Volume"], textposition="top center",
+                    line=dict(color="#8b5cf6", width=4, shape="spline", dash="dot"), marker=dict(size=10, color="#6d28d9"),
+                    name="توقع حجم العمل", hovertemplate="%{x}<br>Expected: %{y} Tickets<extra></extra>"
+                ))
+                fig_f.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=30, b=10), height=400, yaxis_title="حجم التيكتات المتوقع")
+                st.plotly_chart(fig_f, use_container_width=True)
+            with c_f2:
+                st.markdown("#### 🎯 ملخص التوقعات")
+                total_expected = df_forecast["Predicted Volume"].sum()
+                peak_day = df_forecast.loc[df_forecast["Predicted Volume"].idxmax()] if not df_forecast.empty else None
+                st.info(f"📦 إجمالي العمل المتوقع: **{total_expected:,}** تيكت")
+                if peak_day is not None:
+                    st.warning(f"🚨 أقصى ضغط متوقع: **{peak_day['Day Name']} ({peak_day['Date']})** بحجم **{peak_day['Predicted Volume']}** تيكت. (يرجى توفير طاقة بشرية كافية)")
+                st.dataframe(df_forecast[["Date", "Day Name", "Predicted Volume"]].rename(columns={"Date": "التاريخ", "Day Name": "اليوم", "Predicted Volume": "العدد المتوقع"}), hide_index=True, use_container_width=True)
+        else:
+            st.info("لا توجد بيانات تاريخية كافية لبناء التوقع.")
+
 # ── TAB 2 — Team Performance and KPIs ─────────────────────────────
+
 if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
     with tabs[1]:
         st.markdown("### 👥 Team Performance and KPIs")
@@ -1611,6 +1720,42 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         gold_exp, silver_exp, bronze_exp = top_exps[0] if len(top_exps) > 0 else None, top_exps[1] if len(top_exps) > 1 else None, top_exps[2] if len(top_exps) > 2 else None
 
         display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
+        
+        # 🎮 Gamification Logic (Awards)
+        awards_list = []
+        valid_exp = display_df[display_df["Expert"] != "🏆 Team AVG"]
+        if not valid_exp.empty:
+            best_afr = valid_exp[valid_exp["AFR"] != "00:00:00"]["AFR"].min() if not valid_exp[valid_exp["AFR"] != "00:00:00"].empty else None
+            best_tat = valid_exp[valid_exp["Service Time"] != "00:00:00"]["Service Time"].min() if not valid_exp[valid_exp["Service Time"] != "00:00:00"].empty else None
+            
+            try: max_qual = valid_exp["Service Quality"].apply(lambda x: float(str(x).replace('%',''))).max()
+            except: max_qual = None
+            
+            try: 
+                valid_exp["_reopen_rate"] = valid_exp.apply(lambda r: float(r["Reopened Cases"])/(float(r["Tickets Count"])+0.001), axis=1)
+                min_reopen = valid_exp["_reopen_rate"].min()
+            except: min_reopen = None
+
+            for _, r in display_df.iterrows():
+                if r["Expert"] == "🏆 Team AVG":
+                    awards_list.append("")
+                    continue
+                a_str = ""
+                if best_afr and r["AFR"] == best_afr: a_str += "⚡ "
+                if best_tat and r["Service Time"] == best_tat: a_str += "🏎️ "
+                try:
+                    if max_qual and float(str(r["Service Quality"]).replace('%','')) == max_qual: a_str += "🎯 "
+                except: pass
+                try:
+                    curr_rr = float(r["Reopened Cases"])/(float(str(r["Tickets Count"]).replace(',', ''))+0.001)
+                    if min_reopen is not None and curr_rr == min_reopen and int(r.get("Tickets Count", 0)) > 10: a_str += "🛡️ "
+                except: pass
+                awards_list.append(a_str)
+        else:
+            awards_list = [""] * len(display_df)
+            
+        display_df.insert(1, "Awards", awards_list)
+
         for c in ["Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
             if c in display_df.columns: display_df[c] = display_df[c].apply(lambda x: "-" if x == "-" else (str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))))
         
@@ -1692,7 +1837,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 except: pass
             return styles
 
-        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        display_df = display_df[["Expert", "Awards", "Rank", "Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         
         try: 
             html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
