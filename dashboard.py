@@ -1077,21 +1077,21 @@ with tabs[0]:
     prev_reopen_pct = (prev_reopened_count / prev_total * 100) if prev_total > 0 else 0
     chg_reopen = reopen_pct - prev_reopen_pct
 
-    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5, r2c6 = st.columns(6)
+    r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
+    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
+    r1c6.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
-    r2c6.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
     st.write("")
 
 
