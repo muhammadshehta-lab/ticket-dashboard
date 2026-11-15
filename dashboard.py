@@ -286,7 +286,9 @@ def fmt_m(v):
     return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
 
 def assign_time_tier(m):
-    if m <= 15: return "Under 15 Mins"
+    if m <= 5: return "Under 5 Mins"
+    if m <= 10: return "5-10 Mins"
+    if m <= 15: return "10-15 Mins"
     if m <= 30: return "15-30 Mins"
     if m <= 45: return "30-45 Mins"
     if m <= 60: return "45-60 Mins"
@@ -314,7 +316,7 @@ def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
 #  DATA LOADER (LOAD ACTIVE LIVE USERS DIRECTLY FROM SHEET)
 # ══════════════════════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=300, show_spinner="Syncing database tables…")
-def load_data_master():
+def load_data():
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
@@ -473,7 +475,7 @@ def load_archive_2025():
         pass
     return pd.DataFrame()
 
-df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data_master()
+df_raw, df_roster, df_out_req, df_quality, df_bonus_raw, df_achievements, fetched_users = load_data()
 
 # ==========================================
 # FAILSAFE: Initialize core dataframes globally to prevent NameError
@@ -1077,34 +1079,22 @@ with tabs[0]:
     prev_reopen_pct = (prev_reopened_count / prev_total * 100) if prev_total > 0 else 0
     chg_reopen = reopen_pct - prev_reopen_pct
 
-    r1c1, r1c2, r1c3, r1c4, r1c5, r1c6 = st.columns(6)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4, r2c5, r2c6 = st.columns(6)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
     r1c3.markdown(kpi_colored("Closed Completed",   f"{ok:,} <span style='font-size:1.15rem; opacity:0.8;'>({ok_pct:.1f}%)</span>",    "card-success", chg_ok), unsafe_allow_html=True)
     r1c4.markdown(kpi_colored("Closed with Issue", f"{issue:,} <span style='font-size:1.15rem; opacity:0.8;'>({issue_pct:.1f}%)</span>", "card-danger", chg_issue, inverse=True),     unsafe_allow_html=True)
-    r1c5.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
-    r1c6.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
+    r1c5.markdown(kpi_colored("AFR (Avg Response)", fmt_m(curr_afr_val), "card-neutral", chg_afr, inverse=True),       unsafe_allow_html=True)
     
     r2c1.markdown(kpi_colored("Avg Service (TAT)", fmt_m(curr_tat_val),        "card-neutral", chg_tat, inverse=True),       unsafe_allow_html=True)
     r2c2.markdown(kpi_colored("Stores Served",      f"{stores_count:,}", "card-neutral", chg_stores, neutral=True),  unsafe_allow_html=True)
     r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c6.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
     st.write("")
-
-
-    st.write("")
-    
-    if is_admin():
-        with st.expander("🛠️ System Debug Info (Admin Only)"):
-            st.code(f"df_out_req Shape: {df_out_req.shape}")
-            if not df_out_req.empty:
-                st.write("Columns found:", df_out_req.columns.tolist())
-                st.write("First 3 Parsed Dates:", df_out_req["Parsed_Date"].head(3).tolist() if "Parsed_Date" in df_out_req.columns else "Not parsed")
-                st.write("Active Filter:", d_from, "to", d_to)
-                st.write("Filtered rows count:", len(df_out_filtered) if 'df_out_filtered' in locals() else 0)
 
     req_counts, req_pct = pd.Series(dtype=int), pd.Series(dtype=float)
     if not dfm.empty:
@@ -1139,8 +1129,8 @@ with tabs[0]:
             else: bar_trends.append("")
         # ---------------------------------------------------
         
-        SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 15 Mins": "#22c55e", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
-        tier_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+        SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 5 Mins": "#059669", "5-10 Mins": "#10b981", "10-15 Mins": "#34d399", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
+        tier_order = ["Under 5 Mins", "5-10 Mins", "10-15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
         sb_payloads = {}   
         
         for rt in ["All Types"] + bar_labels:
