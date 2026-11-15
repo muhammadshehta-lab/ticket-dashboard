@@ -1535,8 +1535,8 @@ if "🔮 Workload Forecast" in tabs_list:
 
 # ── TAB 2 — Team Performance and KPIs ─────────────────────────────
 
-if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
-    with tabs[1]:
+if "👥 Team Performance & KPIs" in tabs_list:
+    with tabs[tabs_list.index("👥 Team Performance & KPIs")]:
         st.markdown("### 👥 Team Performance and KPIs")
         sel_agents_t2 = st.multiselect("Filter by Expert Name", sorted(df_raw["Assigned By"].dropna().unique()), key="t2_agents")
         aname = my_agent_name()
@@ -1957,8 +1957,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 st.markdown(f'<a href="{mail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
 
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
-if is_admin():
-    with tabs[2]:
+if "✏️ Manual Overrides" in tabs_list:
+    with tabs[tabs_list.index("✏️ Manual Overrides")]:
         st.markdown("### 🎯 Global Settings (This Period)")
         with st.form("global_target_form"):
             new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
