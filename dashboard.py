@@ -1513,6 +1513,7 @@ if "🔮 Workload Forecast" in tabs_list:
             
             c_f1, c_f2 = st.columns([2, 1])
             with c_f1:
+                st.markdown("#### 📊 منحنى التوقعات اليومية")
                 fig_f = go.Figure()
                 fig_f.add_trace(go.Scatter(
                     x=df_forecast["Date Label"], y=df_forecast["Predicted Volume"],
@@ -1520,74 +1521,73 @@ if "🔮 Workload Forecast" in tabs_list:
                     line=dict(color="#8b5cf6", width=4, shape="spline", dash="dot"), marker=dict(size=10, color="#6d28d9"),
                     name="توقع حجم العمل", hovertemplate="%{x}<br>Expected: %{y} Tickets<extra></extra>"
                 ))
-                fig_f.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=30, b=10), height=400, yaxis_title="حجم التيكتات المتوقع")
+                fig_f.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=10, b=10), height=350, yaxis_title="حجم التيكتات المتوقع")
                 st.plotly_chart(fig_f, use_container_width=True)
             with c_f2:
-                st.markdown("#### 🎯 ملخص التوقعات")
+                st.markdown("#### 🎯 ملخص الأسبوع")
                 total_expected = df_forecast["Predicted Volume"].sum()
                 peak_day = df_forecast.loc[df_forecast["Predicted Volume"].idxmax()] if not df_forecast.empty else None
-                st.info(f"📦 إجمالي العمل المتوقع: **{total_expected:,}** تيكت")
+                st.info(f"📦 إجمالي التيكتات: **{total_expected:,}**")
                 if peak_day is not None:
-                    st.warning(f"🚨 أقصى ضغط متوقع: **{peak_day['Day Name']} ({peak_day['Date']})** بحجم **{peak_day['Predicted Volume']}** تيكت. (يرجى توفير طاقة بشرية كافية)")
-                st.dataframe(df_forecast[["Date", "Day Name", "Predicted Volume"]].rename(columns={"Date": "التاريخ", "Day Name": "اليوم", "Predicted Volume": "العدد المتوقع"}), hide_index=True, use_container_width=True)
+                    st.error(f"🚨 أقصى ضغط: **{peak_day['Day Name']}** ({peak_day['Predicted Volume']} تيكت)")
+                st.dataframe(df_forecast[["Date", "Day Name", "Predicted Volume"]].rename(columns={"Date": "التاريخ", "Day Name": "اليوم", "Predicted Volume": "المتوقع"}), hide_index=True, use_container_width=True)
                 
         st.divider()
-        st.markdown("### 🤖 مقترح جدول العمل الذكي (بناءً على 7 موظفين)")
-        st.markdown("تم احتساب هذا الجدول لتوزيع **35 شيفت أسبوعياً** (7 موظفين × 5 أيام عمل) لضمان عدم تجاوز العبء للمعدل الطبيعي قدر الإمكان:")
+        st.markdown("### 🤖 مقترح جدول العمل الذكي (بناءً على 7 موظفين بـ 35 شيفت أسبوعياً)")
         
-        if not df_raw.empty:
-            # 1. Distribute days off mathematically based on lowest volume
-            # To get a total of 35 shifts (14 days off), we distribute them inversely to volume.
-            sorted_days = df_forecast.sort_values(by="Predicted Volume", ascending=False)
-            
-            # Base distribution strategy for 35 shifts over 7 days for 7 agents
-            offs_distribution = [0, 1, 1, 2, 2, 3, 5]  # sum = 14 offs = 35 shifts
-            
-            roster_sugg = []
-            for i, (idx, r) in enumerate(sorted_days.iterrows()):
-                vol = r["Predicted Volume"]
-                off_days = offs_distribution[i]
-                scheduled = 7 - off_days
-                expected_ratio = round(vol / scheduled, 1) if scheduled > 0 else 0
+        c_ros1, c_ros2 = st.columns([1.5, 1])
+        with c_ros1:
+            st.markdown("#### 📅 توزيع الشيفتات الموصى به")
+            if not df_raw.empty:
+                sorted_days = df_forecast.sort_values(by="Predicted Volume", ascending=False)
+                offs_distribution = [0, 1, 1, 2, 2, 3, 5]
+                roster_sugg = []
+                for i, (idx, r) in enumerate(sorted_days.iterrows()):
+                    vol = r["Predicted Volume"]
+                    off_days = offs_distribution[i]
+                    scheduled = 7 - off_days
+                    expected_ratio = round(vol / scheduled, 1) if scheduled > 0 else 0
+                    
+                    status_color = "#3b82f6" if expected_ratio <= 55 else ("#eab308" if expected_ratio <= 60 else ("#f97316" if expected_ratio <= 63 else "#ef4444"))
+                    status = "🟢 مثالي" if expected_ratio <= 55 else ("🟡 متوسط" if expected_ratio <= 60 else ("🟠 عالي" if expected_ratio <= 63 else "🔴 شديد"))
+                    
+                    roster_sugg.append({
+                        "اليوم": r["Day Name"],
+                        "الطلبات المتوقعة": vol,
+                        "الموظفين المطلوبين": scheduled,
+                        "الراحات الممكنة (Offs)": off_days,
+                        "متوسط التيكتات/موظف": expected_ratio,
+                        "مؤشر الضغط": status
+                    })
+                    
+                df_roster_ai = pd.DataFrame(roster_sugg)
+                df_roster_ai["Sort"] = df_roster_ai["اليوم"].map({"Sunday":0, "Monday":1, "Tuesday":2, "Wednesday":3, "Thursday":4, "Friday":5, "Saturday":6})
+                df_roster_ai = df_roster_ai.sort_values("Sort").drop(columns=["Sort"])
                 
-                status_color = "#3b82f6" if expected_ratio <= 55 else ("#eab308" if expected_ratio <= 60 else ("#f97316" if expected_ratio <= 63 else "#ef4444"))
-                status = "🟢 مثالي" if expected_ratio <= 55 else ("🟡 ضغط متوسط" if expected_ratio <= 60 else ("🟠 ضغط عالي" if expected_ratio <= 63 else "🔴 ضغط شديد"))
+                def style_roster(row):
+                    s = row["مؤشر الضغط"]
+                    if "🔴" in s: return ['background-color: #fef2f2; color: #dc2626; font-weight: bold'] * len(row)
+                    if "🟠" in s: return ['background-color: #fff7ed; color: #ea580c; font-weight: bold'] * len(row)
+                    if "🟡" in s: return ['background-color: #fefce8; color: #ca8a04; font-weight: bold'] * len(row)
+                    return ['background-color: #f0fdf4; color: #16a34a; font-weight: bold'] * len(row)
+                    
+                st.dataframe(df_roster_ai.style.apply(style_roster, axis=1), hide_index=True, use_container_width=True)
                 
-                roster_sugg.append({
-                    "اليوم": r["Day Name"],
-                    "الطلبات المتوقعة": vol,
-                    "الموظفين المطلوبين": scheduled,
-                    "الراحات المقترحة (Offs)": off_days,
-                    "نصيب الموظف المتوقع": expected_ratio,
-                    "حالة الضغط": status
-                })
-                
-            df_roster_ai = pd.DataFrame(roster_sugg)
-            
-            # Sort back chronologically for display
-            df_roster_ai["Sort"] = df_roster_ai["اليوم"].map({"Sunday":0, "Monday":1, "Tuesday":2, "Wednesday":3, "Thursday":4, "Friday":5, "Saturday":6})
-            df_roster_ai = df_roster_ai.sort_values("Sort").drop(columns=["Sort"])
-            
-            def style_roster(row):
-                s = row["حالة الضغط"]
-                if "🔴" in s: return ['background-color: #fef2f2; color: #dc2626; font-weight: bold'] * len(row)
-                if "🟠" in s: return ['background-color: #fff7ed; color: #ea580c; font-weight: bold'] * len(row)
-                if "🟡" in s: return ['background-color: #fefce8; color: #ca8a04; font-weight: bold'] * len(row)
-                return ['background-color: #f0fdf4; color: #16a34a; font-weight: bold'] * len(row)
-                
-            st.dataframe(df_roster_ai.style.apply(style_roster, axis=1), hide_index=True, use_container_width=True)
-            
-            st.markdown("### ⏱️ استراتيجية الشيفتات لتحسين سرعة الرد (FRT)")
+        with c_ros2:
+            st.markdown("#### ⏱️ استراتيجية تحسين سرعة الرد (FRT)")
             st.info('''
-            **بناءً على منحنى تدفق الطلبات على مدار الساعة (Flow Rate Curve)، إليك التوزيعة المثالية لساعات العمل لقتل التكدس وتحسين الـ FRT:**
+            **للقضاء على تكدس الطلبات (Bottlenecks) وتقليل الـ AFR، يجب اتباع الآتي:**
             
-            1. **فترة الذروة الكبرى (1:00 م إلى 9:00 م):** يجب توجيه أكثر من **50% من الفريق المتاح** في هذه الفترة (مثلاً شيفت يبدأ 2:00 ظهراً أو 3:00 عصراً). هذا سيقضي تماماً على التكدس المسائي الذي يرفع الـ AFR.
-            2. **فترة الذروة الصغرى (1:00 ص إلى 5:00 ص):** يجب توفير **موظف واحد على الأقل (شيفت ليلي)** يبدأ 11:00 م إلى 7:00 ص، لضمان عدم تراكم تيكتات الليل لصباح اليوم التالي.
-            3. **فترة الصباح (8:00 ص إلى 1:00 م):** ضغط العمل يكون في أقل مستوياته، يُفضل تقليل عدد موظفي الشفت الصباحي للاستفادة منهم في فترة الذروة المسائية (Overlap Shift).
+            1. **🔥 فترة الذروة الكبرى (1:00 م - 9:00 م):**
+               تخصيص **50% أو أكثر** من الفريق المتاح لشفتات تبدأ (2 ظهراً أو 3 عصراً). التكدس المسائي هو القاتل الأول لسرعة الرد.
+               
+            2. **🌙 فترة الذروة الليلية (1:00 ص - 5:00 ص):**
+               توفير **شفت ليلي واحد على الأقل** (11 م - 7 ص) لمنع ترحيل طلبات الليل والتأثير على أداء الصباح.
+               
+            3. **☕ الفترة الصباحية (8:00 ص - 1:00 م):**
+               الضغط يكون في أقل مستوياته. يمكن الاكتفاء بالحد الأدنى وتوجيه الباقين لعمل Overlapping Shifts في المساء.
             ''')
-
-        else:
-            st.info("لا توجد بيانات تاريخية كافية لبناء التوقع.")
+            st.warning("💡 **ملاحظة:** يمكن قبول الإجازات بسهولة في الأيام ذات المؤشر 🟢، ويُمنع إعطاء إجازات في الأيام ذات المؤشر 🔴 أو 🟠 لضمان الـ SLA.")
 
 # ── TAB 2 — Team Performance and KPIs ─────────────────────────────
 
