@@ -338,7 +338,7 @@ def load_data():
             data = ws.get_all_values()
             if len(data) < 2: continue
             if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif t_lower == "out requests": out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
+            elif "out request" in t_lower: out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower in ["achievements", "great achievements", "الإنجازات"]: df_achievements = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
@@ -377,6 +377,7 @@ def load_data():
                 elif "email" in cl or "special" in cl: t = "Is Special Request(By Email)"
                 elif "hic" in cl or "insurance" in cl: t = "HIC"
                 elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
+                elif "reopen" in cl: t = "Is Reopen"
                 if t and t not in seen: mp[col] = t; seen.add(t)
             dft.rename(columns=mp, inplace=True)
             all_dfs.append(dft)
@@ -384,7 +385,7 @@ def load_data():
         if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), pd.DataFrame(), fetched_users
             
         df = pd.concat(all_dfs, ignore_index=True, sort=False).replace("", np.nan)
-        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
+        for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Is Reopen"]:
             if c not in df.columns: df[c] = np.nan
         if "Store ID" not in df.columns: df["Store ID"] = "Unknown"
 
@@ -399,6 +400,7 @@ def load_data():
         df["Request Date"], df["Date Only"], df["Hour"], df["Day Name"] = dp, dp.dt.date, dp.dt.hour.fillna(0).astype(int), dp.dt.day_name().fillna("Unknown")
         if "Request Take" in df.columns: df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
         if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
+        df["Is Reopen"] = (df["Is Reopen"].astype(str).str.strip().str.lower() == "yes")
         df["Is Email"] = (df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
         return df, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements, fetched_users
@@ -448,7 +450,7 @@ def load_archive_2025():
                 
             df25 = pd.concat(archive_dfs, ignore_index=True, sort=False).replace("", np.nan)
             
-            for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC"]:
+            for c in ["Request ID", "Request Date", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Is Reopen"]:
                 if c not in df25.columns: df25[c] = np.nan
             if "Store ID" not in df25.columns: df25["Store ID"] = "Unknown"
             
@@ -463,6 +465,7 @@ def load_archive_2025():
             df25["Request Date"], df25["Date Only"], df25["Hour"], df25["Day Name"] = dp25, dp25.dt.date, dp25.dt.hour.fillna(0).astype(int), dp25.dt.day_name().fillna("Unknown")
             if "Request Take" in df25.columns: df25["Request Take (min)"] = df25["Request Take"].apply(time_to_minutes).fillna(0)
             if "Response Take" in df25.columns: df25["Response Take (min)"] = df25["Response Take"].apply(time_to_minutes).fillna(0)
+            df25["Is Reopen"] = (df25["Is Reopen"].astype(str).str.strip().str.lower() == "yes")
             df25["Is Email"] = (df25["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
             return df25
@@ -479,7 +482,7 @@ df = pd.DataFrame()
 df_prev_all = pd.DataFrame()
 
 # Ensure mandatory columns exist to avoid KeyErrors during filtering
-mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email"]
+mandatory_cols = ["Request ID", "Request Date", "Date Only", "Request Type", "Status", "Status Count", "Request Take", "Response Take", "Assigned By", "Is Special Request(By Email)", "HIC", "Store ID", "Hour", "Day Name", "Request Take (min)", "Response Take (min)", "Is Email", "Is Reopen"]
 for col in mandatory_cols:
     if col not in df_raw.columns:
         df_raw[col] = np.nan
@@ -733,27 +736,35 @@ prev_roster_counts = get_roster_stats(df_roster, prev_d_from, prev_d_to)
 out_req_dict, prev_out_req_dict = {}, {}
 global_jhah, global_support, prev_global_jhah, prev_global_support = 0, 0, 0, 0
 
-if not df_out_req.empty and "Date" in df_out_req.columns:
-    df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req["Date"], errors="coerce").dt.date
-    df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
-    if "Source" in df_out_filtered.columns: global_jhah = df_out_filtered[df_out_filtered["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    global_support = len(df_out_filtered) - global_jhah
-    if "Expert Name" in df_out_filtered.columns:
-        df_out_filtered["Norm_Expert"] = df_out_filtered["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
-            
-    df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
-    if "Source" in df_out_prev.columns: prev_global_jhah = df_out_prev[df_out_prev["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
-    prev_global_support = len(df_out_prev) - prev_global_jhah
-    if "Expert Name" in df_out_prev.columns:
-        df_out_prev["Norm_Expert"] = df_out_prev["Expert Name"].fillna("").astype(str).apply(normalize_expert_name).str.lower()
-        for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
-            if not exp_name or exp_name == "nan": continue 
-            j_count = grp[grp["Source"].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if "Source" in grp.columns else 0
-            prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+if not df_out_req.empty:
+    date_col = next((c for c in df_out_req.columns if "date" in c.lower() or "تاريخ" in c), None)
+    source_col = next((c for c in df_out_req.columns if "source" in c.lower() or "مصدر" in c), None)
+    expert_col = next((c for c in df_out_req.columns if "expert" in c.lower() or "agent" in c.lower() or "اسم" in c), None)
+    
+    if date_col:
+        df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req[date_col], errors="coerce").dt.date
+        df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
+        
+        if source_col: global_jhah = df_out_filtered[df_out_filtered[source_col].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+        global_support = len(df_out_filtered) - global_jhah
+        
+        if expert_col:
+            df_out_filtered["Norm_Expert"] = df_out_filtered[expert_col].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+            for exp_name, grp in df_out_filtered.groupby("Norm_Expert"):
+                if not exp_name or exp_name == "nan": continue 
+                j_count = grp[grp[source_col].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if source_col else 0
+                out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
+                
+        df_out_prev = df_out_req[(df_out_req["Parsed_Date"] >= prev_d_from) & (df_out_req["Parsed_Date"] <= prev_d_to)].copy()
+        if source_col: prev_global_jhah = df_out_prev[df_out_prev[source_col].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
+        prev_global_support = len(df_out_prev) - prev_global_jhah
+        
+        if expert_col:
+            df_out_prev["Norm_Expert"] = df_out_prev[expert_col].fillna("").astype(str).apply(normalize_expert_name).str.lower()
+            for exp_name, grp in df_out_prev.groupby("Norm_Expert"):
+                if not exp_name or exp_name == "nan": continue 
+                j_count = grp[grp[source_col].astype(str).str.lower().str.contains("jhah", na=False)].shape[0] if source_col else 0
+                prev_out_req_dict[exp_name] = {"JHAH": j_count, "Support Req": len(grp) - j_count}
 
 expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
 if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
@@ -1059,9 +1070,15 @@ with tabs[0]:
     chg_avg_per_day = calc_change(curr_avg_per_day, prev_avg_per_day)
     chg_afr = calc_change(curr_afr_val, prev_afr_val)
     chg_tat = calc_change(curr_tat_val, prev_tat_val)
+    
+    reopened_count = dfm["Is Reopen"].sum() if "Is Reopen" in dfm.columns else 0
+    reopen_pct = (reopened_count / total * 100) if total > 0 else 0
+    prev_reopened_count = dfm_prev["Is Reopen"].sum() if "Is Reopen" in dfm_prev.columns else 0
+    prev_reopen_pct = (prev_reopened_count / prev_total * 100) if prev_total > 0 else 0
+    chg_reopen = reopen_pct - prev_reopen_pct
 
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r2c1, r2c2, r2c3, r2c4, r2c5 = st.columns(5)
+    r2c1, r2c2, r2c3, r2c4, r2c5, r2c6 = st.columns(6)
     
     r1c1.markdown(kpi_colored("Tickets Count",      f"{total:,}", "card-primary", chg_total, neutral=True),     unsafe_allow_html=True)
     r1c2.markdown(kpi_colored("Total Actions",      f"{status_actions_sum:,}", "card-neutral", chg_actions, neutral=True),  unsafe_allow_html=True)
@@ -1074,6 +1091,7 @@ with tabs[0]:
     r2c3.markdown(kpi_colored("JHAH Requests", f"{global_jhah:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c4.markdown(kpi_colored("Support Requests", f"{global_support:,}", "card-neutral", neutral=True), unsafe_allow_html=True)
     r2c5.markdown(kpi_colored("Avg Requests / Day",  f"{curr_avg_per_day:.1f}", "card-neutral", chg_avg_per_day, neutral=True), unsafe_allow_html=True)
+    r2c6.markdown(kpi_colored("Reopen Rate", f"{int(reopened_count):,} <span style='font-size:1.15rem; opacity:0.8;'>({reopen_pct:.1f}%)</span>", "card-danger", chg_reopen, inverse=True), unsafe_allow_html=True)
     st.write("")
 
     req_counts, req_pct = pd.Series(dtype=int), pd.Series(dtype=float)
@@ -1194,7 +1212,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
     st.divider()
 
     if not df_raw.empty:
-        st.markdown("### ⏳ Ticket flow rate over daily hours")
+        st.markdown("### ⏳ Ticket Volume, FRT & TAT over Daily Hours")
         df_flow_strict = df_raw[(df_raw["Date Only"] >= d_from) & (df_raw["Date Only"] <= d_to)].copy()
         if esc and not nesc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == True]
         elif nesc and not esc: df_flow_strict = df_flow_strict[df_flow_strict["Is Email"] == False]
@@ -1209,21 +1227,12 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         hrs["Avg_Vol"] = hrs["Volume"] / max(1, delta_days)
         
         fig_r = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
-        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#10b981", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="Volume: %{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["AR"], name="FRT (Avg Response)", mode="lines+markers", line=dict(color="#10b981", width=3, shape="spline"), hovertemplate="FRT: %{y:.1f} min<extra></extra>"), secondary_y=True)
+        fig_r.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["ST"], name="TAT (Avg Service)", mode="lines+markers", line=dict(color="#f59e0b", width=3, shape="spline"), hovertemplate="TAT: %{y:.1f} min<extra></extra>"), secondary_y=True)
         fig_r.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_r.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_r.update_yaxes(title_text="Avg Response Time (min)", secondary_y=True)
+        fig_r.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_r.update_yaxes(title_text="Time (min)", secondary_y=True)
         st.plotly_chart(fig_r, use_container_width=True)
-
-        st.divider()
-
-        st.markdown("### ⏱️ Service Time (TAT) over daily hours")
-        fig_st = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["Volume"], name="Volume", fill="tozeroy", line=dict(color="#3b82f6", width=2), customdata=hrs["Avg_Vol"], hovertemplate="%{y} (Avg: %{customdata:.1f}/day)<extra></extra>"), secondary_y=False)
-        fig_st.add_trace(go.Scatter(x=hrs["Hour Label"], y=hrs["ST"], name="TAT (Avg Service)", mode="lines+markers", line=dict(color="#f59e0b", width=3, shape="spline"), hovertemplate="%{y:.1f} min<extra></extra>"), secondary_y=True)
-        fig_st.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#1e293b", margin=dict(l=10, r=10, t=55, b=10), height=550, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig_st.update_yaxes(title_text="Volume (Tickets)", secondary_y=False); fig_st.update_yaxes(title_text="Avg Service Time (min)", secondary_y=True)
-        st.plotly_chart(fig_st, use_container_width=True)
 
         st.divider()
         st.markdown("### 📅 Daily Volume & Schedule Workload Analysis")
@@ -1494,6 +1503,8 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             stats = pd.DataFrame(index=grp.groups.keys())
             stats["Tickets Count"] = grp["Request ID"].count()
             stats["Emails Count"] = grp["_email_int"].sum()
+            df_sc["_reopen_int"] = df_sc["Is Reopen"].fillna(False).astype(int)
+            stats["Reopened Cases"] = grp["_reopen_int"].sum()
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
             stats["_AFR_val"] = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
             sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
@@ -1503,6 +1514,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             
         sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
         sc["Emails Count"] = sc["Emails Count"].fillna(0).astype(int)
+        sc["Reopened Cases"] = sc.get("Reopened Cases", 0).fillna(0).astype(int)
         sc["Tickets Count"] = sc.apply(lambda row: row["Tickets Count"] + int(period_adjs.get(str(row["Expert"]).strip(), 0)), axis=1)
 
         sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
@@ -1583,6 +1595,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
             "Expert": "🏆 Team AVG", "Rank": "-", "Working Days": team_wd,
             "Tickets Count": round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Emails Count": round(pd.to_numeric(sc["Emails Count"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Reopened Cases": round(pd.to_numeric(sc["Reopened Cases"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Cases/Day": round((round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0) / (team_wd if team_wd > 0 else 1), 1),
@@ -1596,7 +1609,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
         gold_exp, silver_exp, bronze_exp = top_exps[0] if len(top_exps) > 0 else None, top_exps[1] if len(top_exps) > 1 else None, top_exps[2] if len(top_exps) > 2 else None
 
         display_df = sc_final[sc_final["Expert"].isin(["🏆 Team AVG", aname])] if is_exp else (sc_final[sc_final["Expert"].isin(["🏆 Team AVG"] + sel_agents_t2)] if sel_agents_t2 else sc_final.copy())
-        for c in ["Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
+        for c in ["Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
             if c in display_df.columns: display_df[c] = display_df[c].apply(lambda x: "-" if x == "-" else (str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))))
         
         # ── حساب أسهم المقارنة مع نفس الفترة الشهر السابق ──
@@ -1677,7 +1690,7 @@ if len(tabs) > 1 and (is_admin() or st.session_state.role == "expert"):
                 except: pass
             return styles
 
-        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        display_df = display_df[["Expert", "Rank", "Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         
         try: 
             html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
