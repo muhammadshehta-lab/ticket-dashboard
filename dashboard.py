@@ -1705,6 +1705,41 @@ if "🔮 Workload Forecast" in tabs_list:
             ''')
             st.warning("💡 **ملاحظة:** يمكن قبول الإجازات بسهولة في الأيام ذات المؤشر 🟢، ويُمنع إعطاء إجازات في الأيام ذات المؤشر 🔴 أو 🟠 لضمان الـ SLA.")
 
+        st.divider()
+        st.markdown("### ⏰ خريطة الزحمة (متوسط التيكتات لكل ساعة)")
+        st.markdown("الجدول يوضح متوسط عدد التيكتات المتوقعة في كل ساعة على مدار اليوم (باللون الأحمر لأوقات الذروة) لتعريف الموظف بأوقات الضغط:")
+        
+        if not df_raw.empty:
+            total_historical_days = df_raw['Date Only'].nunique()
+            if total_historical_days > 0:
+                h_df = df_raw.groupby("Hour").size().reset_index(name="Tickets")
+                h_df = h_df.set_index("Hour").reindex(range(24)).fillna(0).reset_index()
+                h_df["Average Tickets"] = (h_df["Tickets"] / total_historical_days).round(1)
+                
+                def format_hour_ar(h):
+                    if h == 0: return "12:00 منتصف الليل"
+                    elif h == 12: return "12:00 ظهراً"
+                    elif h < 12: return f"{h}:00 صباحاً"
+                    else: return f"{h - 12}:00 مساءً"
+                
+                h_df["Hour Label"] = h_df["Hour"].apply(format_hour_ar)
+                disp_h = h_df[["Hour Label", "Average Tickets"]].rename(columns={"Hour Label": "الساعة", "Average Tickets": "متوسط التيكتات"})
+                
+                max_val = disp_h["متوسط التيكتات"].max()
+                
+                c_h1, c_h2, c_h3 = st.columns(3)
+                
+                with c_h1:
+                    st.markdown("**🌙 شفت الليل والصباح الباكر**")
+                    st.dataframe(disp_h.iloc[0:8].style.background_gradient(subset=["متوسط التيكتات"], cmap="Reds", vmin=0, vmax=max_val).format({"متوسط التيكتات": "{:.1f}"}), hide_index=True, use_container_width=True)
+                with c_h2:
+                    st.markdown("**☕ شفت الصباح والظهيرة**")
+                    st.dataframe(disp_h.iloc[8:16].style.background_gradient(subset=["متوسط التيكتات"], cmap="Reds", vmin=0, vmax=max_val).format({"متوسط التيكتات": "{:.1f}"}), hide_index=True, use_container_width=True)
+                with c_h3:
+                    st.markdown("**🔥 شفت المساء (الذروة)**")
+                    st.dataframe(disp_h.iloc[16:24].style.background_gradient(subset=["متوسط التيكتات"], cmap="Reds", vmin=0, vmax=max_val).format({"متوسط التيكتات": "{:.1f}"}), hide_index=True, use_container_width=True)
+
+
 # ── TAB 2 — Team Performance and KPIs ─────────────────────────────
 
 if "👥 Team Performance & KPIs" in tabs_list:
