@@ -1092,7 +1092,7 @@ if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type
 
 tabs_list = ["📈 Operational Insights"]
 if is_admin(): tabs_list.extend(["🏪 Stores Analysis", "🔮 Workload Forecast", "👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
-elif st.session_state.role == "expert": tabs_list.extend(["🔮 Workload Forecast", "👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
+elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
 
 tabs = st.tabs(tabs_list)
 
@@ -1617,64 +1617,94 @@ if "🔮 Workload Forecast" in tabs_list:
         with c_ros1:
             st.markdown("#### 📅 توزيع الشيفتات الموصى به")
             if not df_raw.empty:
-                sorted_days = df_forecast.sort_values(by="Predicted Volume", ascending=False)
-                offs_distribution = [0, 1, 1, 2, 2, 3, 5]
-                roster_sugg = []
-                for i, (idx, r) in enumerate(sorted_days.iterrows()):
-                    vol = r["Predicted Volume"]
-                    off_days = offs_distribution[i]
-                    scheduled = 7 - off_days
-                    expected_ratio = round(vol / scheduled, 1) if scheduled > 0 else 0
-                    
-                    status_color = "#3b82f6" if expected_ratio <= 55 else ("#eab308" if expected_ratio <= 60 else ("#f97316" if expected_ratio <= 63 else "#ef4444"))
-                    status = "🟢 مثالي" if expected_ratio <= 55 else ("🟡 متوسط" if expected_ratio <= 60 else ("🟠 عالي" if expected_ratio <= 63 else "🔴 شديد"))
-                    
-                    
-                    # Shift distribution logic based on scheduled agents
-                    # We want to favor 1PM-9PM (Overlap) due to bottleneck
-                    if scheduled == 7: shift_dist = "🌞 ص: 2 | 🌅 م: 4 | 🌙 ل: 1"
-                    elif scheduled == 6: shift_dist = "🌞 ص: 1 | 🌅 م: 4 | 🌙 ل: 1"
-                    elif scheduled == 5: shift_dist = "🌞 ص: 1 | 🌅 م: 3 | 🌙 ل: 1"
-                    elif scheduled == 4: shift_dist = "🌞 ص: 1 | 🌅 م: 2 | 🌙 ل: 1"
-                    elif scheduled == 2: shift_dist = "🌞 ص: 1 | 🌅 م: 1 | 🌙 ل: 0"
-                    else: shift_dist = "🌞 ص: 1 | 🌅 م: 2 | 🌙 ل: 0"
-                    
-                    roster_sugg.append({
-                        "اليوم": r["Day Name"],
-                        "متوقع": vol,
-                        "الدوام": scheduled,
-                        "توزيع الشفتات (ص-م-ل)": shift_dist,
-                        "Off": off_days,
-                        "حمل/فرد": expected_ratio,
-                        "مؤشر": status
-                    })
-                    
-                df_roster_ai = pd.DataFrame(roster_sugg)
-                df_roster_ai["Sort"] = df_roster_ai["اليوم"].map({"Sunday":0, "Monday":1, "Tuesday":2, "Wednesday":3, "Thursday":4, "Friday":5, "Saturday":6})
-                df_roster_ai = df_roster_ai.sort_values("Sort").drop(columns=["Sort"])
+
+            # 1. Base distribution: everyone works 5 days, 2 days off -> 35 total shifts
+            # We want to distribute 35 shifts across the 7 days to balance the workload.
+            # Workload = Predicted Volume / Scheduled Agents.
+            
+            # Start with 1 agent per day (7 shifts used)
+            shifts = {d: 1 for d in df_forecast['Day Name']}
+            remaining_shifts = 35 - 7
+            
+            # Greedily add shifts to the day with the highest current workload ratio
+            for _ in range(remaining_shifts):
+                # Find day with highest workload that hasn't reached 7 agents yet
+                max_wl_day = None
+                max_wl = -1
+                for d in df_forecast['Day Name']:
+                    if shifts[d] < 7:
+                        # calculate workload if we don't add this shift
+                        vol = df_forecast.loc[df_forecast['Day Name'] == d, 'Predicted Volume'].values[0]
+                        current_wl = vol / shifts[d]
+                        if current_wl > max_wl:
+                            max_wl = current_wl
+                            max_wl_day = d
+                if max_wl_day:
+                    shifts[max_wl_day] += 1
+            
+            roster_sugg = []
+            for idx, r in df_forecast.iterrows():
+                day = r["Day Name"]
+                vol = r["Predicted Volume"]
+                scheduled = shifts[day]
+                off_days = 7 - scheduled
+                expected_ratio = round(vol / scheduled, 1) if scheduled > 0 else 0
                 
-                def style_roster(row):
-                    s = row["مؤشر"]
-                    if "🔴" in s: return ['background-color: #fef2f2; color: #dc2626; font-weight: bold'] * len(row)
-                    if "🟠" in s: return ['background-color: #fff7ed; color: #ea580c; font-weight: bold'] * len(row)
-                    if "🟡" in s: return ['background-color: #fefce8; color: #ca8a04; font-weight: bold'] * len(row)
-                    return ['background-color: #f0fdf4; color: #16a34a; font-weight: bold'] * len(row)
-                    
-                st.dataframe(df_roster_ai.style.apply(style_roster, axis=1), hide_index=True, use_container_width=True)
+                status = "🟢 مثالي" if expected_ratio <= 55 else ("🟡 متوسط" if expected_ratio <= 60 else ("🟠 عالي" if expected_ratio <= 63 else "🔴 شديد"))
+                
+                # Shift distribution logic based on scheduled agents
+                # Morning: 7 AM to 1 PM (6 hrs), Overlap/Eve: 1 PM to 9 PM (8 hrs), Night: 11 PM to 7 AM (8 hrs)
+                # Actually, standard is 8-hour shifts. 7AM-3PM, 3PM-11PM, 11PM-7AM.
+                # But the user mentioned: "فترة الذروة الكبرى (1:00 م - 9:00 م)"
+                # Let's organize it as: Morning, Evening, Night.
+                if scheduled == 7: shift_dist = "ص: 2 | م: 4 | ل: 1"
+                elif scheduled == 6: shift_dist = "ص: 2 | م: 3 | ل: 1"
+                elif scheduled == 5: shift_dist = "ص: 1 | م: 3 | ل: 1"
+                elif scheduled == 4: shift_dist = "ص: 1 | م: 2 | ل: 1"
+                elif scheduled == 3: shift_dist = "ص: 1 | م: 1 | ل: 1"
+                elif scheduled == 2: shift_dist = "ص: 1 | م: 1 | ل: 0"
+                else: shift_dist = "ص: 1 | م: 0 | ل: 0"
+                
+                roster_sugg.append({
+                    "اليوم": day,
+                    "التيكتات المتوقعة": vol,
+                    "الموظفين (الدوام)": scheduled,
+                    "صباحي (7ص - 3م)": shift_dist.split(" | ")[0].replace("ص: ", ""),
+                    "مسائي (3م - 11م)": shift_dist.split(" | ")[1].replace("م: ", ""),
+                    "ليلي (11م - 7ص)": shift_dist.split(" | ")[2].replace("ل: ", ""),
+                    "إجازات (Off)": off_days,
+                    "معدل (تيكت/موظف)": expected_ratio,
+                    "مؤشر الضغط": status
+                })
+                
+            df_roster_ai = pd.DataFrame(roster_sugg)
+            df_roster_ai["Sort"] = df_roster_ai["اليوم"].map({"Sunday":0, "Monday":1, "Tuesday":2, "Wednesday":3, "Thursday":4, "Friday":5, "Saturday":6})
+            df_roster_ai = df_roster_ai.sort_values("Sort").drop(columns=["Sort"])
+            
+            def style_roster(row):
+                s = row["مؤشر الضغط"]
+                if "🔴" in s: return ['background-color: #fef2f2; color: #dc2626; font-weight: bold'] * len(row)
+                if "🟠" in s: return ['background-color: #fff7ed; color: #ea580c; font-weight: bold'] * len(row)
+                if "🟡" in s: return ['background-color: #fefce8; color: #ca8a04; font-weight: bold'] * len(row)
+                return ['background-color: #f0fdf4; color: #16a34a; font-weight: bold'] * len(row)
+                
+            st.dataframe(df_roster_ai.style.apply(style_roster, axis=1), hide_index=True, use_container_width=True)
                 
         with c_ros2:
             st.markdown("#### ⏱️ استراتيجية تحسين سرعة الرد (FRT)")
             st.info('''
             **للقضاء على تكدس الطلبات (Bottlenecks) وتقليل الـ AFR، يجب اتباع الآتي:**
             
-            1. **🔥 فترة الذروة الكبرى (1:00 م - 9:00 م):**
-               تخصيص **50% أو أكثر** من الفريق المتاح لشفتات تبدأ (2 ظهراً أو 3 عصراً). التكدس المسائي هو القاتل الأول لسرعة الرد.
+            **بناءً على مواعيد العمل الرسمية (7 صباحاً - 1 صباحاً) وشفت الـ 9 ساعات، النظام يقترح 3 ورديات استراتيجية للقضاء على التكدس:**
+            
+            1. **☕ الشفت الصباحي (7:00 ص - 4:00 م):**
+               فترة بداية اليوم واستقبال الطلبات. يتم تخصيص (1 إلى 2 موظفين) لتغطية هذه الفترة.
                
-            2. **🌙 فترة الذروة الليلية (1:00 ص - 5:00 ص):**
-               توفير **شفت ليلي واحد على الأقل** (11 م - 7 ص) لمنع ترحيل طلبات الليل والتأثير على أداء الصباح.
+            2. **🔥 شفت الأوفرلاب (12:00 م - 9:00 م):**
+               هذا هو **"شفت الإنقاذ"** لأن فترة الذروة الكبرى (Peak) تبدأ من 1 ظهراً. الموظف في هذا الشفت بيدخل يسند مع الصباحي، وبيكمل مع المسائي عشان يقضي على التكدس تماماً ويقلل الـ AFR.
                
-            3. **☕ الفترة الصباحية (8:00 ص - 1:00 م):**
-               الضغط يكون في أقل مستوياته. يمكن الاكتفاء بالحد الأدنى وتوجيه الباقين لعمل Overlapping Shifts في المساء.
+            3. **🌙 الشفت المسائي (4:00 م - 1:00 ص):**
+               يقوم بتغطية النصف الثاني من اليوم حتى الإغلاق. وجوده يضمن تصفية كل الطلبات وعدم ترحيل أي تيكت لليوم التالي.
             ''')
             st.warning("💡 **ملاحظة:** يمكن قبول الإجازات بسهولة في الأيام ذات المؤشر 🟢، ويُمنع إعطاء إجازات في الأيام ذات المؤشر 🔴 أو 🟠 لضمان الـ SLA.")
 
