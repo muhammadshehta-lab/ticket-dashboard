@@ -1935,7 +1935,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
             "Reopened Cases": round(pd.to_numeric(sc["Reopened Cases"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
-            "Cases/Day": round((round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0 + round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0) / (team_wd if team_wd > 0 else 1), 1),
+            "Cases/Day": round(pd.to_numeric(sc["Cases/Day"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Bonus Score": "-",
             "Off Days": round(pd.to_numeric(sc["Off Days"], errors='coerce').mean(), 1) if not sc.empty else 0, "Annual Leaves": round(pd.to_numeric(sc["Annual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Casual Leaves": round(pd.to_numeric(sc["Casual Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0, "Sick Leaves": round(pd.to_numeric(sc["Sick Leaves"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "% Achievement from Target": "100.0%", "AFR": fmt_m(df_sc["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns and not df_sc.empty else 0), "Service Time": fmt_m(df_sc["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns and not df_sc.empty else 0),
