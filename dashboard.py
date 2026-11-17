@@ -756,6 +756,18 @@ with st.sidebar:
             st.rerun()
 
 
+def parse_col_date_header(col_str):
+    clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', str(col_str)).strip()
+    match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
+    if match:
+        try: return pd.to_datetime(match.group(1), dayfirst=True).date()
+        except: pass
+    try:
+        if clean_col.isdigit() and len(clean_col) == 5:
+            return pd.to_datetime(float(clean_col), unit="D", origin="1899-12-30").date()
+    except: pass
+    return None
+
 def parse_sheet_dates(series):
     nums = pd.to_numeric(series, errors='coerce')
     dates_from_nums = pd.to_datetime(nums, unit="D", origin="1899-12-30")
@@ -781,14 +793,9 @@ def get_roster_stats(roster_df, start_date, end_date):
     if roster_df.empty: return counts
     valid_cols = []
     for col in roster_df.columns:
-        col_str = str(col).strip()
-        clean_col = re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', col_str).strip()
-        match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', clean_col)
-        if match:
-            try:
-                col_date = pd.to_datetime(match.group(1), dayfirst=True).date()
-                if start_date <= col_date <= end_date: valid_cols.append(col)
-            except: pass
+        col_date = parse_col_date_header(col)
+        if col_date and start_date <= col_date <= end_date:
+            valid_cols.append(col)
 
     df_r_str = roster_df.astype(str)
     for exp in OFFICIAL_EXPERTS:
@@ -1337,10 +1344,9 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
         roster_date_map = {}
         if not df_roster.empty:
             for col in df_roster.columns:
-                match = re.search(r'(\d{1,2}[-/\s]+(?:[A-Za-z]+|\d{1,2})[-/\s]+\d{4}|\d{4}[-/\s]+\d{1,2}[-/\s]+\d{1,2})', re.sub(r'(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', '', str(col).strip()).strip())
-                if match:
-                    try: roster_date_map[pd.to_datetime(match.group(1), dayfirst=True).date()] = col
-                    except: pass
+                col_date = parse_col_date_header(col)
+                if col_date:
+                    roster_date_map[col_date] = col
         
         tracked_ids = [str(v).strip().lower() for v in EXPERT_ID_MAP.values()]
         def get_scheduled_agents(target_date):
