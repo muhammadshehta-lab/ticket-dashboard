@@ -1403,10 +1403,10 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             def calc_incentive_g(row):
                 try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
                 except: achiev = 0.0
-                count_inc = 1500 if achiev >= 0.97 else (1350 if achiev >= 0.95 else (1200 if achiev >= 0.90 else (1050 if achiev >= 0.85 else 0)))
+                count_inc = 2500 * achiev
                 try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
                 except: qual = 0.0
-                return f"{count_inc + (600 * qual) + 1000:,.0f} EGP"
+                return f"{count_inc + (600 * qual):,.0f} EGP"
                 
             sc_g["Prospected Incentive"] = sc_g.apply(calc_incentive_g, axis=1)
             
@@ -1719,10 +1719,10 @@ if "👥 Team Performance & KPIs" in tabs_list:
         def calc_incentive(row):
             try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
             except: achiev = 0.0
-            count_inc = 1500 if achiev >= 0.97 else (1350 if achiev >= 0.95 else (1200 if achiev >= 0.90 else (1050 if achiev >= 0.85 else 0)))
+            count_inc = 2500 * achiev
             try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
             except: qual = 0.0
-            return f"{count_inc + (600 * qual) + 1000:,.0f} EGP"
+            return f"{count_inc + (600 * qual):,.0f} EGP"
             
         sc["Prospected Incentive"] = sc.apply(calc_incentive, axis=1)
 
