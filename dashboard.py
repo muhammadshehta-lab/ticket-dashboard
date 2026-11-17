@@ -405,32 +405,6 @@ def load_data_master():
                 continue
                 
             if not TICKET_TAB.match(title): continue # 🛑 Skip any unknown tab
-
-                df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
-                for _, row in df_u.iterrows():
-                    if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
-                        u_key = str(row.iloc[0]).strip().lower()
-
-                        raw_pwd = str(row.iloc[1]).strip()
-                        # If it looks like a SHA256 hash (64 hex chars), use it directly. Otherwise, hash it (legacy support).
-                        if len(raw_pwd) == 64 and all(c in '0123456789abcdefABCDEF' for c in raw_pwd):
-                            final_hash = raw_pwd.lower()
-                        else:
-                            final_hash = hashlib.sha256(raw_pwd.encode()).hexdigest()
-                        
-                        fetched_users[u_key] = {
-                            "password_hash": final_hash,
-                            "role": str(row.iloc[2]).strip().lower(),
-                            "display_name": str(row.iloc[3]).strip(),
-                            "agent_name": str(row.iloc[4]).strip() if str(row.iloc[4]).strip() not in ['','none','nan'] else None,
-                            "photo": parse_drive_link(str(row.iloc[6])) if len(row) > 6 and str(row.iloc[6]).strip() else "",
-                            "grad_year": str(row.iloc[7]).strip() if len(row) > 7 else "",
-                            "join_cc": str(row.iloc[8]).strip() if len(row) > 8 else "",
-                            "join_team": str(row.iloc[9]).strip() if len(row) > 9 else "",
-                            "bio": str(row.iloc[10]).strip() if len(row) > 10 else "",
-                            "personal_email": str(row.iloc[11]).strip() if len(row) > 11 else ""
-                        }
-                continue
             
             dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
             mp = {}; seen = set()
