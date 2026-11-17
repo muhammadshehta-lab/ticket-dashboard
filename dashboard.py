@@ -1133,8 +1133,23 @@ def generate_pptx_summary(d_from_str, d_to_str, total_val, avg_per_day_val, ok_v
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD MAIN MODULE
 # ══════════════════════════════════════════════════════════════════════════════════
-period_ovs = overrides().get(PERIOD_KEY, {})
-global_target = float(period_ovs.get("GLOBAL_TARGET", 0))
+global_settings = overrides().get("GLOBAL_SETTINGS", {})
+global_target = float(global_settings.get("GLOBAL_TARGET", 0))
+global_sla_afr = float(global_settings.get("SLA_AFR", 15.0))
+
+def get_period_adjustments(d_start, d_end):
+    adjs = {exp: 0 for exp in OFFICIAL_EXPERTS}
+    if "daily_adjustments" in overrides():
+        curr_d = pd.to_datetime(d_start).date()
+        end_d = pd.to_datetime(d_end).date()
+        while curr_d <= end_d:
+            d_str = curr_d.strftime("%Y-%m-%d")
+            day_adjs = overrides()["daily_adjustments"].get(d_str, {})
+            for ag, v in day_adjs.items():
+                if ag in adjs: adjs[ag] += v
+            curr_d += timedelta(days=1)
+    return adjs
+
 
 caption_text = f"Search Period: {d_from} ({DAYS_AR.get(pd.to_datetime(d_from).day_name(), '')})" if d_from == d_to else f"Search Period: {d_from} to {d_to}"
 st.markdown("## 💊 In-Store Requests Matrix")
@@ -1159,10 +1174,10 @@ with tabs[0]:
     if esc and not nesc: dfm = dfm[dfm["Is Email"] == True]; dfm_prev = dfm_prev[dfm_prev["Is Email"] == True]
     elif nesc and not esc: dfm = dfm[dfm["Is Email"] == False]; dfm_prev = dfm_prev[dfm_prev["Is Email"] == False]
 
-    global_period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+    global_period_adjs = get_period_adjustments(d_from, d_to)
     global_adj_total = sum(int(v) for v in global_period_adjs.values()) if not esc and not nesc else 0
 
-    global_prev_adjs = overrides().get(f"{prev_d_from}_{prev_d_to}", {}).get("agent_adjustments", {})
+    global_prev_adjs = get_period_adjustments(prev_d_from, prev_d_to)
     global_prev_adj_total = sum(int(v) for v in global_prev_adjs.values()) if not esc and not nesc else 0
 
     total = len(dfm) + global_adj_total
@@ -1860,9 +1875,9 @@ if "👥 Team Performance & KPIs" in tabs_list:
                         st.dataframe(disp_bonus, use_container_width=True, hide_index=True)
         
         scope_agents = [aname] if is_exp else (sel_agents_t2 if sel_agents_t2 else OFFICIAL_EXPERTS)
-        period_adjs = overrides().get(PERIOD_KEY, {}).get("agent_adjustments", {})
+        period_adjs = get_period_adjustments(d_from, d_to)
         total_kpi_adj = sum(int(period_adjs.get(agent, 0)) for agent in scope_agents)
-        prev_total_kpi_adj = sum(int(overrides().get(f"{prev_d_from}_{prev_d_to}", {}).get("agent_adjustments", {}).get(agent, 0)) for agent in scope_agents)
+        prev_total_kpi_adj = sum(int(get_period_adjustments(prev_d_from, prev_d_to).get(agent, 0)) for agent in scope_agents)
         
         df_kpi, df_kpi_prev = df.copy(), df_prev_all.copy()
         if is_exp: df_kpi = df_kpi[df_kpi["Assigned By"] == aname]; df_kpi_prev = df_kpi_prev[df_kpi_prev["Assigned By"] == aname]
@@ -1893,7 +1908,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
             stats["Tickets Count"] = grp["Request ID"].count()
             stats["Emails Count"] = grp["_email_int"].sum()
             df_sc["_reopen_int"] = df_sc["Is Reopen"].fillna(False).astype(int)
-            stats["Reopened Cases"] = grp["_reopen_int"].sum()
+            stats["Reopen Rate"] = (grp["_reopen_int"].sum() / stats["Tickets Count"].replace(0, 1)) * 100.0
             stats["_Service_Time_val"] = grp["Request Take (min)"].mean() if "Request Take (min)" in df_sc.columns else 0
             stats["_AFR_val"] = grp["Response Take (min)"].mean() if "Response Take (min)" in df_sc.columns else 0
             sc = sc.merge(stats, left_on="Expert", right_index=True, how="left")
@@ -1903,7 +1918,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
             
         sc["Tickets Count"] = sc["Tickets Count"].fillna(0).astype(int)
         sc["Emails Count"] = sc["Emails Count"].fillna(0).astype(int)
-        sc["Reopened Cases"] = sc.get("Reopened Cases", 0).fillna(0).astype(int)
+        sc["Reopen Rate"] = sc.get("Reopen Rate", 0.0).fillna(0.0).astype(float).round(1)
         sc["Tickets Count"] = sc.apply(lambda row: row["Tickets Count"] + int(period_adjs.get(str(row["Expert"]).strip(), 0)), axis=1)
 
         sc["Working Days"] = sc["Expert"].apply(lambda x: curr_roster_counts.get(x, {}).get("wd", 0))
@@ -1984,7 +1999,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
             "Expert": "🏆 Team AVG", "Rank": "-", "Working Days": team_wd,
             "Tickets Count": round(pd.to_numeric(sc["Tickets Count"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Emails Count": round(pd.to_numeric(sc["Emails Count"], errors='coerce').mean(), 1) if not sc.empty else 0,
-            "Reopened Cases": round(pd.to_numeric(sc["Reopened Cases"], errors='coerce').mean(), 1) if not sc.empty else 0,
+            "Reopen Rate": round(pd.to_numeric(sc["Reopen Rate"], errors='coerce').mean(), 1) if not sc.empty else 0.0,
             "JHAH Requests": round(pd.to_numeric(sc["JHAH Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Support Requests": round(pd.to_numeric(sc["Support Requests"], errors='coerce').mean(), 1) if not sc.empty else 0,
             "Cases/Day": round(pd.to_numeric(sc["Cases/Day"], errors='coerce').mean(), 1) if not sc.empty else 0,
@@ -2010,7 +2025,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
             except: max_qual = None
             
             try: 
-                valid_exp["_reopen_rate"] = valid_exp.apply(lambda r: float(r["Reopened Cases"])/(float(r["Tickets Count"])+0.001), axis=1)
+                valid_exp["_reopen_rate"] = pd.to_numeric(valid_exp["Reopen Rate"], errors='coerce')
                 min_reopen = valid_exp["_reopen_rate"].min()
             except: min_reopen = None
 
@@ -2025,8 +2040,8 @@ if "👥 Team Performance & KPIs" in tabs_list:
                     if max_qual and float(str(r["Service Quality"]).replace('%','')) == max_qual: a_str += "🎯 "
                 except: pass
                 try:
-                    curr_rr = float(r["Reopened Cases"])/(float(str(r["Tickets Count"]).replace(',', ''))+0.001)
-                    if min_reopen is not None and curr_rr == min_reopen and int(r.get("Tickets Count", 0)) > 10: a_str += "🛡️ "
+                    curr_rr = float(r["Reopen Rate"])
+                    if min_reopen is not None and curr_rr == min_reopen and int(str(r.get("Tickets Count", "0")).replace(',', '')) > 10: a_str += "🛡️ "
                 except: pass
                 awards_list.append(a_str)
         else:
@@ -2034,8 +2049,11 @@ if "👥 Team Performance & KPIs" in tabs_list:
             
         display_df.insert(1, "Awards", awards_list)
 
-        for c in ["Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
+        for c in ["Working Days", "Tickets Count", "Emails Count", "Reopen Rate", "JHAH Requests", "Support Requests", "Cases/Day", "Off Days", "Annual Leaves", "Casual Leaves", "Sick Leaves", "Bonus Score"]:
             if c in display_df.columns: display_df[c] = display_df[c].apply(lambda x: "-" if x == "-" else (str(int(float(x))) if float(x).is_integer() else str(round(float(x), 1))))
+        
+        if "Reopen Rate" in display_df.columns:
+            display_df["Reopen Rate"] = display_df["Reopen Rate"].astype(str) + "%" 
         
         # ── حساب أسهم المقارنة مع نفس الفترة الشهر السابق ──
         try:
@@ -2104,6 +2122,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
             elif "🥇" in exp: styles = ['background-color: #fef08a; color: #854d0e; font-weight: 800'] * len(row)
             elif "🥈" in exp: styles = ['background-color: #e2e8f0; color: #334155; font-weight: 800'] * len(row)
             elif "🥉" in exp: styles = ['background-color: #ffedd5; color: #9a3412; font-weight: 800'] * len(row)
+            
             if "Prospected Incentive" in row.index and exp != "🏆 Team AVG":
                 inc_val = str(row["Prospected Incentive"]).replace(',', '').replace(' EGP', '').strip()
                 try:
@@ -2113,9 +2132,21 @@ if "👥 Team Performance & KPIs" in tabs_list:
                     else:
                         styles[row.index.get_loc("Prospected Incentive")] += '; background-color: #f0fdf4; color: #16a34a; font-weight: 900; border: 2px solid #86efac;'
                 except: pass
+                
+            if "AFR" in row.index and row["AFR"] != "-":
+                afr_str = str(row["AFR"]).split(" ")[0]
+                try:
+                    pts = afr_str.split(':')
+                    mins = int(pts[0])*60 + int(pts[1]) + int(pts[2])/60.0
+                    if mins <= overrides().get("GLOBAL_SETTINGS", {}).get("SLA_AFR", 15.0):
+                        styles[row.index.get_loc("AFR")] += '; color: #16a34a; font-weight: 900;'
+                    else:
+                        styles[row.index.get_loc("AFR")] += '; color: #dc2626; font-weight: 900;'
+                except: pass
+                
             return styles
 
-        display_df = display_df[["Expert", "Awards", "Rank", "Working Days", "Tickets Count", "Emails Count", "Reopened Cases", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
+        display_df = display_df[["Expert", "Awards", "Rank", "Working Days", "Tickets Count", "Emails Count", "Reopen Rate", "JHAH Requests", "Support Requests", "Cases/Day", "Bonus Score", "% Achievement from Target", "AFR", "Service Time", "Service Quality", "Prospected Incentive"]]
         
         try: 
             html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).hide(axis="index").to_html()
@@ -2238,22 +2269,46 @@ if "👥 Team Performance & KPIs" in tabs_list:
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
 if "✏️ Manual Overrides" in tabs_list:
     with tabs[tabs_list.index("✏️ Manual Overrides")]:
-        st.markdown("### 🎯 Global Settings (This Period)")
+        st.markdown("### 🎯 Global Targets & SLAs")
         with st.form("global_target_form"):
-            new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
+            c1, c2 = st.columns(2)
+            with c1: new_target = st.number_input("Daily Target (Cases/Day)", value=int(global_target), step=1, min_value=0)
+            with c2: new_sla = st.number_input("SLA Target for AFR (Minutes)", value=float(global_sla_afr), step=1.0, min_value=1.0)
             if st.form_submit_button("💾 Save Global Parameters", use_container_width=True):
-                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-                overrides()[PERIOD_KEY]["GLOBAL_TARGET"] = new_target; _save_store(); st.success("✅ Saved!"); st.rerun()
+                if "GLOBAL_SETTINGS" not in overrides(): overrides()["GLOBAL_SETTINGS"] = {}
+                overrides()["GLOBAL_SETTINGS"]["GLOBAL_TARGET"] = new_target
+                overrides()["GLOBAL_SETTINGS"]["SLA_AFR"] = new_sla
+                _save_store(); st.success("✅ Saved Successfully!"); st.rerun()
 
-        st.markdown("### 🤫 Secret Agent Ticket Adjustments")
+        st.divider()
+        st.markdown("### 🤫 Secret Agent Ticket Adjustments (Daily Tasks)")
+        st.info("💡 استخدم هذه الأداة لتعويض موظف بحالات افتراضية إذا قضى جزء من يومه في مهام أخرى (تاسكات)، أو لخصم حالات. التعديلات ترتبط بيوم محدد وسيتم تجميعها تلقائياً حسب الفلتر الزمني.")
         with st.form("secret_adj_form"):
-            adj_agent = st.selectbox("Select Agent", OFFICIAL_EXPERTS)
-            adj_val = st.number_input("Adjustment Value", value=0, step=1)
-            if st.form_submit_button("💾 Save Secret Adjustment", use_container_width=True):
-                if PERIOD_KEY not in overrides(): overrides()[PERIOD_KEY] = {}
-                if "agent_adjustments" not in overrides()[PERIOD_KEY]: overrides()[PERIOD_KEY]["agent_adjustments"] = {}
-                overrides()[PERIOD_KEY]["agent_adjustments"][adj_agent] = adj_val; _save_store()
-                st.success("Secret adjustment applied!"); st.rerun()
+            c_adj1, c_adj2, c_adj3 = st.columns(3)
+            with c_adj1: adj_date = st.date_input("تاريخ التاسك", value=pd.to_datetime(d_to))
+            with c_adj2: adj_agent = st.selectbox("الموظف", OFFICIAL_EXPERTS)
+            with c_adj3: adj_val = st.number_input("عدد الحالات (+ إضافة / - خصم)", value=0, step=1)
+            
+            if st.form_submit_button("💾 تسجيل الحالات للموظف", use_container_width=True):
+                adj_d_str = adj_date.strftime("%Y-%m-%d")
+                if "daily_adjustments" not in overrides(): overrides()["daily_adjustments"] = {}
+                if adj_d_str not in overrides()["daily_adjustments"]: overrides()["daily_adjustments"][adj_d_str] = {}
+                current_adj = overrides()["daily_adjustments"][adj_d_str].get(adj_agent, 0)
+                overrides()["daily_adjustments"][adj_d_str][adj_agent] = current_adj + adj_val
+                _save_store()
+                st.success(f"✅ تم إضافة {adj_val} حالة للزميل {adj_agent} في يوم {adj_d_str} بنجاح!"); st.rerun()
+                
+        if "daily_adjustments" in overrides() and overrides()["daily_adjustments"]:
+            with st.expander("🔍 سجل التعديلات اليدوية (حسب الأيام)"):
+                adj_data = []
+                for dt, adjs in overrides()["daily_adjustments"].items():
+                    for ag, v in adjs.items():
+                        if v != 0: adj_data.append({"التاريخ": dt, "الموظف": ag, "الحالات المضافة/المخصومة": v})
+                if adj_data:
+                    st.dataframe(pd.DataFrame(adj_data), hide_index=True, use_container_width=True)
+                if st.button("🗑️ مسح كل التعديلات اليدوية المسجلة"):
+                    overrides()["daily_adjustments"] = {}
+                    _save_store(); st.rerun()
 
 # ── TAB 4 — Team Profiles (Admin & Expert) ────────────────────────────────────────
 if "🧑‍🤝‍🧑 Team Profiles" in tabs_list:
