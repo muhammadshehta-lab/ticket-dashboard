@@ -287,7 +287,7 @@ AGENT_ALIASES = {
     "محمد شحته عبدالنبي مصطفي": "Muhammad Shehta", 
     "50228": "Muhammad Shehta"
 }
-EXCLUSION_LIST = ['off', 'اوف', 'أوف', 'راحة', 'annual', 'casual', 'عارضة', 'عارضه', 'v', 'a', 'vacation', 'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي', 'nan', 'none', '']
+EXCLUSION_LIST = ['off', 'اوف', 'أوف', 'راحة', 'annual', 'v', 'a', 'vacation', 'casual', 'عارضة', 'عارضه', 'عارضة علي الحساب', 'resign', 'استقالة', 'مستقيل', 'sick', 'مرضي', 'مرضى', 'غياب', 'أجازة حج', 'اجازة حج', 'حالة وفاة', 'انقطاع', 'nan', 'none', '']
 
 def normalize_expert_name(name):
     if pd.notna(name): name = re.sub(r'^\d+\s*-\s*', '', str(name).strip())
@@ -806,10 +806,56 @@ def get_roster_stats(roster_df, start_date, end_date):
             if not exp_rows.empty and valid_cols:
                 safe_cols = [c for c in valid_cols if c in exp_rows.columns]
                 if safe_cols:
+                    vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten() if str(v).strip().lower() not in ['nan', 'none', '']]
+                    
+                    wd_count = 0
+                    off_count = 0
+                    ann_count = 0
+                    cas_count = 0
+                    sick_count = 0
+                    
+                    for v in vals_lower:
+                        # If it contains numbers (e.g. shift times like "08:00", "4:00", "8"), it's a working day
+                        if re.search(r'\d', v):
+                            wd_count += 1
+                        else:
+                            # It's some text meaning they are not working
+                            if any(x in v for x in ['sick', 'مرضي', 'مرضى']):
+                                sick_count += 1
+                            elif any(x in v for x in ['annual', 'v', 'a', 'vacation', 'حج', 'سنوي', 'سنوى']):
+                                ann_count += 1
+                            elif any(x in v for x in ['casual', 'عارضة', 'عارضه', 'وفاة']):
+                                cas_count += 1
+                            else:
+                                # Default to 'off' for anything else like (off, راحة, غياب, انقطاع, استقالة, etc)
+                                off_count += 1
+                                
+                    counts[exp]["wd"] = wd_count
+                    counts[exp]["off"] = off_count
+                    counts[exp]["ann"] = ann_count
+                    counts[exp]["cas"] = cas_count
+                    counts[exp]["sick"] = sick_count
+                    
+    return counts
+    valid_cols = []
+    for col in roster_df.columns:
+        col_date = parse_col_date_header(col)
+        if col_date and start_date <= col_date <= end_date:
+            valid_cols.append(col)
+
+    df_r_str = roster_df.astype(str)
+    for exp in OFFICIAL_EXPERTS:
+        exp_id = EXPERT_ID_MAP.get(exp, "")
+        if exp_id:
+            mask = df_r_str.apply(lambda row: str(exp_id).strip().lower() in [str(x).strip().lower() for x in row.values], axis=1)
+            exp_rows = df_r_str[mask]
+            if not exp_rows.empty and valid_cols:
+                safe_cols = [c for c in valid_cols if c in exp_rows.columns]
+                if safe_cols:
                     vals_lower = [str(v).strip().lower() for v in exp_rows[safe_cols].values.flatten()]
-                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة'])
-                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation'])
-                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه'])
+                    counts[exp]["off"] = sum(1 for v in vals_lower if v in ['off', 'اوف', 'أوف', 'راحة', 'غياب', 'انقطاع'])
+                    counts[exp]["ann"] = sum(1 for v in vals_lower if v in ['annual', 'v', 'a', 'vacation', 'أجازة حج', 'اجازة حج'])
+                    counts[exp]["cas"] = sum(1 for v in vals_lower if v in ['casual', 'عارضة', 'عارضه', 'عارضة علي الحساب', 'حالة وفاة'])
                     counts[exp]["sick"] = sum(1 for v in vals_lower if v in ['sick', 'مرضي', 'مرضى'])
                     counts[exp]["wd"] = sum(1 for v in vals_lower if v and v not in EXCLUSION_LIST)
     return counts
