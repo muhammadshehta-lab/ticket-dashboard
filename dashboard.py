@@ -1729,15 +1729,34 @@ if "🔮 Workload Forecast" in tabs_list:
                 
                 c_h1, c_h2, c_h3 = st.columns(3)
                 
+                def bg_color(val):
+                    try:
+                        v = float(val)
+                        intensity = min(1.0, max(0.0, v / max_val)) if max_val > 0 else 0
+                        # Calculate a smooth red color (from white to solid red)
+                        r = 255
+                        g = int(255 * (1 - intensity * 0.85))
+                        b = int(255 * (1 - intensity * 0.85))
+                        text_color = "white" if intensity > 0.6 else "black"
+                        return f'background-color: rgb({r},{g},{b}); color: {text_color}; font-weight: bold;'
+                    except:
+                        return ''
+                        
+                # Handle pandas version for styling
+                style_method = 'map' if hasattr(disp_h.style, 'map') else 'applymap'
+                
                 with c_h1:
                     st.markdown("**🌙 شفت الليل والصباح الباكر**")
-                    st.dataframe(disp_h.iloc[0:8].style.background_gradient(subset=["متوسط التيكتات"], cmap="Reds", vmin=0, vmax=max_val).format({"متوسط التيكتات": "{:.1f}"}), hide_index=True, use_container_width=True)
+                    styled_1 = getattr(disp_h.iloc[0:8].style, style_method)(bg_color, subset=["متوسط التيكتات"]).format({"متوسط التيكتات": "{:.1f}"})
+                    st.dataframe(styled_1, hide_index=True, use_container_width=True)
                 with c_h2:
                     st.markdown("**☕ شفت الصباح والظهيرة**")
-                    st.dataframe(disp_h.iloc[8:16].style.background_gradient(subset=["متوسط التيكتات"], cmap="Reds", vmin=0, vmax=max_val).format({"متوسط التيكتات": "{:.1f}"}), hide_index=True, use_container_width=True)
+                    styled_2 = getattr(disp_h.iloc[8:16].style, style_method)(bg_color, subset=["متوسط التيكتات"]).format({"متوسط التيكتات": "{:.1f}"})
+                    st.dataframe(styled_2, hide_index=True, use_container_width=True)
                 with c_h3:
                     st.markdown("**🔥 شفت المساء (الذروة)**")
-                    st.dataframe(disp_h.iloc[16:24].style.background_gradient(subset=["متوسط التيكتات"], cmap="Reds", vmin=0, vmax=max_val).format({"متوسط التيكتات": "{:.1f}"}), hide_index=True, use_container_width=True)
+                    styled_3 = getattr(disp_h.iloc[16:24].style, style_method)(bg_color, subset=["متوسط التيكتات"]).format({"متوسط التيكتات": "{:.1f}"})
+                    st.dataframe(styled_3, hide_index=True, use_container_width=True)
 
 
 # ── TAB 2 — Team Performance and KPIs ─────────────────────────────
