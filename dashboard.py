@@ -1092,7 +1092,7 @@ if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type
 
 tabs_list = ["📈 Operational Insights"]
 if is_admin(): tabs_list.extend(["🏪 Stores Analysis", "🔮 Workload Forecast", "👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
-elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
+elif st.session_state.role == "expert": tabs_list.extend(["🔮 Workload Forecast", "👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
 
 tabs = st.tabs(tabs_list)
 
@@ -1629,13 +1629,24 @@ if "🔮 Workload Forecast" in tabs_list:
                     status_color = "#3b82f6" if expected_ratio <= 55 else ("#eab308" if expected_ratio <= 60 else ("#f97316" if expected_ratio <= 63 else "#ef4444"))
                     status = "🟢 مثالي" if expected_ratio <= 55 else ("🟡 متوسط" if expected_ratio <= 60 else ("🟠 عالي" if expected_ratio <= 63 else "🔴 شديد"))
                     
+                    
+                    # Shift distribution logic based on scheduled agents
+                    # We want to favor 1PM-9PM (Overlap) due to bottleneck
+                    if scheduled == 7: shift_dist = "🌞 ص: 2 | 🌅 م: 4 | 🌙 ل: 1"
+                    elif scheduled == 6: shift_dist = "🌞 ص: 1 | 🌅 م: 4 | 🌙 ل: 1"
+                    elif scheduled == 5: shift_dist = "🌞 ص: 1 | 🌅 م: 3 | 🌙 ل: 1"
+                    elif scheduled == 4: shift_dist = "🌞 ص: 1 | 🌅 م: 2 | 🌙 ل: 1"
+                    elif scheduled == 2: shift_dist = "🌞 ص: 1 | 🌅 م: 1 | 🌙 ل: 0"
+                    else: shift_dist = "🌞 ص: 1 | 🌅 م: 2 | 🌙 ل: 0"
+                    
                     roster_sugg.append({
                         "اليوم": r["Day Name"],
-                        "الطلبات المتوقعة": vol,
-                        "الموظفين المطلوبين": scheduled,
-                        "الراحات الممكنة (Offs)": off_days,
-                        "متوسط التيكتات/موظف": expected_ratio,
-                        "مؤشر الضغط": status
+                        "متوقع": vol,
+                        "الدوام": scheduled,
+                        "توزيع الشفتات (ص-م-ل)": shift_dist,
+                        "Off": off_days,
+                        "حمل/فرد": expected_ratio,
+                        "مؤشر": status
                     })
                     
                 df_roster_ai = pd.DataFrame(roster_sugg)
@@ -1643,7 +1654,7 @@ if "🔮 Workload Forecast" in tabs_list:
                 df_roster_ai = df_roster_ai.sort_values("Sort").drop(columns=["Sort"])
                 
                 def style_roster(row):
-                    s = row["مؤشر الضغط"]
+                    s = row["مؤشر"]
                     if "🔴" in s: return ['background-color: #fef2f2; color: #dc2626; font-weight: bold'] * len(row)
                     if "🟠" in s: return ['background-color: #fff7ed; color: #ea580c; font-weight: bold'] * len(row)
                     if "🟡" in s: return ['background-color: #fefce8; color: #ca8a04; font-weight: bold'] * len(row)
