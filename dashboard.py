@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import json, hashlib, time, pathlib, urllib.parse, re, requests
+import json, hashlib, time, pathlib, urllib.parse, re, requests, html
 from datetime import timedelta
 import smtplib
 from email.message import EmailMessage
@@ -30,19 +30,37 @@ st.set_page_config(
 _DATA_FILE = pathlib.Path(__file__).parent / ".dashboard_data.json"
 
 def _load_store() -> dict:
-    default_store = {
-        "requests": [], "overrides": {}, "login_logs": []
-    }
-    if _DATA_FILE.exists():
-        try:
-            loaded = json.loads(_DATA_FILE.read_text())
-            if "requests" in loaded: default_store["requests"] = loaded["requests"]
-            if "overrides" in loaded: default_store["overrides"] = loaded["overrides"]
-            if "login_logs" in loaded: default_store["login_logs"] = loaded["login_logs"]
-        except Exception: pass
+    default_store = {"requests": [], "overrides": {}, "login_logs": []}
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            try:
+                ws = client.open("AlDawaa Tickets Data").worksheet("System_State")
+                val = ws.acell('A1').value
+                if val:
+                    loaded = json.loads(val)
+                    if "requests" in loaded: default_store["requests"] = loaded["requests"]
+                    if "overrides" in loaded: default_store["overrides"] = loaded["overrides"]
+                    if "login_logs" in loaded: default_store["login_logs"] = loaded["login_logs"]
+            except gspread.exceptions.WorksheetNotFound:
+                # Create the sheet if it doesn't exist
+                sheet = client.open("AlDawaa Tickets Data")
+                ws = sheet.add_worksheet(title="System_State", rows="2", cols="2")
+                ws.update_acell('A1', json.dumps(default_store))
+    except Exception as e: print(f"Store load error: {e}")
     return default_store
 
-def _save_store(): _DATA_FILE.write_text(json.dumps(st.session_state.store, indent=2))
+def _save_store():
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        if "gspread" in st.secrets and "credentials" in st.secrets["gspread"]:
+            creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
+            client = gspread.authorize(creds)
+            ws = client.open("AlDawaa Tickets Data").worksheet("System_State")
+            ws.update_acell('A1', json.dumps(st.session_state.store))
+    except Exception as e: print(f"Store save error: {e}")
 def _hash(pw: str) -> str: return hashlib.sha256(pw.encode()).hexdigest()
 
 def parse_drive_link(raw_url):
@@ -66,8 +84,10 @@ def update_sheet_password(uname: str, new_pass: str):
             client = gspread.authorize(creds)
             ws = client.open("AlDawaa Tickets Data").worksheet("Users")
             cell = ws.find(str(uname), in_column=1)
-            if cell: ws.update_cell(cell.row, 2, str(new_pass))
-    except Exception: pass
+            if cell: 
+                hashed_pwd = hashlib.sha256(str(new_pass).encode()).hexdigest()
+                ws.update_cell(cell.row, 2, hashed_pwd)
+    except Exception as e: st.error(f"Error updating password: {e}")
 
 def update_sheet_profile(uname: str, profile_data: dict):
     try:
@@ -94,8 +114,9 @@ def add_user_to_sheet(uname, pwd, role, dname, aname):
             creds = Credentials.from_service_account_info(json.loads(st.secrets["gspread"]["credentials"]), scopes=scopes)
             client = gspread.authorize(creds)
             ws = client.open("AlDawaa Tickets Data").worksheet("Users")
-            ws.append_row([str(uname), str(pwd), str(role), str(dname), str(aname or ""), "", "", "", "", "", ""])
-    except Exception: pass
+            hashed_pwd = hashlib.sha256(str(pwd).encode()).hexdigest()
+            ws.append_row([str(uname), hashed_pwd, str(role), str(dname), str(aname or ""), "", "", "", "", "", ""])
+    except Exception as e: st.error(f"Error adding user: {e}")
 
 def delete_user_from_sheet(uname: str):
     try:
@@ -277,8 +298,18 @@ def normalize_expert_name(name):
     return str(name).strip()
 
 def time_to_minutes(s):
-    try: p = str(s).strip().split(":"); return int(p[0]) * 60 + int(p[1])
-    except: return 0
+    if pd.isna(s) or str(s).strip() in ["", "nan", "none"]: return np.nan
+    # If the value comes as a float from unformatted Google Sheets (fraction of a day)
+    try:
+        val = float(s)
+        return val * 1440.0 # 24 hours * 60 minutes
+    except ValueError:
+        pass
+    # Fallback for string format "h:mm:ss"
+    try: 
+        p = str(s).strip().split(":")
+        return int(p[0]) * 60 + int(p[1])
+    except: return np.nan
 
 def fmt_m(v):
     if pd.isna(v) or v <= 0: return "00:00:00"
@@ -295,19 +326,22 @@ def assign_time_tier(m):
 def calc_change(curr, prev):
     if pd.isna(curr): curr = 0
     if pd.isna(prev): prev = 0
-    if prev == 0: return 100.0 if curr > 0 else 0.0
+    if prev == 0: return np.nan if curr > 0 else 0.0
     return ((curr - prev) / prev) * 100.0
 
 def kpi_colored(label, value, cls, change=None, inverse=False, neutral=False):
     change_html = ""
     if change is not None:
-        if neutral: color, arrow = "#64748b", ("▲" if change > 0 else ("▼" if change < 0 else "−"))
+        if pd.isna(change):
+            change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: #94a3b8; background-color: #f1f5f9;">N/A</div>'
         else:
-            if change > 0: arrow, color = "▲", ("#dc2626" if inverse else "#16a34a")
-            elif change < 0: arrow, color = "▼", ("#16a34a" if inverse else "#dc2626")
-            else: arrow, color = "−", "#94a3b8"
-        bg_color = color + "15"
-        change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: {color}; background-color: {bg_color};">{arrow} {abs(change):.1f}%</div>'
+            if neutral: color, arrow = "#64748b", ("▲" if change > 0 else ("▼" if change < 0 else "−"))
+            else:
+                if change > 0: arrow, color = "▲", ("#dc2626" if inverse else "#16a34a")
+                elif change < 0: arrow, color = "▼", ("#16a34a" if inverse else "#dc2626")
+                else: arrow, color = "−", "#94a3b8"
+            bg_color = color + "15"
+            change_html = f'<div style="position: absolute; bottom: 8px; right: 10px; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: 700; color: {color}; background-color: {bg_color};">{arrow} {abs(change):.1f}%</div>'
     return (f'<div class="kpi-container {cls}"><div class="kpi-label">{label}</div><div class="kpi-value" style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;">{value}</div>{change_html}</div>')
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -327,6 +361,7 @@ def load_data_master():
         all_dfs, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements = [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
         fetched_users = {}
         
+        TICKET_TAB = re.compile(r"^\d{2}-\d{4}$")
         for ws in sheet.worksheets():
             title = ws.title.strip()
             t_lower = title.lower()
@@ -335,21 +370,56 @@ def load_data_master():
             if t_lower.startswith("archive 2025"):
                 continue
                 
-            data = ws.get_all_values()
+            data = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
             if len(data) < 2: continue
             if t_lower == "working days": roster_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif "out" in t_lower and "req" in t_lower: out_req_df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "quality issues": df_quality = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower == "bonus": df_bonus_raw = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
             elif t_lower in ["achievements", "great achievements", "الإنجازات"]: df_achievements = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]]); continue
-            elif "analysis" in t_lower: continue # 🛑 Ignore ANALYSIS tab completely
             elif t_lower == "users":
                 df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                 for _, row in df_u.iterrows():
                     if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
                         u_key = str(row.iloc[0]).strip().lower()
+
+                        raw_pwd = str(row.iloc[1]).strip()
+                        # If it looks like a SHA256 hash (64 hex chars), use it directly. Otherwise, hash it (legacy support).
+                        if len(raw_pwd) == 64 and all(c in '0123456789abcdefABCDEF' for c in raw_pwd):
+                            final_hash = raw_pwd.lower()
+                        else:
+                            final_hash = hashlib.sha256(raw_pwd.encode()).hexdigest()
+                        
                         fetched_users[u_key] = {
-                            "password_hash": hashlib.sha256(str(row.iloc[1]).strip().encode()).hexdigest(),
+                            "password_hash": final_hash,
+                            "role": str(row.iloc[2]).strip().lower(),
+                            "display_name": str(row.iloc[3]).strip(),
+                            "agent_name": str(row.iloc[4]).strip() if str(row.iloc[4]).strip() not in ['','none','nan'] else None,
+                            "photo": parse_drive_link(str(row.iloc[6])) if len(row) > 6 and str(row.iloc[6]).strip() else "",
+                            "grad_year": str(row.iloc[7]).strip() if len(row) > 7 else "",
+                            "join_cc": str(row.iloc[8]).strip() if len(row) > 8 else "",
+                            "join_team": str(row.iloc[9]).strip() if len(row) > 9 else "",
+                            "bio": str(row.iloc[10]).strip() if len(row) > 10 else "",
+                            "personal_email": str(row.iloc[11]).strip() if len(row) > 11 else ""
+                        }
+                continue
+                
+            if not TICKET_TAB.match(title): continue # 🛑 Skip any unknown tab
+
+                df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                for _, row in df_u.iterrows():
+                    if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
+                        u_key = str(row.iloc[0]).strip().lower()
+
+                        raw_pwd = str(row.iloc[1]).strip()
+                        # If it looks like a SHA256 hash (64 hex chars), use it directly. Otherwise, hash it (legacy support).
+                        if len(raw_pwd) == 64 and all(c in '0123456789abcdefABCDEF' for c in raw_pwd):
+                            final_hash = raw_pwd.lower()
+                        else:
+                            final_hash = hashlib.sha256(raw_pwd.encode()).hexdigest()
+                        
+                        fetched_users[u_key] = {
+                            "password_hash": final_hash,
                             "role": str(row.iloc[2]).strip().lower(),
                             "display_name": str(row.iloc[3]).strip(),
                             "agent_name": str(row.iloc[4]).strip() if str(row.iloc[4]).strip() not in ['','none','nan'] else None,
@@ -396,15 +466,21 @@ def load_data_master():
         df["Assigned By"]  = df["Assigned By"].fillna("Unassigned").astype(str).str.strip().apply(normalize_expert_name)
         df["Store ID"]     = df["Store ID"].fillna("Unknown").astype(str).str.strip()
         
-        dp = pd.to_datetime(df["Request Date"], errors="coerce")
+        # If dates come as unformatted serial numbers from Google Sheets
+        try:
+            dp = pd.to_numeric(df["Request Date"], errors="coerce")
+            dp = pd.to_datetime(dp, unit="D", origin="1899-12-30")
+        except:
+            dp = pd.to_datetime(df["Request Date"], errors="coerce")
         df["Request Date"], df["Date Only"], df["Hour"], df["Day Name"] = dp, dp.dt.date, dp.dt.hour.fillna(0).astype(int), dp.dt.day_name().fillna("Unknown")
-        if "Request Take" in df.columns: df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes).fillna(0)
-        if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes).fillna(0)
+        if "Request Take" in df.columns: df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes)
+        if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes)
         df["Is Reopen"] = (df["Is Reopen"].astype(str).str.strip().str.lower() == "yes")
         df["Is Email"] = (df["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
         return df, roster_df, out_req_df, df_quality, df_bonus_raw, df_achievements, fetched_users
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ خطأ فادح في سحب البيانات من Google Sheets: {str(e)}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {}
 
 
@@ -424,7 +500,7 @@ def load_archive_2025():
             for ws in sheet.worksheets():
                 title = ws.title.strip()
                 if title.lower().startswith("archive 2025"):
-                    data = ws.get_all_values()
+                    data = ws.get_all_values(value_render_option="UNFORMATTED_VALUE")
                     if len(data) > 1:
                         df = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
                         mp = {}; seen = set()
@@ -461,10 +537,14 @@ def load_archive_2025():
             df25["Assigned By"]  = df25["Assigned By"].fillna("Unassigned").astype(str).str.strip().apply(normalize_expert_name)
             df25["Store ID"]     = df25["Store ID"].fillna("Unknown").astype(str).str.strip()
             
-            dp25 = pd.to_datetime(df25["Request Date"], errors="coerce")
+            try:
+                dp25_num = pd.to_numeric(df25["Request Date"], errors="coerce")
+                dp25 = pd.to_datetime(dp25_num, unit="D", origin="1899-12-30")
+            except:
+                dp25 = pd.to_datetime(df25["Request Date"], errors="coerce")
             df25["Request Date"], df25["Date Only"], df25["Hour"], df25["Day Name"] = dp25, dp25.dt.date, dp25.dt.hour.fillna(0).astype(int), dp25.dt.day_name().fillna("Unknown")
-            if "Request Take" in df25.columns: df25["Request Take (min)"] = df25["Request Take"].apply(time_to_minutes).fillna(0)
-            if "Response Take" in df25.columns: df25["Response Take (min)"] = df25["Response Take"].apply(time_to_minutes).fillna(0)
+            if "Request Take" in df25.columns: df25["Request Take (min)"] = df25["Request Take"].apply(time_to_minutes)
+            if "Response Take" in df25.columns: df25["Response Take (min)"] = df25["Response Take"].apply(time_to_minutes)
             df25["Is Reopen"] = (df25["Is Reopen"].astype(str).str.strip().str.lower() == "yes")
             df25["Is Email"] = (df25["Is Special Request(By Email)"].astype(str).str.strip().str.lower() == "yes")
             
@@ -492,8 +572,10 @@ for col in mandatory_cols:
 # ══════════════════════════════════════════════════════════════════════════════════
 SESSION_DURATION_HOURS = 12  
 
+import hmac
 def generate_signed_token(uname: str, exp_timestamp: str) -> str:
-    return hashlib.sha256(f"{uname}|{exp_timestamp}|SECRET_ALDAWAA_TOKEN".encode()).hexdigest()
+    secret = st.secrets.get("auth", {}).get("secret", "SECRET_ALDAWAA_TOKEN_DEFAULT_CHANGE_ME")
+    return hmac.new(secret.encode(), f"{uname}|{exp_timestamp}".encode(), "sha256").hexdigest()
 
 if "store" not in st.session_state: st.session_state.store = _load_store()
 st.session_state.db_users = fetched_users
@@ -504,7 +586,7 @@ if "authenticated" not in st.session_state:
         q_usr, q_tok, q_exp = st.query_params["usr"], st.query_params["tok"], st.query_params["exp"]
         try: is_expired = int(time.time()) > int(q_exp)
         except ValueError: is_expired = True
-        if not is_expired and generate_signed_token(q_usr, q_exp) == q_tok:
+        if not is_expired and hmac.compare_digest(generate_signed_token(q_usr, q_exp), q_tok):
             st.session_state.username = q_usr
             st.session_state.authenticated = True
 
@@ -546,9 +628,16 @@ if not st.session_state.authenticated:
         if not st.session_state.view_request_form:
             inp_u = st.text_input("Username / ID", placeholder="Enter ID", key="li_u")
             inp_p = st.text_input("Password", type="password", placeholder="Enter password", key="li_p")
-            if st.button("🔐 Login", use_container_width=True):
+            if "failed_attempts" not in st.session_state: st.session_state.failed_attempts = 0
+            if "lockout_time" not in st.session_state: st.session_state.lockout_time = 0
+            
+            if st.session_state.failed_attempts >= 5 and time.time() < st.session_state.lockout_time:
+                remaining = int((st.session_state.lockout_time - time.time()) / 60)
+                st.error(f"❌ حساب مغلق مؤقتاً بسبب كثرة المحاولات الفاشلة. الرجاء المحاولة بعد {remaining} دقيقة.")
+            elif st.button("🔐 Login", use_container_width=True):
                 uname = inp_u.strip().lower()
                 if uname in st.session_state.db_users and st.session_state.db_users[uname]["password_hash"] == _hash(inp_p):
+                    st.session_state.failed_attempts = 0 # Reset on success
                     notify_admin_whatsapp(st.session_state.db_users[uname]["display_name"] + " ✅ Success")
                     if "login_logs" not in st.session_state.store: st.session_state.store["login_logs"] = []
                     st.session_state.store["login_logs"].append({"Timestamp": time.strftime('%Y-%m-%d %H:%M:%S'), "Username": uname, "Display Name": st.session_state.db_users[uname]["display_name"], "Role": st.session_state.db_users[uname]["role"]})
@@ -567,7 +656,13 @@ if not st.session_state.authenticated:
                         st.session_state.force_onboard = True
                     st.rerun()
                 else:
-                    st.error("❌ Account not registered or incorrect password. If your account was deleted or you are a new member, please request access below.")
+                    st.session_state.failed_attempts += 1
+                    if st.session_state.failed_attempts >= 5:
+                        st.session_state.lockout_time = time.time() + 900 # 15 minutes lockout
+                        st.error("❌ تم قفل الحساب مؤقتاً لمدة 15 دقيقة لدواعي أمنية.")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ بيانات غير صحيحة. المحاولات المتبقية: {5 - st.session_state.failed_attempts}")
             st.write("")
             if st.button("🆕 Request Dashboard Access", use_container_width=True):
                 st.session_state.view_request_form = True; st.rerun()
@@ -615,7 +710,8 @@ with st.sidebar:
     if is_admin(): badge_cls, badge_txt = "badge-admin", "ADMIN"
     elif st.session_state.role == "supervisor": badge_cls, badge_txt = "badge-supervisor", "SUPERVISOR"
     else: badge_cls, badge_txt = "badge-expert", "EXPERT"
-    st.markdown(f"👤 **{cur_user().get('display_name', '–')}** <span class='badge {badge_cls}'>{badge_txt}</span>", unsafe_allow_html=True)
+    safe_curr_dn = html.escape(str(cur_user().get('display_name', '–')))
+    st.markdown(f"👤 **{safe_curr_dn}** <span class='badge {badge_cls}'>{badge_txt}</span>", unsafe_allow_html=True)
     
     st.divider()
     presentation_mode = st.checkbox("🖥️ Presentation Mode", value=False)
@@ -833,7 +929,8 @@ if st.session_state.page == "settings":
                 for req in pending:
                     if req["type"] == "new_account":
                         p_data = json.loads(req["new_value"])
-                        st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 New account request for: <b>{p_data.get('name')}</b> (ID: {p_data.get('id')})</div>", unsafe_allow_html=True)
+                        safe_name, safe_id = html.escape(str(p_data.get('name'))), html.escape(str(p_data.get('id')))
+                        st.markdown(f"<div class='req-pending'>🕐 <b>{req['ts']}</b> &nbsp;|&nbsp; 🆕 New account request for: <b>{safe_name}</b> (ID: {safe_id})</div>", unsafe_allow_html=True)
                         rc1, rc2 = st.columns(2)
                         with rc1:
                             if st.button("✅ Approve", key=f"apr_na_{req['id']}", use_container_width=True):
@@ -1904,6 +2001,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
                 html_table = display_df.style.apply(style_performers, axis=1).set_properties(**{'text-align': 'center'}).set_properties(subset=['Expert'], **{'font-weight': '900', 'color': '#0f172a'}).to_html()
         
         st.markdown("### 📊 Expert Performance Scorecard Dashboard")
+        st.info("🏆 **دليل الأوسمة (Awards):** &nbsp; ⚡ **صاروخ الاستجابة** (أقل AFR) &nbsp;|&nbsp; 🏎️ **أسرع إغلاق** (أقل TAT) &nbsp;|&nbsp; 🎯 **بطل الجودة** (أعلى Service Quality) &nbsp;|&nbsp; 🛡️ **درع الحماية** (أقل نسبة إرجاع Reopen).")
         st.markdown(f'<div class="scorecard-container">{html_table}</div>', unsafe_allow_html=True)
         st.divider()
 
@@ -2041,15 +2139,21 @@ if "🧑‍🤝‍🧑 Team Profiles" in tabs_list:
         for i, member in enumerate(team_members):
             photo_url = member.get("photo", "") or "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" 
             r_badge = "👑 ADMIN" if member['role'] == 'admin' else ("👁️ SUPERVISOR" if member['role'] == 'supervisor' else "⭐ EXPERT")
+            safe_dn = html.escape(str(member.get('display_name', 'Unknown')))
+            safe_grad = html.escape(str(member.get('grad_year') or 'N/A'))
+            safe_jc = html.escape(str(member.get('join_cc') or 'N/A'))
+            safe_jt = html.escape(str(member.get('join_team') or 'N/A'))
+            safe_bio = html.escape(str(member.get('bio') or 'لا توجد نبذة شخصية.'))
+            safe_photo = html.escape(str(photo_url))
             card_html = f"""
             <div class="profile-card">
-                <img src="{photo_url}" class="profile-img" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
-                <div class="profile-name">{member.get('display_name', 'Unknown')}</div>
+                <img src="{safe_photo}" class="profile-img" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
+                <div class="profile-name">{safe_dn}</div>
                 <div class="profile-role">{r_badge}</div>
-                <div class="profile-detail"><span>🎓 Graduation</span> <b>{member.get('grad_year') or 'N/A'}</b></div>
-                <div class="profile-detail"><span>🏢 Joined CC</span> <b>{member.get('join_cc') or 'N/A'}</b></div>
-                <div class="profile-detail"><span>🚀 Joined Team</span> <b>{member.get('join_team') or 'N/A'}</b></div>
-                <div class="profile-bio">"{member.get('bio') or 'لا توجد نبذة شخصية.'}"</div>
+                <div class="profile-detail"><span>🎓 Graduation</span> <b>{safe_grad}</b></div>
+                <div class="profile-detail"><span>🏢 Joined CC</span> <b>{safe_jc}</b></div>
+                <div class="profile-detail"><span>🚀 Joined Team</span> <b>{safe_jt}</b></div>
+                <div class="profile-bio">"{safe_bio}"</div>
             </div>
             """
             cols[i % 3].markdown(card_html, unsafe_allow_html=True)
@@ -2140,10 +2244,14 @@ if "⚖️ Period Comparison" in tabs_list:
                 val2_str = fmt_m(v2) if is_time else (f"{v2:.1f}" if isinstance(v2, float) else f"{v2:,}")
                 chg = calc_change(v2, v1)
                 
-                if chg > 0: arrow, color = "▲", ("#dc2626" if inverse else "#16a34a")
-                elif chg < 0: arrow, color = "▼", ("#16a34a" if inverse else "#dc2626")
-                else: arrow, color = "−", "#94a3b8"
-                bg_color = color + "15"
+                if pd.isna(chg):
+                    badge_html = f'<div style="display:inline-block; font-size: 0.95rem; padding: 4px 12px; border-radius: 12px; font-weight: 800; color: #94a3b8; background-color: #f1f5f9; border: 1px solid #cbd5e1;">N/A</div>'
+                else:
+                    if chg > 0: arrow, color = "▲", ("#dc2626" if inverse else "#16a34a")
+                    elif chg < 0: arrow, color = "▼", ("#16a34a" if inverse else "#dc2626")
+                    else: arrow, color = "−", "#94a3b8"
+                    bg_color = color + "15"
+                    badge_html = f'<div style="display:inline-block; font-size: 0.95rem; padding: 4px 12px; border-radius: 12px; font-weight: 800; color: {color}; background-color: {bg_color}; border: 1px solid {color}40;">{arrow} {abs(chg):.1f}%</div>'
                 
                 return f'''
                 <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.2rem; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02); position:relative; margin-bottom: 15px;">
@@ -2159,9 +2267,7 @@ if "⚖️ Period Comparison" in tabs_list:
                             <div style="font-size:1.6rem; font-weight:900; color:#0f172a;">{val2_str}</div>
                         </div>
                     </div>
-                    <div style="display:inline-block; font-size: 0.95rem; padding: 4px 12px; border-radius: 12px; font-weight: 800; color: {color}; background-color: {bg_color}; border: 1px solid {color}40;">
-                        {arrow} {abs(chg):.1f}%
-                    </div>
+                    {badge_html}
                 </div>
                 '''
                 
