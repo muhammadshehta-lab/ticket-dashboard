@@ -405,6 +405,32 @@ def load_data_master():
                 continue
                 
             if not TICKET_TAB.match(title): continue # 🛑 Skip any unknown tab
+
+                df_u = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
+                for _, row in df_u.iterrows():
+                    if pd.notna(row.iloc[0]) and str(row.iloc[0]).strip():
+                        u_key = str(row.iloc[0]).strip().lower()
+
+                        raw_pwd = str(row.iloc[1]).strip()
+                        # If it looks like a SHA256 hash (64 hex chars), use it directly. Otherwise, hash it (legacy support).
+                        if len(raw_pwd) == 64 and all(c in '0123456789abcdefABCDEF' for c in raw_pwd):
+                            final_hash = raw_pwd.lower()
+                        else:
+                            final_hash = hashlib.sha256(raw_pwd.encode()).hexdigest()
+                        
+                        fetched_users[u_key] = {
+                            "password_hash": final_hash,
+                            "role": str(row.iloc[2]).strip().lower(),
+                            "display_name": str(row.iloc[3]).strip(),
+                            "agent_name": str(row.iloc[4]).strip() if str(row.iloc[4]).strip() not in ['','none','nan'] else None,
+                            "photo": parse_drive_link(str(row.iloc[6])) if len(row) > 6 and str(row.iloc[6]).strip() else "",
+                            "grad_year": str(row.iloc[7]).strip() if len(row) > 7 else "",
+                            "join_cc": str(row.iloc[8]).strip() if len(row) > 8 else "",
+                            "join_team": str(row.iloc[9]).strip() if len(row) > 9 else "",
+                            "bio": str(row.iloc[10]).strip() if len(row) > 10 else "",
+                            "personal_email": str(row.iloc[11]).strip() if len(row) > 11 else ""
+                        }
+                continue
             
             dft = pd.DataFrame(data[1:], columns=[str(c).strip() for c in data[0]])
             mp = {}; seen = set()
@@ -441,11 +467,11 @@ def load_data_master():
         df["Store ID"]     = df["Store ID"].fillna("Unknown").astype(str).str.strip()
         
         # If dates come as unformatted serial numbers from Google Sheets
-        try:
-            dp = pd.to_numeric(df["Request Date"], errors="coerce")
-            dp = pd.to_datetime(dp, unit="D", origin="1899-12-30")
-        except:
-            dp = pd.to_datetime(df["Request Date"], errors="coerce")
+        nums = pd.to_numeric(df["Request Date"], errors='coerce')
+        dates_from_nums = pd.to_datetime(nums, unit="D", origin="1899-12-30")
+        dates_from_strs = pd.to_datetime(df["Request Date"], errors='coerce')
+        dp = dates_from_nums.fillna(dates_from_strs)
+        
         df["Request Date"], df["Date Only"], df["Hour"], df["Day Name"] = dp, dp.dt.date, dp.dt.hour.fillna(0).astype(int), dp.dt.day_name().fillna("Unknown")
         if "Request Take" in df.columns: df["Request Take (min)"] = df["Request Take"].apply(time_to_minutes)
         if "Response Take" in df.columns: df["Response Take (min)"] = df["Response Take"].apply(time_to_minutes)
@@ -511,11 +537,11 @@ def load_archive_2025():
             df25["Assigned By"]  = df25["Assigned By"].fillna("Unassigned").astype(str).str.strip().apply(normalize_expert_name)
             df25["Store ID"]     = df25["Store ID"].fillna("Unknown").astype(str).str.strip()
             
-            try:
-                dp25_num = pd.to_numeric(df25["Request Date"], errors="coerce")
-                dp25 = pd.to_datetime(dp25_num, unit="D", origin="1899-12-30")
-            except:
-                dp25 = pd.to_datetime(df25["Request Date"], errors="coerce")
+            nums = pd.to_numeric(df25["Request Date"], errors='coerce')
+            dates_from_nums = pd.to_datetime(nums, unit="D", origin="1899-12-30")
+            dates_from_strs = pd.to_datetime(df25["Request Date"], errors='coerce')
+            dp25 = dates_from_nums.fillna(dates_from_strs)
+            
             df25["Request Date"], df25["Date Only"], df25["Hour"], df25["Day Name"] = dp25, dp25.dt.date, dp25.dt.hour.fillna(0).astype(int), dp25.dt.day_name().fillna("Unknown")
             if "Request Take" in df25.columns: df25["Request Take (min)"] = df25["Request Take"].apply(time_to_minutes)
             if "Response Take" in df25.columns: df25["Response Take (min)"] = df25["Response Take"].apply(time_to_minutes)
@@ -755,6 +781,13 @@ with st.sidebar:
             for k in ("authenticated", "username", "role", "page", "force_onboard"): st.session_state.pop(k, None)
             st.rerun()
 
+
+def parse_sheet_dates(series):
+    nums = pd.to_numeric(series, errors='coerce')
+    dates_from_nums = pd.to_datetime(nums, unit="D", origin="1899-12-30")
+    dates_from_strs = pd.to_datetime(series, errors='coerce')
+    return dates_from_nums.fillna(dates_from_strs)
+
 # ══════════════════════════════════════════════════════════════════════════════════
 #  DATA FILTERING INFRASTRUCTURE
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -812,7 +845,7 @@ if not df_out_req.empty:
     expert_col = next((c for c in df_out_req.columns if "expert" in c.lower() or "agent" in c.lower() or "اسم" in c), None)
     
     if date_col:
-        df_out_req["Parsed_Date"] = pd.to_datetime(df_out_req[date_col], errors="coerce").dt.date
+        df_out_req["Parsed_Date"] = parse_sheet_dates(df_out_req[date_col]).dt.date
         df_out_filtered = df_out_req[(df_out_req["Parsed_Date"] >= d_from) & (df_out_req["Parsed_Date"] <= d_to)].copy()
         
         if source_col: global_jhah = df_out_filtered[df_out_filtered[source_col].astype(str).str.lower().str.contains("jhah", na=False)].shape[0]
@@ -838,7 +871,7 @@ if not df_out_req.empty:
 
 expert_quality_deductions, df_q_filtered = {}, pd.DataFrame()
 if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_quality.columns and "Expert Name" in df_quality.columns:
-    df_quality['Parsed_Date'] = pd.to_datetime(df_quality['Date'], errors='coerce').dt.date
+    df_quality['Parsed_Date'] = parse_sheet_dates(df_quality['Date']).dt.date
     df_q_filtered = df_quality[(df_quality['Parsed_Date'] >= d_from) & (df_quality['Parsed_Date'] <= d_to)].copy()
     def get_deduction(sev):
         s = str(sev).strip().lower()
@@ -856,7 +889,7 @@ if not df_quality.empty and "Date" in df_quality.columns and "Severity" in df_qu
 expert_bonus_qty, expert_bonus_qual = {}, {}
 df_b_filtered = pd.DataFrame()
 if 'df_bonus_raw' in globals() and not df_bonus_raw.empty and "Date" in df_bonus_raw.columns:
-    df_bonus_raw['Parsed_Date'] = pd.to_datetime(df_bonus_raw['Date'], errors='coerce').dt.date
+    df_bonus_raw['Parsed_Date'] = parse_sheet_dates(df_bonus_raw['Date']).dt.date
     df_b_filtered = df_bonus_raw[(df_bonus_raw['Parsed_Date'] >= d_from) & (df_bonus_raw['Parsed_Date'] <= d_to)].copy()
     
     if not df_b_filtered.empty:
@@ -1474,7 +1507,7 @@ document.getElementById("bar-div").on("plotly_deselect", function() {{
             def calc_incentive_g(row):
                 try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
                 except: achiev = 0.0
-                count_inc = 2500 * achiev
+                count_inc = min(2500 * achiev, 2500)
                 try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
                 except: qual = 0.0
                 return f"{count_inc + (600 * qual):,.0f} EGP"
@@ -1790,7 +1823,7 @@ if "👥 Team Performance & KPIs" in tabs_list:
         def calc_incentive(row):
             try: achiev = float(str(row["% Achievement from Target"]).replace("%", "")) / 100.0
             except: achiev = 0.0
-            count_inc = 2500 * achiev
+            count_inc = min(2500 * achiev, 2500)
             try: qual = float(str(row["Service Quality"]).replace("%", "")) / 100.0
             except: qual = 0.0
             return f"{count_inc + (600 * qual):,.0f} EGP"
