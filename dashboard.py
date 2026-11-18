@@ -1160,7 +1160,7 @@ if st.checkbox("🔍 كشف الطلبات غير المعروفة (Unknown Type
 
 tabs_list = ["📈 Operational Insights"]
 if is_admin(): tabs_list.extend(["🏪 Stores Analysis", "🔮 Workload Forecast", "👥 Team Performance & KPIs", "✏️ Manual Overrides", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
-elif st.session_state.role == "expert": tabs_list.extend(["👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
+elif st.session_state.role == "expert": tabs_list.extend(["🏪 Stores Analysis", "🔮 Workload Forecast", "👥 Team Performance & KPIs", "🧑‍🤝‍🧑 Team Profiles", "🌟 Great Achievements", "⚖️ Period Comparison"])
 
 tabs = st.tabs(tabs_list)
 
@@ -1742,7 +1742,7 @@ if "🔮 Workload Forecast" in tabs_list:
                         })
                         
                     df_roster_ai = pd.DataFrame(roster_sugg)
-                    df_roster_ai["Sort"] = df_roster_ai["اليوم"].map({"Sunday":0, "Monday":1, "Tuesday":2, "Wednesday":3, "Thursday":4, "Friday":5, "Saturday":6})
+                    df_roster_ai["Sort"] = df_roster_ai["اليوم"].map({"Saturday":0, "Sunday":1, "Monday":2, "Tuesday":3, "Wednesday":4, "Thursday":5, "Friday":6})
                     df_roster_ai = df_roster_ai.sort_values("Sort").drop(columns=["Sort"])
                     
                     def style_roster(row):
