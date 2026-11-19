@@ -391,6 +391,9 @@ def load_data():
                 elif "store" in cl or "branch" in cl or "pharmacy" in cl: t = "Store ID"
                 if t and t not in seen: mp[col] = t; seen.add(t)
             dft.rename(columns=mp, inplace=True)
+            # drop blank-header and duplicate-named columns so pd.concat never hits a non-unique index
+            dft = dft.loc[:, [str(c).strip() != "" for c in dft.columns]]
+            dft = dft.loc[:, ~dft.columns.duplicated()]
             all_dfs.append(dft)
         
         if not all_dfs: return pd.DataFrame(), roster_df, out_req_df, df_quality, pd.DataFrame(), fetched_users
