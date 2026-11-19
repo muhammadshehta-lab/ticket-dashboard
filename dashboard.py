@@ -766,21 +766,22 @@ with st.sidebar:
     
     st.markdown("### ⏰ Time Filter")
     # Quick filters
-    quick_shift = st.radio("Quick Shift Filter", ["All Day (24h)", "☕ Morning (7 AM - 3 PM)", "🔥 Evening/Peak (3 PM - 11 PM)", "🌙 Night (11 PM - 7 AM)"], index=0)
+    quick_shift = st.radio("Quick Shift Filter", [
+        "All Day (24h)", 
+        "🌙 Night (12 AM - 7 AM)", 
+        "☕ Morning (7 AM - 1 PM)", 
+        "🔥 Evening (1 PM - 12 AM)"
+    ], index=0)
     
     # Define hour range based on quick shift
     default_range = (0, 23)
-    if "Morning" in quick_shift: default_range = (7, 14)
-    elif "Evening" in quick_shift: default_range = (15, 22)
-    elif "Night" in quick_shift: default_range = (23, 6) # Needs special handling below
+    if "Night" in quick_shift: default_range = (0, 6)
+    elif "Morning" in quick_shift: default_range = (7, 12)
+    elif "Evening" in quick_shift: default_range = (13, 23)
     
-    if "Night" in quick_shift:
-        sel_hour_range = (23, 6) # We will handle wraparound in logic
-        st.info("🌙 Night Shift Selected (11 PM to 7 AM)")
-    else:
-        sel_hour_range = st.slider("Select Custom Hour Range", 0, 23, default_range, format="%d:00")
-        if sel_hour_range != (0, 23):
-            st.caption(f"Filtering from {sel_hour_range[0]}:00 to {sel_hour_range[1]}:59")
+    sel_hour_range = st.slider("Select Custom Hour Range", 0, 23, default_range, format="%d:00")
+    if sel_hour_range != (0, 23):
+        st.caption(f"Filtering from {sel_hour_range[0]}:00 to {sel_hour_range[1]}:59")
 
 
     st.markdown("<br><br>", unsafe_allow_html=True); st.divider()
