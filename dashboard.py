@@ -154,6 +154,27 @@ def notify_admin_whatsapp(logged_in_user):
             requests.get(url, timeout=3)
     except Exception: pass
 
+def send_performance_email(to_email, agent_name, html_content, date_range_str, admin_name="Team Leader"):
+    try:
+        if "smtp" in st.secrets and "email" in st.secrets["smtp"] and "password" in st.secrets["smtp"]:
+            sender_email = st.secrets["smtp"]["email"]
+            sender_password = st.secrets["smtp"]["password"]
+            msg = EmailMessage()
+            msg['Subject'] = f"📊 Your Performance Report ({date_range_str})"
+            msg['From'] = f"{admin_name} <{sender_email}>"
+            msg['To'] = to_email
+            
+            msg.set_content(f"Dear {agent_name},\n\nPlease view this email in an HTML-compatible client.")
+            msg.add_alternative(html_content, subtype='html')
+            
+            with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.send_message(msg)
+            return True
+        return False
+    except Exception: return False
+
 def send_approval_email(to_email, name, uid, admin_name="Team Leader"):
     try:
         if "smtp" in st.secrets and "email" in st.secrets["smtp"] and "password" in st.secrets["smtp"]:
@@ -742,7 +763,25 @@ with st.sidebar:
     
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().astype(str).unique()))
     sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().astype(str).unique()))
-    sel_hours = st.multiselect("Hour of Day", sorted(df_raw["Hour"].dropna().unique()), format_func=lambda h: f"{12 if h==0 else (h if h<=12 else h-12)} {'AM' if h<12 else 'PM'}")
+    
+    st.markdown("### ⏰ Time Filter")
+    # Quick filters
+    quick_shift = st.radio("Quick Shift Filter", ["All Day (24h)", "☕ Morning (7 AM - 3 PM)", "🔥 Evening/Peak (3 PM - 11 PM)", "🌙 Night (11 PM - 7 AM)"], index=0)
+    
+    # Define hour range based on quick shift
+    default_range = (0, 23)
+    if "Morning" in quick_shift: default_range = (7, 14)
+    elif "Evening" in quick_shift: default_range = (15, 22)
+    elif "Night" in quick_shift: default_range = (23, 6) # Needs special handling below
+    
+    if "Night" in quick_shift:
+        sel_hour_range = (23, 6) # We will handle wraparound in logic
+        st.info("🌙 Night Shift Selected (11 PM to 7 AM)")
+    else:
+        sel_hour_range = st.slider("Select Custom Hour Range", 0, 23, default_range, format="%d:00")
+        if sel_hour_range != (0, 23):
+            st.caption(f"Filtering from {sel_hour_range[0]}:00 to {sel_hour_range[1]}:59")
+
 
     st.markdown("<br><br>", unsafe_allow_html=True); st.divider()
     if is_admin() and pending_count() > 0: st.warning(f"🔔 {pending_count()} pending requests")
@@ -790,9 +829,15 @@ if sel_hic and not df.empty:
 if sel_req_type and not df.empty: 
     df = df[df["Request Type"].isin(sel_req_type)]
     df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
-if sel_hours and not df.empty:
-    df = df[df["Hour"].isin(sel_hours)]
-    df_prev_all = df_prev_all[df_prev_all["Hour"].isin(sel_hours)]
+if not df.empty:
+    if "sel_hour_range" in locals():
+        start_h, end_h = sel_hour_range
+        if start_h <= end_h:
+            df = df[(df["Hour"] >= start_h) & (df["Hour"] <= end_h)]
+            df_prev_all = df_prev_all[(df_prev_all["Hour"] >= start_h) & (df_prev_all["Hour"] <= end_h)]
+        else: # Night shift wrap-around (e.g., 23 to 6)
+            df = df[(df["Hour"] >= start_h) | (df["Hour"] <= end_h)]
+            df_prev_all = df_prev_all[(df_prev_all["Hour"] >= start_h) | (df_prev_all["Hour"] <= end_h)]
 
 def get_roster_stats(roster_df, start_date, end_date):
     counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
@@ -2206,8 +2251,13 @@ if "👥 Team Performance & KPIs" in tabs_list:
             csv_sc = display_df.copy(); csv_sc["Expert"] = csv_sc["Expert"].apply(lambda x: re.sub(r'^[🥇🥈🥉]\s*', '', str(x)))
             st.download_button("📥 Download Team Scorecard (CSV)", csv_sc.to_csv(index=False).encode('utf-8-sig'), f"Team_Scorecard_{d_from}_to_{d_to}.csv", "text/csv", use_container_width=True)
             
-            st.divider(); st.markdown("#### ✉️ Performance Review Emails")
-            sel_email_agent = st.selectbox("Select Agent for Email Draft", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
+            st.divider(); st.markdown("#### ✉️ Automated Performance Reports")
+            st.info("💡 يمكنك إرسال التقرير فوراً للإيميل الشخصي للموظف بدلاً من فتحه كمسودة.")
+            
+            c_mail1, c_mail2 = st.columns([2, 1])
+            with c_mail1:
+                sel_email_agent = st.selectbox("Select Agent for Report", [x for x in sc_final["Expert"] if "🏆 Team AVG" not in x])
+            
             if sel_email_agent:
                 clean_agent_name = re.sub(r'^[🥇🥈🥉]\s*', '', str(sel_email_agent))
                 arow, trow = sc_final[sc_final["Expert"] == sel_email_agent].iloc[0], sc_final[sc_final["Expert"] == "🏆 Team AVG"].iloc[0]
@@ -2274,7 +2324,27 @@ if "👥 Team Performance & KPIs" in tabs_list:
                         break
                         
                 mail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={target_agent_email}&su={safe_subj}"
-                st.markdown(f'<a href="{mail_link}" target="_blank" style="display:block; padding:0.8rem 1.2rem; background-color:#2563eb; color:white; text-decoration:none; border-radius:8px; font-weight:800; font-size:1.15rem; width:100%; text-align:center; margin-top: 10px;">🌐 Open Draft in Gmail</a>', unsafe_allow_html=True)
+                target_agent_email = ""
+                for un, udata in st.session_state.db_users.items():
+                    if udata.get("display_name") == clean_agent_name or udata.get("agent_name") == clean_agent_name:
+                        target_agent_email = udata.get("personal_email", "")
+                        break
+                        
+                with c_mail2:
+                    st.write("")
+                    st.write("")
+                    if not target_agent_email:
+                        st.warning("⚠️ No email found for this agent.")
+                    else:
+                        if st.button("🚀 Send Automated Report", use_container_width=True, type="primary"):
+                            with st.spinner("Sending Email..."):
+                                success = send_performance_email(target_agent_email, clean_agent_name, email_html_table, f"{d_from} to {d_to}", admin_name)
+                                if success:
+                                    st.success("✅ Email Sent Successfully!")
+                                else:
+                                    st.error("❌ Failed to send email. Check SMTP settings.")
+                
+                st.markdown(f'<a href="{mail_link}" target="_blank" style="display:block; padding:0.5rem 1rem; background-color:#f1f5f9; color:#475569; text-decoration:none; border-radius:8px; font-weight:700; font-size:1rem; width:100%; text-align:center; border: 1px solid #cbd5e1; margin-top: 5px;">🌐 Open Draft in Gmail Instead</a>', unsafe_allow_html=True)
 
 # ── TAB 3 — Manual Overrides (Admin Only) ─────────────────────────────────────────
 if "✏️ Manual Overrides" in tabs_list:
