@@ -317,7 +317,9 @@ def fmt_m(v):
     return f"{t // 3600:02d}:{(t % 3600) // 60:02d}:{t % 60:02d}"
 
 def assign_time_tier(m):
-    if m <= 15: return "Under 15 Mins"
+    if m <= 5: return "Under 5 Mins"
+    if m <= 10: return "5-10 Mins"
+    if m <= 15: return "10-15 Mins"
     if m <= 30: return "15-30 Mins"
     if m <= 45: return "30-45 Mins"
     if m <= 60: return "45-60 Mins"
@@ -740,6 +742,7 @@ with st.sidebar:
     
     sel_hic = st.multiselect("HIC", sorted(df_raw["HIC"].dropna().astype(str).unique()))
     sel_req_type = st.multiselect("Request Type", sorted(df_raw["Request Type"].dropna().astype(str).unique()))
+    sel_hours = st.multiselect("Hour of Day", sorted(df_raw["Hour"].dropna().unique()), format_func=lambda h: f"{12 if h==0 else (h if h<=12 else h-12)} {'AM' if h<12 else 'PM'}")
 
     st.markdown("<br><br>", unsafe_allow_html=True); st.divider()
     if is_admin() and pending_count() > 0: st.warning(f"🔔 {pending_count()} pending requests")
@@ -787,6 +790,9 @@ if sel_hic and not df.empty:
 if sel_req_type and not df.empty: 
     df = df[df["Request Type"].isin(sel_req_type)]
     df_prev_all = df_prev_all[df_prev_all["Request Type"].isin(sel_req_type)]
+if sel_hours and not df.empty:
+    df = df[df["Hour"].isin(sel_hours)]
+    df_prev_all = df_prev_all[df_prev_all["Hour"].isin(sel_hours)]
 
 def get_roster_stats(roster_df, start_date, end_date):
     counts = {exp: {"wd": 0, "off": 0, "ann": 0, "cas": 0, "sick": 0} for exp in OFFICIAL_EXPERTS}
@@ -1285,8 +1291,12 @@ with tabs[0]:
             else: bar_trends.append("")
         # ---------------------------------------------------
         
-        SB_COLORS = {"Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", "Under 15 Mins": "#22c55e", "15-30 Mins": "#3b82f6", "30-45 Mins": "#8b5cf6", "45-60 Mins": "#f59e0b", "Over 1 Hour": "#ef4444"}
-        tier_order = ["Under 15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
+        SB_COLORS = {
+            "Response Time": "#3b82f6", "Service Resolution": "#0ea5e9", 
+            "Under 5 Mins": "#10b981", "5-10 Mins": "#22c55e", "10-15 Mins": "#84cc16",
+            "15-30 Mins": "#f59e0b", "30-45 Mins": "#f97316", "45-60 Mins": "#ef4444", "Over 1 Hour": "#991b1b"
+        }
+        tier_order = ["Under 5 Mins", "5-10 Mins", "10-15 Mins", "15-30 Mins", "30-45 Mins", "45-60 Mins", "Over 1 Hour"]
         sb_payloads = {}   
         
         for rt in ["All Types"] + bar_labels:
