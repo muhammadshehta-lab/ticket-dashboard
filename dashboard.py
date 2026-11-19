@@ -767,17 +767,17 @@ with st.sidebar:
     st.markdown("### ⏰ Time Filter")
     # Quick filters
     quick_shift = st.radio("Quick Shift Filter", [
-        "All Day (24h)", 
-        "🌙 Night (12 AM - 7 AM)", 
-        "☕ Morning (7 AM - 1 PM)", 
-        "🔥 Evening (1 PM - 12 AM)"
+        "All Day (24h)",
+        "☕ Morning Shift (7 AM - 3 PM)", 
+        "🔥 Evening Shift (3 PM - 11 PM)", 
+        "🌙 Night Shift (11 PM - 7 AM)"
     ], index=0)
     
     # Define hour range based on quick shift
     default_range = (0, 23)
-    if "Night" in quick_shift: default_range = (0, 6)
-    elif "Morning" in quick_shift: default_range = (7, 12)
-    elif "Evening" in quick_shift: default_range = (13, 23)
+    if "Morning" in quick_shift: default_range = (7, 14)
+    elif "Evening" in quick_shift: default_range = (15, 22)
+    elif "Night" in quick_shift: default_range = (23, 6)
     
     sel_hour_range = st.slider("Select Custom Hour Range", 0, 23, default_range, format="%d:00")
     if sel_hour_range != (0, 23):
